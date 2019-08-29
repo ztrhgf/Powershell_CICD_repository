@@ -5,8 +5,10 @@ zkontroluje:
     syntaxi, format, pojmenovani, dodrzovani best practices, absenci zavadnnych znaku ps1 souboru
     kodovani textovych souboru
     ze commit neobsahuje modul, ktery se zaroven automaticky generuje
-    ze mazane funkce nejsou nikde pouzity a pripadne na to upozorni
-    ze mazane/modifikovane promenne z Variables modulu nejsou nikde pouzity a pripadne na to upozorni
+upozorni na:
+    mazane funkce, pokud jsou nekde pouzity
+    mazane/modifikovane promenne z Variables modulu, pokud jsou nekde pouzity
+    menene parametry funkci, pokud jsou nekde pouzity
 #>
 
 $ErrorActionPreference = "stop"
