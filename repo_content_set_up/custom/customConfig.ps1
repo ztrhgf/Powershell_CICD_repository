@@ -46,6 +46,5 @@ $config = @(
     [PSCustomObject]@{
         folderName   = "Repo_Sync"
         computerName = $RepoSyncServer
-        customNTFS   = "Network Service"
     }
 )
