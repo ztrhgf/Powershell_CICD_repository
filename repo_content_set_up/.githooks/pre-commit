@@ -1,0 +1,8 @@
+#!/bin/sh
+echo "commit cancelled" # pri chybe zpracovani VSC automaticky vypise obsah prvniho echo, proto tento text i kdyz ve vypisu konzole bude mast
+echo "#####################"
+echo "###### PRE-COMMIT git hook"
+echo "###### Provedu kontrolu, ze pracuji s aktualnimi daty + provedu kontrolu syntaxe ps1 skriptu"
+exec powershell.exe -NoProfile -ExecutionPolicy Bypass -file ".\.githooks\pre-commit.ps1"
+echo "#####################"
+exit

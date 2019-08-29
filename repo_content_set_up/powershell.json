@@ -1,0 +1,820 @@
+{
+	"arrayList": {
+		"prefix": "arrayList = solution to \"fixed size problem\" error",
+		"body": [
+			"# vytvoreni System.Collections.ArrayList pole\r",
+			"\\$array = New-Object System.Collections.ArrayList",
+			"# a pole naplnim (takto zachova arraylist typ i kdyz se nic nevrati)\r",
+			"\\$array = @(Get-Process -name prdel)\r",
+			"# nebo rovnou\r",
+			"[System.Collections.ArrayList] \\$array = @(Get-Process -name hgbf)\r",
+			"\r# nebo mohu prevest klasicke pole (!! nesmi jiz byt definovano napr. jako [string[]] !!)\r",
+			"\\$cArray ={\\$cArray}.invoke()"
+		],
+		"description": ""
+	},
+	"convert array na arrayList": {
+		"prefix": "convert array to arrayList",
+		"body": [
+			"# !! \\$array nesmi jiz byt definovano napr. jako [string[]] !!\r",
+			"\\$array= {\\$array}.invoke()"
+		],
+		"description": ""
+	},
+	"variable value lock in scriptBlock": {
+		"prefix": "variable value lock in scriptBlock",
+		"body": [
+			"\\$info = 1\r",
+			"\\$code = {\r",
+			"    \\$info\r",
+			"}\r",
+			"# vyhodnotim scriptblock s aktualnimi hodnotami promennych == jejich pozdejsi zmena uz nebude mit na obsah scriptBlocku vliv\r",
+			"\\$code = \\$code.GetNewClosure()\r",
+			"# zmenim hodnotu \\$info, ale v \\$code se to jiz neprojevi\r",
+			"\\$info = 2\r",
+			"& \\$code"
+		],
+		"description": "uzamknuti hodnot promennych ve scriptblocku"
+	},
+	"forcing array of arrays": {
+		"prefix": "forcing array of arrays",
+		"body": [
+			"# hodnoty pole uvedu carkou ','\r",
+			"# pole obsahujici jen jedno pole se automaticky prevadi na pole obsahujici prvky puvodne zanoreneho pole\r",
+			"# vytvoreni pole poli (i presto ze obsahuje pouze jedno pole)\r",
+			"\\$polePoli = @(, @(\"a1\", \"a2\"))\r",
+			"\r",
+			"# kdyz nevim kolik prvku budu do pole vkladat, ale vim jiste, ze na konci chci mit pole poli\r",
+			"\\$arr = @()\r",
+			"if(\\$b) { \\$arr += , \\$jabka }\r",
+			"if(\\$a) { \\$arr += , \\$hrusky}\r"
+		],
+		"description": ""
+	},
+	"ordered hash": {
+		"prefix": "ordered hash",
+		"body": [
+			"\\$hash = [ordered]@{\r",
+			"    BindingOrder = '1'\r",
+			"    IPAddress    = '2'\r",
+			"}"
+		],
+		"description": "maintain order of items in hash"
+	},
+	"create directory if it doesnt exist (oneliner)": {
+		"prefix": "create directory if it doesnt exist (oneliner)",
+		"body": [
+			"[Void][System.IO.Directory]::CreateDirectory(\"C:\\temp\")"
+		],
+		"description": "create directory if it doesnt exist (oneliner)"
+	},
+	"create tmp file in $env:TMP": {
+		"prefix": "create tmp file in $env:TMP",
+		"body": [
+			"\\$tempFile = [System.IO.Path]::GetTempFileName()\r",
+			"\r",
+			"# od PS5\r",
+			"New-TemporaryFile"
+		],
+		"description": "generate random name and create tmp file in $env:TMP"
+	},
+	"parameter sets example": {
+		"prefix": "parameter sets example",
+		"body": [
+			"[CmdletBinding(DefaultParameterSetName = 'Default')]\r",
+			"param\r",
+			"(\r",
+			"    [Parameter(Mandatory = \\$true, ParameterSetName = \"Default\")]\r",
+			"    [Parameter(Mandatory = \\$false, ParameterSetName = \"Scheduled\")] \r",
+			"    \\$computername\r",
+			"    ,\r",
+			"    [Parameter(Mandatory = \\$false, ParameterSetName = \"Scheduled\")] \r",
+			"    \\$username\r",
+			")"
+		],
+		"description": "how to use parameter sets"
+	},
+	"use function in scriptBlock": {
+		"prefix": "use function in scriptBlock",
+		"body": [
+			"# PRVNI ZPUSOB, pokud mam fci Get-FunctionString\r",
+			"# ziskam textovou definici funkci zadanych funkci\r",
+			"\\$FunctionString = Get-FunctionString -Function 'Get-ServerList', 'Confirm-ValidSource'\r",
+			"Invoke-Command -ComputerName bumpkin -ScriptBlock {\r",
+			"    param (\\$FunctionString)\r",
+			"    # dot sourcingem vytvorim funkce z jejich textove definice\r",
+			"    \\$scriptblock = [System.Management.Automation.ScriptBlock]::Create(\\$FunctionString)\r",
+			"    . \\$scriptblock\r",
+			"} -argumentList \\$FunctionString\r",
+			"\r",
+			"#DRUHY ZPUSOB\r",
+			"# vytvorim rucne definice funkci oddelene strednikem\r",
+			"\\$allFunctionDefs = \"function foo { \\${function:foo} }; function bar { \\${function:bar} }\"\r",
+			"Invoke-Command -argumentlist \\$allFunctionDefs, \\$computername -ScriptBlock {\r",
+			"    Param( \\$allFunctionDefs, \\$computername )\r",
+			"    # z definice predane jako argument opetovne vytvorim funkce a nactu pomoci dot source notace (tecka)\r",
+			"    foreach (\\$functionDef in \\$allFunctionDefs) {\r",
+			"        . ([ScriptBlock]::Create(\\$functionDef))\r",
+			"    }\r",
+			"    foo \"Bye\"\r",
+			"    bar \"Adieu!\" \r",
+			"}"
+		],
+		"description": "how to use function in scriptBlock"
+	},
+	"use WhatIf in function": {
+		"prefix": "use WhatIf in function",
+		"body": [
+			"1. nastavim SupportsShouldProcess v cmdletbinding\r",
+			"[cmdletbinding(SupportsShouldProcess)] \r",
+			"\r",
+			"2. ve funkci pouziji nasledujici IF pro casti ktere se maji spustit az s potvrzenim\r",
+			"If (\\$PSCmdlet.ShouldContinue(\"urcite chce xxx udelat?!\")) {  \r",
+			"\tRemove-Item \\$File -Force\r",
+			"} Else {  \r",
+			"\t\"Mission aborted!\"\r",
+			"}\r",
+			"3. spustim prikaz s -confirm prepinacem \r",
+			"\r",
+			"4. pokud chci aby bylo potreba potvrzeni i bez -confirm nastavim:\r",
+			"\\$ConfirmPreference = \"Low\""
+		],
+		"description": "how to use WhatIf in function"
+	},
+	"function parameter validation example": {
+		"prefix": "function parameter validation example",
+		"body": [
+			"# VALIDACE se nekdy neaplikuje pokud nepouziji named par. ale position\r",
+			"[ValidateNotNullOrEmpty()] # neakceptuje ani prazdny retezec\r",
+			"[ValidateNotNull()] # akceptuje prazdny retezec\r",
+			"[ValidateLength(1, 8)]\r",
+			"[ValidateRange(21, 29)]\r",
+			"[ValidateCount(4, 9)]\r",
+			"[ValidateSet('Bob', 'Joe', 'Steve', ignorecase = \\$False)]\r",
+			"[ValidatePattern('(?# nejaky komentar)^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\$')]\r",
+			"[ValidateScript( {\r",
+			"        If (Test-Path -Path \\$_ -PathType Container) {\r",
+			"            \\$true\r",
+			"        } else {\r",
+			"            Throw \"\\$_ is not a valid destination folder. Enter in 'c:\\destination' format\"\r",
+			"        }\r",
+			"    })]\r",
+			"\r",
+			"# dalsi ukazky ValidateScript (vzdy pouzit variantu s if + else + throw kvuli peknym vypisum chyb)\r",
+			"# je emailova adresa\r",
+			"\\$_ -match '^[_a-z0-9-]+(\\.[_a-z0-9-]+)*@[a-z0-9-]+(\\.[a-z0-9-]+)*(\\.[a-z]{2,4})\\$'})]\r",
+			"# je soubor\r",
+			"\\$_ -match \"\\\\[^\\.]+\\.[\\w]{2,4}\\$\"\r",
+			"# je lokalni cesta\r",
+			"Test-Path \\$_ -IsValid\r",
+			"# je UNC cesta\r",
+			"\\$_ -match \"^\\\\\\\\[.\\w]+\\\\\\w+\"\r",
+			"# je IP adresa\r",
+			"[ValidateScript( {\\$_ -match [IPAddress]\\$_ })]\r",
+			"# je MASKA\r",
+			"[ValidateScript( {\\$_ -match \"^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\\$\"})]\r",
+			"# je datum ve tvaru (d.M.yyyy, d.M.yyyy H:m, d.M.yyyy H:m:s)\r",
+			"\\$_ -match '^\\d{1,2}\\.\\d{1,2}\\.\\d{4}( \\d{1,2}:\\d{1,2}(:\\d{1,2}?)?)?\\$'"
+		],
+		"description": "function parameter validation examples"
+	},
+	"fill message request of empty parameter": {
+		"prefix": "fill message request of empty parameter",
+		"body": [
+			"param (\r",
+			"    \\$Name = \\$(\r",
+			"        \\$inp = \\$null;\r",
+			"        do {\r",
+			"            Write-Host 'Please, enter your name: ' -ForegroundColor Yellow -NoNewLine\r",
+			"            \\$inp = Read-Host;\r",
+			"        }\r",
+			"        while ([string]::IsNullOrEmpty(\\$inp))\r",
+			"        return \\$inp\r",
+			"    )\r",
+			")"
+		],
+		"description": ""
+	},
+	"number rounding": {
+		"prefix": "number rounding",
+		"body": [
+			"\\$number = 4.7354\r",
+			"\\$number = [math]::Round(\\$number,2)\r",
+			"#nebo:\r",
+			"\\$number = \"{0:N2}\" -f(\\$number)",
+			"$0"
+		],
+		"description": ""
+	},
+	"add collection into PropertySet example": {
+		"prefix": "add collection into PropertySet example",
+		"body": [
+			"# mam objekt\r",
+			"\\$props = @{\"Mary\"=1;\"Jane\"=2;\"Frank\"=3;\"John\"=5;\"Brenda\"=6}\r",
+			"\\$obj = New-Object -TypeName PSObject -Property \\$props\r",
+			"# pridam mu propertyset male a female\r",
+			"\\$obj | Add-Member PropertySet \"Male\" @(\"Frank\",\"John\")\r",
+			"\\$obj | Add-Member PropertySet \"Female\" @(\"Mary\",\"Jane\",\"Brenda\")\r",
+			"# udelam select na konkretni propertyset\r",
+			"\\$obj | select male"
+		],
+		"description": ""
+	},
+	"psobject creation": {
+		"prefix": "psobject creation",
+		"body": [
+			"\\$object = [PSCustomObject]@{\r",
+			"  Name = 'Weltner'\r",
+			"  ID = 123\r",
+			"  Active = \\$true\r",
+			"}\r",
+			"\r",
+			"# nebo zvlast property a zvlast vytvoreni objektu\r",
+			"\\$property = @{\"Mary\"=1;\"Jane\"=2;\"Frank\"=3;\"John\"=5;\"Brenda\"=6}\r",
+			"\\$object = New-Object -TypeName PSObject -Property \\$property\r",
+			"\r",
+			"# ci jednoradkovy zapis\r",
+			"New-Object PSObject -Property ([Ordered]@{Location=\\$Info; Remark=\\$SomeOtherInfo })"
+		],
+		"description": ""
+	},
+	"f operator usage example": {
+		"prefix": "f operator usage example",
+		"body": [
+			"'Your host is called {0} and tmp is: {1}' -f \\$host.Name, \\$env:tmp"
+		],
+		"description": "shows how to combine text and variables in output in clear way"
+	},
+	"match using [regex] object": {
+		"prefix": "match using [regex] object",
+		"body": [
+			"\\$string = \"Moje cislo je 33524005 nebo taky 555240026\"\r",
+			"# vrati prvni match\r",
+			"\\$vysledek = ([regex]\"\\d+\").Match(\\$string).value\r",
+			"# vrati vsechny matche\r",
+			"\\$vysledek = ([regex]\"\\d+\").Matches(\\$string).value\r",
+			"# vrati jen vybranou captured group\r",
+			"\\$vysledek = ([regex]\"\\d+\").Matches(\\$string).captures.groups[1].value\r",
+			"\r",
+			"# case insensitive match\r",
+			"[regex]::matches(\\$string, \"[a-z]ook\", \"IgnoreCase\")\r",
+			"\r",
+			"# pokud bych pouzil groupy (zavorky), tak vypsani nejake konkretni\r",
+			"\\$vysledek = \\$rx.Match(\\$string).groups[2].value"
+		],
+		"description": "[regex] object match is better than -match operator, because there is no need to empty \\$matches variable"
+	},
+	"get substring before|after specified symbol": {
+		"prefix": "get substring before|after specified symbol",
+		"body": [
+			"\\$string = \"text pred - text za\"\r",
+			"\\$before = \\$string.Split(\"-\")[0] \r",
+			"\\$after = \\$string.Split(\"-\")[-1]\r",
+			"nebo\r",
+			"\\$position = \\$string.IndexOf(\"-\")\r",
+			"\\$before = \\$string.Substring(0, \\$position)\r",
+			"\\$after = \\$string.Substring(\\$position+1)"
+		],
+		"description": "ziskani textu pred/za znakem"
+	},
+	"replace specified string in file": {
+		"prefix": "replace specified string in file",
+		"body": [
+			"# dulezite je dat get-content do zavorek jinak bude hlasit ze soubor je otevren (takto se nacte obsah a zavre se)\r",
+			"(Get-Content \\$filePath) | Foreach-Object {\\$_ -replace \\$FindString, \\$ReplacementString } | Set-Content \\$filePath"
+		],
+		"description": "nahrazeni casti textu v souboru"
+	},
+	"specify column width at Format-Table": {
+		"prefix": "specify column width at Format-Table",
+		"body": [
+			"Get-Process | format-table @{Expression = {\\$env:COMPUTERNAME}; Label = \"Computer\"; width = 15}, name"
+		],
+		"description": "nastaveni sirky sloupce u Format-Table"
+	},
+	"admin rights check": {
+		"prefix": "admin rights check",
+		"body": [
+			"if (! ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] \"Administrator\")) {\r",
+			"    Write-Error \"You dont have administrator rights\"\r",
+			"    Return\r",
+			"}\r",
+			""
+		],
+		"description": "kontrola zdali skript/funkkce bezi s admin pravy"
+	},
+	"interruption of parent cycle": {
+		"prefix": "interruption of parent cycle",
+		"body": [
+			"# navestim oznacim cyklus ktery budu prerusovat\r",
+			":outer\r",
+			"Foreach (\\$element in (1..10))\r",
+			"{\r",
+			"  for (\\$x = 1; \\$x -lt 5; \\$x += 1) \r",
+			"  {\r",
+			"\t# za prikaz dam jmeno cyklu na ktery se ma aplikovat\r",
+			"    continue outer\r",
+			"    Write-Host 'toto se uz nezobrazi...'\r",
+			"  }\r",
+			"}"
+		],
+		"description": "preruseni nadrazeneho cyklu (pomoci navesti), tzn mam foreach, v nem for a z nej prerusim nadrazeny foreach"
+	},
+	"continue on key stroke": {
+		"prefix": "continue on key stroke",
+		"body": [
+			"Write-Host 'Stiskni libovolnou klavesu pro pokracovani' -NoNewline\r",
+			"$null = [Console]::ReadKey('?')"
+		],
+		"description": "stisknuti libovolne klavesy pro pokracovani"
+	},
+	"parameter splatting": {
+		"prefix": "parameter splatting",
+		"body": [
+			"\\$CommandParameters = @{\r",
+			"\tFirstParameter = \"One\"\r",
+			"\tSecondParameter = \"Two\"\r",
+			"}\r",
+			"# upravim nejaky parameter\r",
+			"\\$CommandParameters[\"FirstParameter\"] = \"One point one\"\r",
+			"# pridam novy parameter\r",
+			"\\$CommandParameters.Add(\"FourthParameter\", \"Four\")\r",
+			"# odstranim stavajici parameter\r",
+			"\\$CommandParameters.Remove(\"SecondParameter\")\r",
+			"\r",
+			"# zavolam prikaz s danymi parametry\r",
+			"Get-Process @CommandParameters"
+		],
+		"description": "parameter splatting (ulozeni parametru prikazu do hashe)"
+	},
+	"try catch": {
+		"prefix": "try catch",
+		"body": [
+			"Try {   \r",
+			"} Catch [DivideByZeroException]{\r",
+			"\t# zachytim konkretni chybu\r",
+			"\t# typ chyby zjistim spustenim prikazu koncici pozadovanou chybou a \\$Error[0] | fl * -Force a cast za --> dam do [] \r",
+			"\t# nebo try {prikaz}catch{\\$_.exception.gettype().fullname}\r",
+			"} Catch {\r",
+			"\t# zachytim jakoukoli chybu (pokud prikaz konci nonterminating chybou je potreba pridat -ea stop)\r",
+			"    Write-Error -Message \"Error: \\$(\\$_.Exception.Message) - Line Number: \\$(\\$_.InvocationInfo.ScriptLineNumber)\"\r",
+			"} Finally {\r",
+			"\t# spust vzdy\r",
+			"}"
+		],
+		"description": "try catch (specific exception)"
+	},
+	"encode/decode string to base64": {
+		"prefix": "encode/decode string to base64",
+		"body": [
+			"\\$command = @'\r",
+			"radky kodu\r",
+			"'@\r",
+			"\r",
+			"# zakodovani prikazu do base64\r",
+			"\\$bytes = [System.Text.Encoding]::Unicode.GetBytes(\\$command)\r",
+			"\\$encodedString = [Convert]::ToBase64String(\\$bytes)\r",
+			"\r",
+			"# dekodovani base64 retezce\r",
+			"\\$string  = [System.Convert]::FromBase64String(\"\\$encodedString\")\r",
+			"\\$decodedString = [System.Text.Encoding]::UTF8.GetString(\\$string)\r",
+			"\r",
+			"# v CMD pak zavolat \r",
+			"powershell -encodedcommand 'obsah \\$encodedString'\r",
+			"# pokud je obsah v souboru\r",
+			"powershell -encodedcommand (Get-Content 'Z:\\pathtoscript\\scriptname.pse1' -Raw)\r",
+			"# POZOR! PS podporuje spusteni prikazu s maximalne cca 8000 znaku!"
+		],
+		"description": "zakodovani/dekodovani stringu/prikazu do base64"
+	},
+	"how to propagate verbose preference inside scriptBlock": {
+		"prefix": "how to propagate verbose preference inside scriptBlock",
+		"body": [
+			"# predam \\$VerbosePreference jako argument prikazu invoke-command \r",
+			"invoke-command -argumentlist \\$VerbosePreference -scriptblock {\r",
+			"    # uvnitr scriptblocku prevezmu argument v param() bloku\r",
+			"    param(\\$VerbosePreference)\r",
+			"    # nastavim verbose uroven\r",
+			"    \\$VerbosePreference = \"\\$(\\$VerbosePreference.value)\" \r",
+			"    write-verbose \"melo by byt videt\"\r",
+			"}"
+		],
+		"description": "jak zpropagovat nastaveni verbose do scriptblocku"
+	},
+	"get script directory location": {
+		"prefix": "get script directory location",
+		"body": [
+			"\\$ScriptDirectory = Split-Path -Parent -Path \\$MyInvocation.MyCommand.Definition\r",
+			"\r#od PS3\r",
+			"\\$PSScriptRoot"
+		],
+		"description": "ziskani cesty do slozky, kde je tento skript"
+	},
+	"get script filename": {
+		"prefix": "get script filename",
+		"body": [
+			"# PS1 PS2\r",
+			"\\$scriptName = \\$invocation.MyCommand.Name\r",
+			"\r# PS3\r",
+			"\\$ScriptName = Split-Path \\$PSCommandPath -Leaf\r",
+			"\r# teoreticky se da zjistit i z Get-PSCallStack"
+		],
+		"description": "jmeno souboru, ze ktereho je spusteno"
+	},
+	"count files in folder": {
+		"prefix": "count files in folder",
+		"body": [
+			"\\$FilesCount = (Get-ChildItem $$path -recurse | where-object {-not (\\$_.PSIsContainer)}).Count"
+		],
+		"description": "pocet souboru v adresari (JEN souboru, ne slozek)"
+	},
+	"how to use psasync": {
+		"prefix": "how to use psasync",
+		"body": [
+			"#requires -modules psasync\r",
+			"BEGIN {\t\r",
+			"    \\$ssyncPipelines = @()\r",
+			"    \\$pool = Get-RunspacePool 20\r",
+			"\t\r",
+			"    \\$scriptBlock = {\r",
+			"        param (\\$userName, \\$computer)\r",
+			"        if (test-connection -computername \\$computer -Count 1 -quiet) { \r",
+			"            neco udelej\r",
+			"        }\r",
+			"    }\r",
+			"}\r",
+			"PROCESS {\t\t\t\r",
+			"    foreach (\\$computer in \\$computerName) {\r",
+			"        \\$asyncPipelines += Invoke-Async -RunspacePool \\$pool -ScriptBlock \\$scriptBlock -Parameters \\$userName, \\$computer\r",
+			"    }\r",
+			"}\r",
+			"END {\r",
+			"    Receive-AsyncResults -Pipelines \\$asyncPipelines -ShowProgress\r",
+			"}"
+		],
+		"description": "template pro pouziti psasync"
+	},
+	"how to use WMI class method": {
+		"prefix": "how to use WMI class method",
+		"body": [
+			"# trida\r",
+			"\\$ApplicationClass = [WmiClass]\"\\\\\\$computer\\root\\ccm\\clientSDK:CCM_Application\"\r",
+			"# metody \r",
+			"\\$ApplicationClass | gm -MemberType Method\r",
+			"# pouziti metody\r",
+			"\\$ApplicationClass.Install(\\$ApplicationID, \\$ApplicationRevision, \\$ApplicationIsMachineTarget, 0, \\$Priority, \\$IsRebootIfNeeded)\r",
+			"# nebo\r",
+			"# !pozor u Invoke-WmiMethod je nekdy poradi parametru jine nez v prvnim pripade!\r",
+			"Invoke-WmiMethod -ComputerName \\$ComputerName -Class CCM_Application -Namespace root\\ccm\\clientSDK -Name install -ArgumentList 0, \\$ApplicationID, \\$ApplicationIsMachineTarget, \\$IsRebootIfNeeded, \\$Priority, \\$ApplicationRevision\r",
+			"# poradi parametru metody ziskam:\r",
+			"\\$ApplicationClass.GetMethodParameters(\"install\") | select -first 1 | select -exp properties"
+		],
+		"description": "pouziti metod u WMI trid"
+	},
+	"how to correctly encode output of native commands in remote session": {
+		"prefix": "how to correctly encode output of native commands in remote session",
+		"body": [
+			"### pokud spustim nativni prikazy jako systeminfo, netsh advfirewall, atd tak na vzdalenem pocitaci s jinym nez ceskym jazykem vrati podrbanou diakritiku\r",
+			"#vrati rozbitou diakritiku\r",
+			"Invoke-Command -ScriptBlock -ComputerName meto05 { netsh advfirewall firewall show rule \"Vzdálená plocha (TCP-In)\" } \r",
+			"\r",
+			"#vrati spravnou diakritiku (nativni prikaz predam argumentem a pak jej na miste spustim pres start-job)\r",
+			"\\$command = 'netsh advfirewall firewall show rule \"Vzdálená plocha (TCP-In)\"'\r",
+			"Invoke-Command -ComputerName meto05 -ArgumentList \\$command -ScriptBlock { \r",
+			"    param (\\$Code)\r",
+			"    \\$job = Start-Job ([ScriptBlock]::Create(\\$Code)) -Name Job1\r",
+			"    \\$null = Wait-Job \\$job \r",
+			"    Receive-Job -Name Job1\r",
+			"    Remove-Job -Name Job1\r",
+			"}"
+		],
+		"description": "spravne kodovani vystupu u nativnich prikazu v remote session"
+	},
+	"how to use background jobs": {
+		"prefix": "how to use background jobs",
+		"body": [
+			"#Set the jobs variable to \\$true so the while loop processes at least once\r",
+			"\\$jobs = \\$true\r",
+			"\r",
+			"While (\\$jobs) {\r",
+			"    #Store the jobs in \\$ourJobs\r",
+			"    \\$ourJobs = Get-Job\r",
+			"\r",
+			"    Write-Host \"Checking for jobs...\"\r",
+			"\r",
+			"    foreach (\\$jobObject in \\$ourJobs) {\r",
+			"        #Null out variables used in this loop cycle\r",
+			"        \\$jobResults = \\$null\r",
+			"        \\$errorMessage = \\$null\r",
+			"        \\$jobFile = \\$null\r",
+			"        \\$jobCommand = \\$null\r",
+			"\r",
+			"        #Store the command used in the job to display later\r",
+			"        \\$jobCommand = \\$jobObject.Command\r",
+			"\r",
+			"        #Use the Switch statement to take different actions based on the job's state value\r",
+			"        Switch (\\$jobObject.State) {\r",
+			"            #If the job state is running, display the job info\r",
+			"            {\\$_ -eq 'Running'} {\r",
+			"                Write-Host \"Job: [\\$(\\$jobObject.Name)] is still running...\"`n\r",
+			"                Write-Host \"Command: \\$jobCommand\"`n\r",
+			"            }\r",
+			"\r",
+			"            {\\$_ -eq 'Completed'} {\r",
+			"                Write-Host \"Job [\\$(\\$jobObject.Name)] has completed!\"\r",
+			"\r",
+			"                #Begin completed but with error checking...\r",
+			"                if (\\$jobObject.ChildJobs[0].Error) {\r",
+			"                    #Store error message in \\$errorMessage\r",
+			"                    \\$errorMessage = \\$jobObject.ChildJobs[0].Error | Out-String\r",
+			"\r",
+			"                    Write-Host \"Job completed with an error!\"`n\r",
+			"                    Write-Host \"\\$errorMessage\"`n -ForegroundColor Red -BackgroundColor DarkBlue\r",
+			"                } else {\r",
+			"                    #Get job result and store in \\$jobResults\r",
+			"                    \\$jobResults = Receive-Job \\$jobObject.Name\r",
+			"\r",
+			"                    Write-Host \"Job completed without errors!\"`n\r",
+			"                }\r",
+			"\r",
+			"                #Remove the job\r",
+			"                Remove-Job \\$jobObject.Name\r",
+			"             \r",
+			"            }\r",
+			"\r",
+			"            {\\$_ -eq 'Failed'} {\r",
+			"                #Store the failure reason in \\$failReason\r",
+			"                \\$failReason = \\$jobObject.ChildJobs[0].JobStateInfo.Reason.Message \r",
+			"\r",
+			"                Write-Host \"Job: [\\$(\\$jobObject.Name)] has failed!\"`n\r",
+			"                Write-Host \"\\$failReason\"`n -ForegroundColor Red -BackgroundColor DarkBlue\r",
+			"                \r",
+			"                #Remove the job\r",
+			"                Remove-Job \\$jobObject.Name\r",
+			"            }\r",
+			"        } #End Job State Switch\r",
+			"    } #End \\$ourJobs ForEach loop\r",
+			"\r",
+			"    #Clear the \\$ourJobs variable\r",
+			"    \\$ourJobs = \\$null\r",
+			"\r",
+			"    #Get the new list of jobs as it may have changed since we did some cleanup for failed/completed jobs\r",
+			"    \\$ourJobs = Get-Job \r",
+			"\r",
+			"    #If jobs exists, keep the loop running by setting \\$jobs to \\$true, else set it to \\$false\r",
+			"    if (\\$ourJobs) {\\$jobs = \\$true} else {\\$jobs = \\$false}\r",
+			"\r",
+			"    #Wait 10 seconds to check for jobs again\r",
+			"    Start-Sleep -Seconds 10\r",
+			"} #End \\$jobs While Loop"
+		],
+		"description": ""
+	},
+	"get filename with extension": {
+		"prefix": "get filename with extension",
+		"body": [
+			"[System.IO.Path]::GetFileName(\"C:\\abc\\xyz\\test.txt\")"
+		],
+		"description": "filename (jmeno souboru) s koncovkou"
+	},
+	"get filename without extension": {
+		"prefix": "get filename without extension",
+		"body": [
+			"[System.IO.Path]::GetFileNameWithoutExtension(\"C:\\abc\\xyz\\test.txt\")"
+		],
+		"description": "filename (jmeno souboru) bez koncovky"
+	},
+	"exit with code": {
+		"prefix": "exit with code",
+		"body": [
+			"function _ExitWithCode { \r",
+			"    param ( \r",
+			"        \\$exitcode \r",
+			"    )\r",
+			"\r",
+			"    \\$host.SetShouldExit(\\$exitcode) \r",
+			"    exit \r",
+			"}"
+		],
+		"description": "provedeni ukonceni/exit se zadefinovanym kodem"
+	},
+	"set gMSA in scheduled task": {
+		"prefix": "set gMSA in scheduled task",
+		"body": [
+			"\\$principal = New-ScheduledTaskPrincipal -UserID contoso\\someGMSA\\$ -LogonType Password \r",
+			"Set-ScheduledTask \"Správa\\nejakyTask\" -Principal \\$principal"
+		],
+		"description": "jak pouzit gMSA ucet ve scheduled tasku"
+	},
+	"invoke scriptBlock": {
+		"prefix": "invoke scriptBlock",
+		"body": [
+			"([scriptblock]::Create(\"`\\$result | \\$resultFilter\")).invoke()"
+		],
+		"description": "invoke prikazu zadaneho jako scriptblock"
+	},
+	"continue a|n": {
+		"prefix": "continue a|n",
+		"body": [
+			"while (\\$choice -notmatch \"^[A|N]\\$\") {\r",
+			"\t    \\$choice = read-host \"Pokračovat? (A|N)\"\r",
+			"}\r",
+			"if (\\$choice -eq \"N\") {\r",
+			"\tbreak\r",
+			"}\r"
+		],
+		"description": "pokracovat a|n"
+	},
+	"how to quickly get list of files in directory": {
+		"prefix": "how to quickly get list of files in directory",
+		"body": [
+			"# o 50% rychlejsi ziskani seznamu souboru nez Get-ChildItem\r",
+			"[System.IO.Directory]::GetFiles(\\$path, \"*gpreport.xml\", [System.IO.SearchOption]::AllDirectories) # jen gpreport.xml v aktualnim i podadresarich\r",
+			"[System.IO.Directory]::GetFiles(\\$path, \"*\", [System.IO.SearchOption]::AllDirectories) # soubory v aktualnim adresari a podadresarich\r",
+			"[System.IO.Directory]::GetFiles(\\$path, \"*\") # soubory v aktualnim adresari"
+		],
+		"description": "rychle ziskani souboru v adresari (o 50% rychlejsi nez Get-ChildItem)"
+	},
+	"how to quickly get content of file": {
+		"prefix": "how to quickly get content of file",
+		"body": [
+			"[System.IO.File]::ReadAllLines(\\$filePath) # nacteni celeho souboru o 50% rychlejsi nez Get-Content"
+		],
+		"description": "rychle nacteni obsahu souboru, je o 50 % rychlejsi nez Get-Content"
+	},
+	"how to quickly get content of just few starting lines of file": {
+		"prefix": "how to quickly get content of just few starting lines of file",
+		"body": [
+			"# jak precit rychle jen prvnich par radku souboru aniz bych jej musel projit cely\r",
+			"[System.IO.StreamReader] \\$sr = [System.IO.File]::OpenText(\\$filePath)\r",
+			"\\$unused1 = \\$sr.ReadLine() # prectu prvni radek\r",
+			"\\$unused2 = \\$sr.ReadLine() # prectu druhy radek\r",
+			"[string]\\$thirdLineOfFile = \\$sr.ReadLine() # prectu treti radek\r",
+			"\\$sr.Close() # ukoncim cteni "
+		],
+		"description": "jak rychle precist jen prvnich par radku souboru aniz bych jej musel nacist cely"
+	},
+	"redirect output of exe process to console instead of file": {
+		"prefix": "redirect output of exe process to console instead of file",
+		"body": [
+			"\\$psi = New-object System.Diagnostics.ProcessStartInfo\r",
+			"\\$psi.CreateNoWindow = \\$true\r",
+			"\\$psi.UseShellExecute = \\$false\r",
+			"\\$psi.RedirectStandardOutput = \\$true\r",
+			"\\$psi.RedirectStandardError = \\$true\r",
+			"\\$psi.FileName = 'notepad.exe'\r",
+			"\\$psi.WorkingDirectory = \\$WorkingDirectory"
+		],
+		"description": "presmerovani vystupu spusteneho exe procesu do konzole (namisto soubor jako to umi start-process)"
+	},
+	"split by (system specific) newline": {
+		"prefix": "split by (system specific) newline",
+		"body": [
+			"'This is `r`na string.'.Split([Environment]::NewLine)"
+		],
+		"description": "split po radcich (automaticky pouzije znak pro newline, podle prostredi kde se spousti)"
+	},
+	"define own action for CTRL + C (instead cancellation)": {
+		"prefix": "define own action for CTRL + C (instead cancellation)",
+		"body": [
+			"if ([console]::KeyAvailable) {\r",
+			"    \\$key = [system.console]::readkey(\\$true)\r",
+			"    if ((\\$key.modifiers -band [consolemodifiers]\"control\") -and (\\$key.key -eq \"C\")) {\r",
+			"        \"Terminating...\"\r",
+			"        break\r",
+			"    }\r",
+			"}"
+		],
+		"description": "moznost definovat vlastni reakci na stisk CTRL+C"
+	},
+	"convert date to format used in xml filters": {
+		"prefix": "define own action for CTRL + C (instead cancellation)",
+		"body": [
+			"# pri konvertovani data na tvar pouzivany v XML event filtrech pouzijte:\r",
+			"# 1. funkci Convert-DateToXmlDate\r",
+			"# 2. (Get-Date \\$date).ToUniversalTime().ToString(\"o\") "
+		],
+		"description": "zkonvertovani data na tvar pouzivany v xml event filtrech"
+	},
+	"credential export to xml": {
+		"prefix": "credential export to xml",
+		"body": [
+			"$$username = 'somelogin@contoso.com'\r",
+			"$$password = ConvertTo-SecureString 'hereenterpassword' -AsPlainText -Force\r",
+			"$$credential = New-Object System.Management.Automation.PSCredential $$username, $$password\r",
+			"Export-Clixml -inputObject $$credential -Path C:\\temp\\client.xml -Encoding UTF8",
+			"\r# import credential: \\$credential = Import-CliXml C:\\temp\\client.xml\r"
+		],
+		"description": "credential export to xml"
+	},
+	"define alias: [Alias(\"Some-FunctionAlias\")]": {
+		"prefix": "define alias: [Alias(\"Some-FunctionAlias\")]",
+		"body": [
+			"[Alias(\"Some-FunctionAlias\")]"
+		],
+		"description": "define alias in body of function (without need of Set-Alias)"
+	},
+	"mandatory param": {
+		"prefix": "mandatory param",
+		"body": [
+			"[Parameter(Mandatory = \\$true)]"
+		],
+		"description": "mandatory param"
+	},
+	"default parameter value for cmdlet or function": {
+		"prefix": "default parameter value for cmdlet",
+		"body": [
+			"\\$PSDefaultParameterValues = @{'Send-Email:To' = \"ondrejs4\"}"
+		],
+		"description": "default parameter value for cmdlet or function"
+	},
+	"directorySearcher (search AD computer)": {
+		"prefix": "directorySearcher (search AD computer)",
+		"body": [
+			"\\$searcher = ((New-Object DirectoryServices.DirectorySearcher -Property @{Filter = '(objectCategory=computer)'; PageSize = 500 }).findall())\r",
+			"\\$ALLComputersObjects = \\$searcher | Select-Object @{n = 'name'; e = { \\$_.properties.name } }, @{n = 'distinguishedName'; e = { \\$_.properties.distinguishedname } }\r",
+			"# vyprazdnim, kvuli ochrane pred memory leakem\r",
+			"\\$searcher.Dispose()"
+		],
+		"description": "directorySearcher (search AD computer)"
+	},
+	"domain admin rights check": {
+		"prefix": "domain admin rights check",
+		"body": [
+			"\\$domainAdmins = Get-ADGroupMemberRecursive -name \"Domain Admins\"\r",
+			"    if (\\$env:USERNAME -notin \\$domainAdmins) {\r",
+			"        Throw \"Insufficient rights. Run as Domain Admin.\"\r",
+			"    }"
+		],
+		"description": "domain admin rights check"
+	},
+	"remove variable validation": {
+		"prefix": "remove variable validation",
+		"body": [
+			"(Get-Variable varName).Attributes.Clear()"
+		],
+		"description": "remove variable validation"
+	},
+	"how to create datetime parameter correctly to accept datetime object or string convertable to datetime. And in culture you actually use.": {
+		"prefix": "datetime in param block",
+		"body": [
+			"    [ValidateScript({\r",
+			"        If ((\\$_.getType().name -eq \"string\" -and [DateTime]::Parse(\\$_)) -or (\\$_.getType().name -eq \"dateTime\")) {\r",
+			"            \\$true\r",
+			"        } else {\r",
+			"            Throw \"Enter in format per your culture. For cs-CZ: 15.2.2019 15:00. For en-US: 2.15.2019 15:00.\"\r",
+			"        }\r",
+			"    })]\r",
+			"    \\$from\r",
+			"    ,\r",
+			"    [ValidateScript({\r",
+			"        If ((\\$_.getType().name -eq \"string\" -and [DateTime]::Parse(\\$_)) -or (\\$_.getType().name -eq \"dateTime\")) {\r",
+			"            \\$true\r",
+			"        } else {\r",
+			"            Throw \"Enter in format per your culture. For cs-CZ: 15.2.2019 15:00. For en-US: 2.15.2019 15:00.\"\r",
+			"        }\r",
+			"    })]\r",
+			"    \\$to\r",
+			"\r",
+			"    # v BEGIN bloku prevedu na datetime objekt, pokud uzivatel zadal string\r",
+			"    BEGIN {\r",
+			"        if (\\$from -and \\$from.getType().name -eq \"string\") {\\$from = [DateTime]::Parse(\\$from)}\r",
+			"        if (\\$to -and \\$to.getType().name -eq \"string\") {\\$to = [DateTime]::Parse(\\$to)}\r",
+			"        # kontrola\r",
+			"        if (\\$from -and \\$to -and \\$from -gt \\$to) {\r",
+			"            throw \"From cannot be after To\"\r",
+			"        }\r",
+			"    }"
+		],
+		"description": "how to create datetime parameter correctly to accept datetime object or string convertable to datetime. And in culture you actually use."
+	},
+	"AST useful commands": {
+		"prefix": "AST",
+		"body": [
+			"# AST ze souboru\r",
+			"\\$AST = [System.Management.Automation.Language.Parser]::ParseFile(\"C:\\Temp\\Variables.psm1\", [ref]\\$null, [ref]\\$null)\r",
+			"# AST z textu\r",
+			"\\$AST = [System.Management.Automation.Language.Parser]::ParseInput((Get-Content \"C:\\Some\\Path\\script.ps1\" -raw), [ref]\\$null, [ref]\\$null)\r",
+			"\r",
+			"# FindAll s druhym parametrem jako \\$true hleda rekurzivne, s \\$false ne\r",
+			"\r",
+			"\\$allTokens = \\$AST.FindAll( { \\$args[0] }, \\$true)\r",
+			"\r",
+			"\\$parameters = \\$AST.FindAll( { \\$args[0] -is [System.Management.Automation.Language.ParameterAst] }, \\$true)\r",
+			"\r",
+			"\\$variables = \\$AST.FindAll( { \\$args[0] -is [System.Management.Automation.Language.VariableExpressionAst ] }, \\$true)\r",
+			"# pouze definovane promenne (tzn promenna nasledovana =) vcetne otypovanych\r",
+			"\\$variables | Where-Object { \\$_.parent.left -or \\$_.parent.type } | Select-Object extent\r",
+			"\r",
+			"\\$functions = \\$AST.FindAll( {\r",
+			"    param([System.Management.Automation.Language.Ast] \\$AST)\r",
+			"\r",
+			"    \\$AST -is [System.Management.Automation.Language.FunctionDefinitionAst] -and\r",
+			"    # Class methods have a FunctionDefinitionAst under them as well, but we don't want them.\r",
+			"    (\\$PSVersionTable.PSVersion.Major -lt 5 -or\r",
+			"        \\$AST.Parent -isnot [System.Management.Automation.Language.FunctionMemberAst])\r",
+			"}, \\$true)"
+		],
+		"description": "AST useful commands"
+	}
+}

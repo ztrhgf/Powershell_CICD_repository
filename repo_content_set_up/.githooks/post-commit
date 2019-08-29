@@ -1,0 +1,8 @@
+#!/bin/sh
+echo "commit cancelled" # pri chybe zpracovani VSC automaticky vypise obsah prvniho echo, proto tento text i kdyz ve vypisu konzole bude mast
+echo "#####################"
+echo "###### POST-COMMIT git hook"
+echo "###### Provedu nakopirovani zmen do cilove slozky + push commitu do repozitare"
+exec powershell.exe -NoProfile -ExecutionPolicy Bypass -file ".\.githooks\post-commit.ps1"
+echo "#####################"
+exit

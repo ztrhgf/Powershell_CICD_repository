@@ -1,0 +1,8 @@
+#!/bin/sh
+echo "commit cancelled" # pri chybe zpracovani VSC automaticky vypise obsah prvniho echo, proto tento text i kdyz ve vypisu konzole bude mast
+echo "#####################"
+echo "###### COMMIT-MSG git hook"
+echo "###### Provedu kontrolu, ze nazev commitu je ve tvaru: 'text: text"
+exec powershell.exe -NoProfile -ExecutionPolicy Bypass -file ".\.githooks\commit-msg.ps1" $1
+echo "#####################"
+exit

@@ -1,0 +1,14 @@
+<Objs Version="1.1.0.1" 
+  xmlns="http://schemas.microsoft.com/powershell/2004/04">
+  <Obj RefId="0">
+    <TN RefId="0">
+      <T>System.Management.Automation.PSCredential</T>
+      <T>System.Object</T>
+    </TN>
+    <ToString>System.Management.Automation.PSCredential</ToString>
+    <Props>
+      <S N="UserName">repo_puller</S>
+      <SS N="Password">000000000000000000000000000</SS>
+    </Props>
+  </Obj>
+</Objs>

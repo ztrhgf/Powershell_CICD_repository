@@ -1,0 +1,65 @@
+// Place your settings in this file to overwrite default and user settings.
+{
+    "editor.wordSeparators": "`~!@#%^&*()-=+[{]}\\|;:'\",.<>/?",
+    "editor.tabSize": 4,
+    "editor.minimap.enabled": false,
+    "editor.renderControlCharacters": true,
+    "editor.formatOnType": true,
+    "editor.formatOnPaste": true,
+    "editor.formatOnSave": true,
+    "editor.formatOnSaveTimeout": 2000,
+    "editor.wordWrap": "on",
+    "editor.tabCompletion": "on",
+    "breadcrumbs.enabled": true,
+    "telemetry.enableCrashReporter": false,
+    "terminal.integrated.fontFamily": "Consolas",
+    "terminal.integrated.fontSize": 14,
+    "terminal.integrated.lineHeight": 1,
+    "terminal.integrated.shell.windows": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "files.defaultLanguage": "powershell",
+    "files.trimTrailingWhitespace": true,
+    "files.trimFinalNewlines": true,
+    "powershell.powerShellExePath": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "files.associations": {
+        "*.ps1": "powershell"
+    },
+    // obecne chceme UTF8 kodovani
+    "files.encoding": "utf8",
+    // u PS skriptu chceme UTF8 with BOM, protoze to podporuje GIT a zaroven tam nevadi EN DASH a podobne uber znaky
+    // viz doporuceni https: //docs.microsoft.com/cs-cz/powershell/scripting/components/vscode/understanding-file-encoding?view=powershell-6
+    "[powershell]": {
+        "files.encoding": "utf8bom",
+    },
+    "powershell.enableProfileLoading": true,
+    "powershell.integratedConsole.focusConsoleOnExecute": true,
+    "powershell.integratedConsole.showOnStartup": false,
+    "powershell.codeFormatting.preset": "OTBS",
+    "powershell.codeFormatting.useCorrectCasing": true,
+    "powershell.codeFormatting.alignPropertyValuePairs": true,
+    "powershell.codeFormatting.ignoreOneLineBlock": true,
+    "powershell.codeFormatting.newLineAfterCloseBrace": true,
+    "powershell.codeFormatting.newLineAfterOpenBrace": true,
+    "powershell.codeFormatting.openBraceOnSameLine": true,
+    "powershell.codeFormatting.whitespaceAroundOperator": true,
+    "powershell.codeFormatting.whitespaceBeforeOpenBrace": true,
+    "powershell.codeFormatting.whitespaceBeforeOpenParen": true,
+    "powershell.scriptAnalysis.enable": true,
+    "powershell.startAutomatically": true,
+    "gitlens.advanced.similarityThreshold": 90,
+    "gitlens.advanced.telemetry.enabled": false,
+    "git.promptToSaveFilesBeforeCommit": false,
+    "git.autofetch": true,
+    "git.fetchOnPull": true,
+    // kvuli autostash pokud dojde k preruseni commitu, muze byt potreba obsah stash rucne obnovit skrze prikaz: git stash pop
+    "git.autoStash": true,
+    "workbench.tree.indent": 10,
+    "workbench.tree.renderIndentGuides": "always",
+    // nastaveni todo-tree doplnku
+    "todo-tree.defaultHighlight": {
+        "icon": "alert",
+        "type": "text",
+        "foreground": "orange",
+        "background": "yellow",
+        "opacity": 10,
+    },
+}
