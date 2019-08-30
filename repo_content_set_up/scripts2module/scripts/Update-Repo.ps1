@@ -433,6 +433,120 @@ function Update-Repo {
             Write-Error "Pri kopirovani Custom sekce se vyskytl nasledujici problem:`n`n$result`n`nPokud slo o chybu, opetovne spustte rozkopirovani prikazem:`n$($MyInvocation.Line) -force"
         }
 
+        # omezeni NTFS prav
+        # aby mely pristup pouze stroje, ktere maji dany obsah stahnout dle $config atributu computerName
+        # slozky, ktere nemaji definovan computerName budou mit vychozi nastaveni
+        # pozn. nastavuji pokazde, protoze pokud by v customConfig byly nejake cilove stroje definovany clenstvim v AD skupine ci OU, tak nemam sanci to jinak poznat
+        $customConfig = Join-Path $customDestination "customConfig.ps1"
+        if (Test-Path $customConfig -ea SilentlyContinue) {
+            # customConfig existuje, tzn je mozne zjistit, jak se maji omezit NTFS prava
+
+            # import promennych
+            # kvuli zjisteni, kam se ma ktera slozka kopirovat a dle toho omezit NTFS prava
+            # chybu ignorujeme, protoze na fresh stroji, modul bude az po prvnim spusteni tohoto skriptu, ne driv :)
+            Import-Module Variables -ErrorAction "Continue"
+
+            # nactu customConfig.ps1 skript respektive $config promennou v nem definovanou
+            . $customConfig
+
+            # skupina ktera ma pravo cist obsah DFS repozitare (i lokalni kopie)
+            [string] $readUser = "TODONAHRADITzaNETBIOSVASIDOMENY\repo_reader"
+            # skupina ktera ma pravo editovat obsah DFS repozitare (i lokalni kopie)
+            [string] $writeUser = "TODONAHRADITzaNETBIOSVASIDOMENY\repo_writer"
+            function _setPermissions {
+                [cmdletbinding()]
+                param (
+                    [Parameter(Mandatory = $true)]
+                    [string] $path
+                    ,
+                    [Parameter(Mandatory = $true)]
+                    [string[]] $readUser
+                    ,
+                    [Parameter(Mandatory = $true)]
+                    [string[]] $writeUser
+                    ,
+                    [switch] $resetACL
+                )
+
+                if (!(Test-Path $path)) {
+                    throw "zadana cesta neexistuje"
+                }
+
+                # vytvorim prazdne ACL
+                $acl = New-Object System.Security.AccessControl.DirectorySecurity
+
+                $permissions = @()
+
+                if (Test-Path $path -PathType Container) {
+                    # je to adresar
+
+                    if ($resetACL) {
+                        # reset ACL, tzn zruseni explicitnich ACL a povoleni dedeni
+                        $acl.SetAccessRuleProtection($false, $false)
+                    } else {
+                        # zakazani dedeni a odebrani zdedenych prav
+                        $acl.SetAccessRuleProtection($true, $false)
+
+                        $readUser | ForEach-Object {
+                            $permissions += @(, ("$_", "ReadAndExecute", 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
+                        }
+
+                        $writeUser | ForEach-Object {
+                            $permissions += @(, ("$_", "FullControl", 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
+                        }
+                    }
+                } else {
+                    "nemelo by nastat, Custom ma obsahovat pouze soubory"
+                }
+
+                # naplneni noveho ACL
+                $permissions | ForEach-Object {
+                    $ace = New-Object System.Security.AccessControl.FileSystemAccessRule $_
+                    try {
+                        $acl.AddAccessRule($ace)
+                    } catch {
+                        Write-Warning "Pravo se nepodarilo nastavit. Existuje zadany ucet?"
+                    }
+                }
+
+                # nastaveni ACL
+                try {
+                    # Set-Acl nejde pouzit protoze bug https://stackoverflow.com/questions/31611103/setting-permissions-on-a-windows-fileshare
+                    (Get-Item $path).SetAccessControl($acl)
+                } catch {
+                    throw "nepodarilo se nastavit opravneni: $_"
+                }
+            }
+
+            # adresare u kterych se maji prava ponechat jak jsou
+            $excludedFolder = ""
+
+            foreach ($folder in (Get-ChildItem $customDestination -Directory)) {
+                $folder = $folder.FullName
+                $folderName = Split-Path $folder -Leaf
+
+                if ($folderName -in $excludedFolder) { continue }
+
+                $configData = $config | ? { $_.folderName -eq $folderName }
+                if ($configData -and $configData.computerName) {
+                    # pro danou slozku je definovano, kam se ma kopirovat
+                    # omezim nalezite pristup
+
+                    [string[]] $readUser = $configData.computerName
+                    # computer AD ucty maji $ za svym jmenem, pridam
+                    $readUser = $readUser | % { $_ + "$" }
+                    "omezuji NTFS prava na $folder (pristup pouze pro: $($readUser -join ', '))"
+                    _setPermissions $folder -readUser $readUser -writeUser $writeUser
+                } else {
+                    # pro danou slozku neni definovano, kam se ma kopirovat
+                    # zresetuji prava na vychozi
+                    "nastavuji vychozi prava na $folder"
+                    _setPermissions $folder -readUser $readUser -writeUser $writeUser -resetACL
+                }
+            }
+        }
+
+
         ++$somethingChanged
     } # konec sekce Custom
 
