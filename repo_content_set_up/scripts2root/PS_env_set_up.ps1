@@ -29,15 +29,6 @@ $ErrorActionPreference = 'stop'
 # cesta k DFS repozitari
 $repoSrc = "\\TODONAHRADIT" # cesta do centralniho (DFS) repo napr.: \\contoso\repository
 
-# nacteni $config promenne (potreba pro deploy Custom sekce repo)
-$customConfig = Join-Path $repoSrc "Custom\customConfig.ps1"
-
-# import promennych
-# kvuli Custom sekci (resp. aby slo pouzivat v definici computerName promenne)
-# a kvuli specifikovani kam se ma kopirovat profile.ps1
-# chybu ignorujeme, protoze na fresh stroji, modul bude az po prvnim spusteni tohoto skriptu, ne driv :)
-Import-Module Variables -ErrorAction "Continue"
-
 function Set-Permissions {
     <#
     dle readUser detekuji moduly, ktere jsem nakopiroval timto sync skriptem
@@ -281,6 +272,19 @@ Get-ChildItem $moduleSrcFolder -Directory | ForEach-Object {
 
 
 
+
+#
+# IMPORT PROMENNYCH
+#
+
+# kvuli Custom sekci (resp. aby slo pouzivat v definici computerName promenne) a kvuli specifikovani kam se ma kopirovat profile.ps1
+# chybu ignorujeme, protoze na fresh stroji, modul bude az po prvnim spusteni tohoto skriptu, ne driv :)
+# pozn.: import delam az po nakopirovani aktualizovanych modulu, abych pracoval s nejnovejsimi daty
+Import-Module Variables -ErrorAction "Continue"
+
+
+
+
 #
 # SYNCHRONIZACE PS PROFILU
 #
@@ -346,10 +350,8 @@ Log adresar se ignoruje pri porovnavani obsahu remote repo vs lokalni kopie a pr
 !!! pokud spoustene skripty generuji nejake soubory, at je ukladaji do tohoto Log adresare, jinak dojde pri kazde synchronizaci s remote repo ke smazani teto slozky (porovnavam velikosti adresaru v repo a lokalu)
 #>
 
+$customConfig = Join-Path $repoSrc "Custom\customConfig.ps1"
 
-#
-# nactu promennou $config
-# schvalne definuji v samostatnem souboru kvuli lepsi prehlednosti a editovatelnosti
 if (!(Test-Path $customConfig -ErrorAction SilentlyContinue)) {
     Import-Module Scripts -Function Send-Email
     Send-Email -subject "Sync of PS scripts: Custom" -body "Hi,`non $env:COMPUTERNAME script $($MyInvocation.ScriptName) detected missing config file $customConfig. Even if you do not want to copy any Custom folders to any server, create empty $customConfig."
@@ -357,6 +359,7 @@ if (!(Test-Path $customConfig -ErrorAction SilentlyContinue)) {
 }
 
 # nactu customConfig.ps1 skript respektive $config promennou v nem definovanou
+# nastaveni Custom sekce schvalne definuji v samostatnem souboru kvuli lepsi prehlednosti a editovatelnosti
 . $customConfig
 
 # zdrojova slozka custom dat
