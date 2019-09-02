@@ -8,7 +8,8 @@ Just clone (don't use "Download ZIP"!) this repository and follow step by step t
 
 ## [Unreleased]
 - Possibility to define custom NTFS rights for folders in Custom (independent on NTFS based on value of property computerName). It could be useful to private content which is not intended for downloading on any clients
-- limit access to global powershell profile.ps1 stored in DFS according to value of $computerWithProfile
+- Limit access to global powershell profile.ps1 stored in DFS according to value of $computerWithProfile
+- Use alternate data stream to detect my modules instead of ACL
 
 ## [1.0.2] - 2019-30-8
 ### Changed
