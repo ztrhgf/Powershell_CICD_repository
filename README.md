@@ -7,9 +7,12 @@ Just clone (don't use "Download ZIP"!) this repository and follow step by step t
 # Changelog
 
 ## [Unreleased]
-- Possibility to define custom NTFS rights for folders in Custom (independent on NTFS based on value of property computerName). It could be useful to private content which is not intended for downloading on any clients
 - Limit access to global powershell profile.ps1 stored in DFS according to value of $computerWithProfile
 - Use alternate data stream to detect my modules instead of ACL
+
+## [1.0.3] - 2019-2-9
+### Added
+- Possibility to define custom share NTFS rights for folders in Custom. Intended for limiting read access to folders stored in share/DFS in case, the folder doesn't have computerName attribute in customConfig etc access isn't limited already.
 
 ## [1.0.2] - 2019-30-8
 ### Changed
