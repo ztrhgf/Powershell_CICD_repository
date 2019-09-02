@@ -518,23 +518,25 @@ function Update-Repo {
                 }
             }
 
-            # adresare u kterych se maji prava ponechat jak jsou
-            $excludedFolder = ""
-
             foreach ($folder in (Get-ChildItem $customDestination -Directory)) {
                 $folder = $folder.FullName
                 $folderName = Split-Path $folder -Leaf
-
-                if ($folderName -in $excludedFolder) { continue }
 
                 $configData = $config | ? { $_.folderName -eq $folderName }
                 if ($configData -and $configData.computerName) {
                     # pro danou slozku je definovano, kam se ma kopirovat
                     # omezim nalezite pristup
 
-                    [string[]] $readUser = $configData.computerName
-                    # computer AD ucty maji $ za svym jmenem, pridam
-                    $readUser = $readUser | % { $_ + "$" }
+                    # custom share NTFS prava maji prednost pred omezenim prav na stroje, kam se ma kopirovat
+                    # tzn pokud je definovano oboje, nastavim co je v customShareNTFS atributu
+                    if ($configData.customShareNTFS) {
+                        [string[]] $readUser = $configData.customShareNTFS
+                    } else {
+                        [string[]] $readUser = $configData.computerName
+                        # computer AD ucty maji $ za svym jmenem, pridam
+                        $readUser = $readUser | % { $_ + "$" }
+                    }
+
                     "omezuji NTFS prava na $folder (pristup pouze pro: $($readUser -join ', '))"
                     _setPermissions $folder -readUser $readUser -writeUser $writeUser
                 } else {
