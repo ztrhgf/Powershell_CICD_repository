@@ -8,7 +8,9 @@ Just clone (don't use "Download ZIP"!) this repository and follow step by step t
 
 ## [Unreleased]
 - Limit access to global powershell profile.ps1 stored in DFS according to value of $computerWithProfile
-- Use alternate data stream to detect my modules instead of ACL
+- add posibility to copy Custom content to any given folder
+- add automatic script signing
+- Use alternate data stream to detect my modules instead of ACL?
 
 ## [1.0.3] - 2019-2-9
 ### Added
