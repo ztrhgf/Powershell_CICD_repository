@@ -7,14 +7,14 @@ Just clone (don't use "Download ZIP"!) this repository and follow step by step t
 # Changelog
 
 ## [Unreleased]
-- Limit access to global powershell profile.ps1 stored in DFS according to value of $computerWithProfile
+- limit access to global powershell profile.ps1 stored in DFS according to value of $computerWithProfile
 - add posibility to copy Custom content to any given folder
 - add automatic script signing
-- Use alternate data stream to detect my modules instead of ACL?
+- use alternate data stream to detect my modules instead of ACL?
 
 ## [1.0.3] - 2019-2-9
 ### Added
-- Possibility to define custom share NTFS rights for folders in Custom. Intended for limiting read access to folders stored in share/DFS in case, the folder doesn't have computerName attribute in customConfig etc access isn't limited already.
+- Possibility to define custom share NTFS rights for folders in Custom. Intended for limiting read access to folders stored in share/DFS, in case the folder doesn't have computerName attribute in customConfig, etc access isn't limited already.
 
 ## [1.0.2] - 2019-30-8
 ### Changed
