@@ -8,7 +8,9 @@ Just clone (don't use "Download ZIP"!) this repository and follow step by step t
 
 ## [Unreleased]
 - limit access to global powershell profile.ps1 stored in DFS according to value of $computerWithProfile
-- add posibility to copy Custom content to any given folder
+- add posibility to copy Custom folders to any given folder locally
+ - or just content of the Custom folder
+- add posibility to copy Custom folders to any given UNC share
 - add automatic script signing
 - use alternate data stream to detect my modules instead of ACL?
 
