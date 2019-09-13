@@ -523,7 +523,7 @@ function Update-Repo {
                 $folderName = Split-Path $folder -Leaf
 
                 $configData = $config | ? { $_.folderName -eq $folderName }
-                if ($configData -and $configData.computerName) {
+                if ($configData -and ($configData.computerName -or $configData.customShareNTFS)) {
                     # pro danou slozku je definovano, kam se ma kopirovat
                     # omezim nalezite pristup
 
