@@ -55,11 +55,11 @@
     "workbench.tree.indent": 10,
     "workbench.tree.renderIndentGuides": "always",
     // nastaveni todo-tree doplnku
-    "todo-tree.defaultHighlight": {
+    "todo-tree.highlights.defaultHighlight": {
         "icon": "alert",
         "type": "text",
         "foreground": "orange",
         "background": "yellow",
-        "opacity": 10,
+        "opacity": 10
     },
 }
