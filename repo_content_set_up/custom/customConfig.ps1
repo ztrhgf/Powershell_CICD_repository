@@ -7,16 +7,24 @@ ZDE DEFINUJETE, JAKE SERVERY MAJI MIT LOKALNE JAKE SLOZKY Z CUSTOM SEKCE REPOZIT
 $config je pole objektu, kde kazdy objekt reprezentuje jednu slozku v Custom adresari
 
 objekt pak obsahuje nasledujici klice:
-    - (povinny) klic folderName = jmeno slozky (ktera se nachazi v Custom adresari)
+    - folderName
+        (povinny) klic
+        jmeno slozky (ktera se nachazi v Custom adresari)
         pozn.: pokud dojde ke smazani slozky, smazte i odpovidajici objekt v Custom jinak sync skript bude koncit chybou!
-    - (nepovinny) klic computerName = na jake servery se ma slozka synchronizovat (je mozne pouzit i promennou (napr. z Variables modulu) obsahujici seznam stroju)
+    - computerName
+        (nepovinny) klic
+        na jake servery se ma slozka synchronizovat (je mozne pouzit i promennou (napr. z Variables modulu) obsahujici seznam stroju)
         !pouze tyto stroje budou mit read pristup k teto slozce v DFS, zadne jine!
-    - (nepovinny) klic customNTFS = slouzi pro omezeni prav na kopii dane slozky na cilovem stroji
+    - customNTFS
+        (nepovinny) klic
+        slouzi pro omezeni prav na kopii dane slozky na cilovem stroji
         pouze zadany ucet muze cist obsah teto slozky (jinak clenove Authenticated Users). SYSTEM a clenove skupin repo_reader, repo_writer a Administrators mohou cist obsah vzdy!
-        Pouze tomuto uctu se zaroven na (automaticky vytvarenem) Log pod adresari nastavi MODIFY prava (jinak opet clenum Authenticated Users)
-        pr.: MASTER\msvc-o365sync$ (gMSA ucet) ci Local Service ci System atp
+        pouze tomuto uctu se zaroven na (automaticky vytvarenem) Log pod adresari nastavi MODIFY prava (jinak opet clenum Authenticated Users)
+        pr.: kontoso\o365sync$ (gMSA ucet) ci Local Service ci System atp
         !!!POZOR lze zadat pouze jeden ucet!!!
-    - (nepovinny) klic customShareNTFS = slouzi pro omezeni prav na dane slozce v DFS share
+    - customShareNTFS
+        (nepovinny) klic 
+        slouzi pro omezeni prav na dane slozce v DFS share
         pouze zadane ucty budou mit pristup k teto slozce v DFS zadne jine
         !prebiji pravo, ktere by se jinak nastavilo pro stroje viz computerName!
         pozn.: u strojovych uctu je potreba zadat s dolarem na konci (APP-15$)
