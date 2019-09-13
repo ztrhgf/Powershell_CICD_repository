@@ -58,16 +58,18 @@ function _GetFileEncoding {
 
         $encodingFound = $false
 
-        foreach ($encoding in [System.Text.Encoding]::GetEncodings().GetEncoding()) {
-            $preamble = $encoding.GetPreamble()
+        if ($bom) {
+            foreach ($encoding in [System.Text.Encoding]::GetEncodings().GetEncoding()) {
+                $preamble = $encoding.GetPreamble()
 
-            if ($preamble) {
-                # obsahuje BOM
-                foreach ($i in 0..($preamble.Length - 1)) {
-                    if ($preamble[$i] -ne $bom[$i]) {
-                        break
-                    } elseif ($i -eq ($preamble.Length - 1)) {
-                        $encodingFound = $encoding
+                if ($preamble) {
+                    # obsahuje BOM
+                    foreach ($i in 0..($preamble.Length - 1)) {
+                        if ($preamble[$i] -ne $bom[$i]) {
+                            break
+                        } elseif ($i -eq ($preamble.Length - 1)) {
+                            $encodingFound = $encoding
+                        }
                     }
                 }
             }
@@ -76,6 +78,7 @@ function _GetFileEncoding {
         if (!$encodingFound) {
             $encodingFound = $defaultEncoding
         }
+
         $encodingFound
     }
 }
