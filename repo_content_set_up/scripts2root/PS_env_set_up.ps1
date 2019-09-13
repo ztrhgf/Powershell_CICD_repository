@@ -53,13 +53,11 @@ function Set-Permissions {
         throw "zadana cesta neexistuje"
     }
 
-    # vytvorim prazdne ACL
-    $acl = New-Object System.Security.AccessControl.DirectorySecurity
-    # zakazani dedeni a odebrani zdedenych prav
-    $acl.SetAccessRuleProtection($true, $false)
-
     if (Test-Path $path -PathType Container) {
         # je to adresar
+        # vytvorim prazdne ACL
+        $acl = New-Object System.Security.AccessControl.DirectorySecurity
+
         $permissions = @()
         $permissions += @(, ("System", "FullControl", 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
         # hardcoded, abych nastavil skutecne vzdy
@@ -83,6 +81,10 @@ function Set-Permissions {
         }
     } else {
         # je to soubor
+
+        # vytvorim prazdne ACL
+        $acl = New-Object System.Security.AccessControl.FileSecurity
+
         $permissions = @()
         $permissions += @(, ("System", "FullControl", 'Allow'))
         # hardcoded, abych nastavil skutecne vzdy
@@ -106,6 +108,9 @@ function Set-Permissions {
         }
     }
 
+    # zakazani dedeni a odebrani zdedenych prav
+    $acl.SetAccessRuleProtection($true, $false)
+
     $permissions | ForEach-Object {
         $ace = New-Object System.Security.AccessControl.FileSystemAccessRule $_
         $acl.AddAccessRule($ace)
@@ -113,7 +118,8 @@ function Set-Permissions {
 
     # nastaveni ACL
     try {
-        Set-Acl -Path $path -AclObject $acl -ea stop
+        # Set-Acl nejde pouzit protoze bug https://stackoverflow.com/questions/31611103/setting-permissions-on-a-windows-fileshare
+        (Get-Item $path).SetAccessControl($acl)
     } catch {
         throw "nepodarilo se nastavit opravneni: $_"
     }
@@ -121,22 +127,23 @@ function Set-Permissions {
     # reset ACL na obsahu slozky (pro pripad, ze nekdo upravil NTFS prava)
     # pozn. ownership nemenim
     if (Test-Path $path -PathType Container) {
-        #Start the job that will reset permissions for each file, don't even start if there are no direct sub-files
+        # Start the job that will reset permissions for each file, don't even start if there are no direct sub-files
         $SubFiles = Get-ChildItem $Path -File
         If ($SubFiles) {
             Start-Job -ScriptBlock { $args[0] | ForEach-Object { icacls.exe $_.FullName /Reset /C } } -ArgumentList $SubFiles
         }
 
-        #Now go through each $Path's direct folder (if there's any) and start a process to reset the permissions, for each folder.
+        # Now go through each $Path's direct folder (if there's any) and start a process to reset the permissions, for each folder.
         $SubFolders = Get-ChildItem $Path -Directory
         If ($SubFolders) {
             Foreach ($SubFolder in $SubFolders) {
-                #Start a process rather than a job, icacls should take way less memory than Powershell+icacls
+                # Start a process rather than a job, icacls should take way less memory than Powershell+icacls
                 Start-Process icacls -WindowStyle Hidden -ArgumentList """$($SubFolder.FullName)"" /Reset /T /C" -PassThru
             }
         }
     }
 }
+
 Function Copy-Folder {
     [cmdletbinding()]
     Param (
