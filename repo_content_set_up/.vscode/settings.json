@@ -59,7 +59,17 @@
         "icon": "alert",
         "type": "text",
         "foreground": "orange",
-        "background": "yellow",
         "opacity": 10
     },
+    "todo-tree.highlights.customHighlight": {
+        "TODO": {
+            "icon": "check",
+        },
+        "FIXME": {
+            "foreground": "yellow",
+            "background": "red",
+            "type": "whole-line",
+            "iconColour": "yellow"
+        }
+    }
 }
