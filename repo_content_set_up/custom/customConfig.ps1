@@ -60,7 +60,7 @@ Log adresar se ignoruje pri porovnavani obsahu remote repo vs lokalni kopie a pr
 
 $config = @(
     [PSCustomObject]@{
-        folderName   = "Repo_Sync"
+        folderName   = "Repo_sync"
         computerName = $RepoSyncServer
     }
 )
