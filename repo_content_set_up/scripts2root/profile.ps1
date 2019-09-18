@@ -63,6 +63,46 @@ $PSDefaultParameterValues = @{
 
 
 
+
+#
+# TAB completition
+#
+
+# automaticke doplneni jmena domenoveho stroje do computerName parametru v jakemkoli prikazu z modulu Scripts
+# zadany string hleda jak v name, tak description
+$computerSB = {
+    param ($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
+
+    $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"LDAP://DC=kontoso,DC=com"), '(objectCategory=computer)', ('name', 'description'))
+    ($searcher.findall() | ? { $_.properties.name -match $wordToComplete -or $_.properties.description -match $wordToComplete }).properties.name
+    $searcher.Dispose()
+}
+Register-ArgumentCompleter -CommandName ((Get-Command -Module Scripts).name) -ParameterName computerName -ScriptBlock $computerSB
+
+# omezeni automatickeho doplneni computerName parametru na jmena serveru (ve vybranych funkcich)
+# zadany string hleda jak v name, tak description
+$serverSB = {
+    param ($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
+
+    $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"LDAP://DC=kontoso,DC=com"), '(objectCategory=computer)', ('name', 'description'))
+    ($searcher.findall() | ? { $_.properties.name -match $wordToComplete -or $_.properties.description -match $wordToComplete }).properties.name
+    $searcher.Dispose()
+}
+Register-ArgumentCompleter -CommandName Invoke-MSTSC -ParameterName computerName -ScriptBlock $serverSB
+
+# omezeni automatickeho doplneni computerName parametru na jmena klientskych stroju (ve vybranych funkcich)
+$clientSB = {
+    param ($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
+
+    $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"LDAP://DC=kontoso,DC=com"), '(objectCategory=computer)', ('name'))
+    ($searcher.findall()).properties.name | ? { $_ -match $wordToComplete }
+    $searcher.Dispose()
+}
+Register-ArgumentCompleter -CommandName Assign-Computer -ParameterName computerName -ScriptBlock $clientSB
+
+
+
+
 #
 # import modulu
 #
