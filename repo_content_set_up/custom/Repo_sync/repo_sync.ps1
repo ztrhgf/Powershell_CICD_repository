@@ -1337,7 +1337,6 @@ try {
             "nastavim FULLCONTROL pristup uctum v customDestinationNTFS na $customLogFolder"
             _setPermissions $customLogFolder -readUser $customNTFS -writeUser $writeUser, $customNTFS
         } elseif (!$customNTFS -and !$copyJustContent) {
-            #FIXME otestovat
             # nemaji se nastavit zadna custom prava
             # pro jistotu udelam reset NTFS prav (mohl jsem je jiz v minulosti nastavit)
             # ale pouze pokud na danem adresari najdu read_user ACL == nastavil jsem v minulosti custom prava

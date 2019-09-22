@@ -521,8 +521,6 @@ if ($thisPCCustom) {
         #
         # vytvorim Log adresar pokud dava smysl
         if (!$_.copyJustContent -or ($_.copyJustContent -and !$_.customLocalDestination)) {
-            ???? asi takto???
-            #FIXME doresit ze je computerName a customShareDestination a zaroven copyJustContent..do Scripts se nakopiruje ale log se nevytvori coz pozdeji vede k chybe ZAKAZAT TAKOVOU MOZNOST obzvlast pokud jde jeden folderName definvoat vickrat OteSTOVAT
             [Void][System.IO.Directory]::CreateDirectory("$customLogFolder")
         }
 
