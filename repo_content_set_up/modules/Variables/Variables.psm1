@@ -2,7 +2,7 @@
 
 # jmeno serveru, ze ktereho se plni DFS repo (MGM server)
 $repoSyncServer = "TODONAHRADIT"
-# seznam stroju, na ktere se ma kopirovat profile.ps1
+# jmena stroju, na ktere se ma kopirovat globalni Powershell profil (tzn. scripts2root\profile.ps1)
 $computerWithProfile = "TODONAHRADIT"
 
 # co dalsiho tu muze byt...
