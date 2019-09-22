@@ -57,8 +57,6 @@ try {
     # commit, ktery je aktualne posledni
     $actualLastCommit = git log -n 1 --pretty=format:"%H"
     $actualLastCommit | Out-File $lastCommitPath -Force
-
-    # rozkopirovani do DFS se deje ze spesl serveru, ktery udela pull pod servisnim uctem + zavola Update-Kentico_repo a tim dostane zmeny do DFS
 } catch {
     _ErrorAndExit "Doslo k chybe:`n$_"
 }

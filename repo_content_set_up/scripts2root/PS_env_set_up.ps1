@@ -1,4 +1,5 @@
 <#
+    .SYNOPSIS
     Skript slouzi k synchronizaci:
      - PS modulu
      - globalniho PS profilu
@@ -9,26 +10,30 @@
      - editovat mohou pouze clenove repo_writer + SYSTEM
      - cist ma pravo skupina repo_reader + Authenticated Users
 
-    U per server (Custom) dat se navic vytvari Log adresar, do nejz muze zapisovat uzivatel zadany v customNTFS parametru (pokud neni, tak clenove Authenticated Users)
-
-    pozn.:
+    U per server (Custom) dat se navic vytvari Log adresar, do nejz muze zapisovat uzivatel zadany v customDestinationNTFS parametru (a pokud neni, tak clenove Authenticated Users)
     Skript je urcen pro pravidelne spousteni skrze scheduled task.
 
     Vyhodou oproti pridani UNC adresare s moduly do $psmodulepath je ten,
     ze moduly jsou dostupne i v remote session a take pod lokalnimi uzivateli (bez pristupu do site),
     navic u nekterych modulu pouzivajicich dll knihovny, byl problem se spoustenim z UNC
+
+    
+    .NOTES
+    Author: Ondřej Šebela - ztrhgf@seznam.cz
 #>
 
 #TODONAHRADIT upravte funkci Send-Email aby odpovidala vasemu prostredi, ci uplne zruste jeji pouziti
 
-# pro potreby debugingu odkomentujte
-# Start-Transcript -Path "C:\windows\temp\psenv.log" -Force
+
+# pro lepsi debugging
+Start-Transcript -Path "$env:SystemRoot\temp\PS_env_set_up.log" -Force
 
 $ErrorActionPreference = 'stop'
-
 # cesta k DFS repozitari
 $repoSrc = "\\TODONAHRADIT" # cesta do centralniho (DFS) repo napr.: \\contoso\repository
 
+
+# pokud prestanu nastavovat specificka prava pro vybranou AD skupinu, bude potreba upravit detekci techto custom modulu viz nize!
 function Set-Permissions {
     <#
     dle readUser detekuji moduly, ktere jsem nakopiroval timto sync skriptem
@@ -40,43 +45,69 @@ function Set-Permissions {
         [Parameter(Mandatory = $true)]
         [string] $path
         ,
-        [Parameter()]
-        [string[]] $readUser
+        $readUser
         ,
-        [Parameter()]
-        [string[]] $writeUser
+        $writeUser
         ,
         [switch] $justGivenUser
+        ,
+        [switch] $resetACL
     )
 
     if (!(Test-Path $path)) {
         throw "zadana cesta neexistuje"
     }
 
+    # osetrim pripad, kdy zadana kombinace stringu a pole
+    function Flatten-Array {
+        param (
+            [array] $inputArray
+        )
+
+        foreach ($item in $inputArray) {
+            if ($item -ne $null) {
+                # recurse for arrays
+                if ($item.gettype().BaseType -eq [System.Array]) {
+                    Flatten-Array $item
+                } else {
+                    # output non-arrays
+                    $item
+                }
+            }
+        }
+    }
+    $readUser = Flatten-Array $readUser
+    $writeUser = Flatten-Array $writeUser
+
+    $permissions = @()
+
     if (Test-Path $path -PathType Container) {
         # je to adresar
         # vytvorim prazdne ACL
         $acl = New-Object System.Security.AccessControl.DirectorySecurity
 
-        $permissions = @()
-        $permissions += @(, ("System", "FullControl", 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
-        # hardcoded, abych nastavil skutecne vzdy
-        $permissions += @(, ("TODONAHRADITzaNETBIOSVASIDOMENY\repo_reader", "ReadAndExecute", 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
+        if ($resetACL) {
+            # reset ACL, tzn zruseni explicitnich ACL a povoleni dedeni
+            $acl.SetAccessRuleProtection($false, $false)
+        } else {
+            # zakazani dedeni a odebrani zdedenych prav
+            $acl.SetAccessRuleProtection($true, $false)
 
-        if (!$justGivenUser) {
-            # pristup pro cteni povolim vsem
-            $permissions += @(, ("Authenticated Users", "ReadAndExecute", 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
-        }
+            $permissions += @(, ("System", "FullControl", 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
+            # hardcoded, abych nastavil skutecne vzdy
+            $permissions += @(, ("repo_reader", "ReadAndExecute", 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
 
-        if ($readUser) {
+            if (!$justGivenUser) {
+                # pristup pro cteni povolim vsem
+                $permissions += @(, ("Authenticated Users", "ReadAndExecute", 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
+            }
+
             $readUser | ForEach-Object {
                 $permissions += @(, ("$_", "ReadAndExecute", 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
             }
-        }
 
-        if ($writeUser) {
             $writeUser | ForEach-Object {
-                $permissions += @(, ("$_", "Modify", 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
+                $permissions += @(, ("$_", "FullControl", 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
             }
         }
     } else {
@@ -84,32 +115,31 @@ function Set-Permissions {
 
         # vytvorim prazdne ACL
         $acl = New-Object System.Security.AccessControl.FileSecurity
+        if ($resetACL) {
+            # reset ACL, tzn zruseni explicitnich ACL a povoleni dedeni
+            $acl.SetAccessRuleProtection($false, $false)
+        } else {
+            # zakazani dedeni a odebrani zdedenych prav
+            $acl.SetAccessRuleProtection($true, $false)
 
-        $permissions = @()
-        $permissions += @(, ("System", "FullControl", 'Allow'))
-        # hardcoded, abych nastavil skutecne vzdy
-        $permissions += @(, ("TODONAHRADITzaNETBIOSVASIDOMENY\repo_reader", "ReadAndExecute", 'Allow'))
+            $permissions += @(, ("System", "FullControl", 'Allow'))
+            # hardcoded, abych nastavil skutecne vzdy
+            $permissions += @(, ("repo_reader", "ReadAndExecute", 'Allow'))
 
-        if (!$justGivenUser) {
-            # pristup pro cteni povolim vsem
-            $permissions += @(, ("Authenticated Users", "ReadAndExecute", 'Allow'))
-        }
+            if (!$justGivenUser) {
+                # pristup pro cteni povolim vsem
+                $permissions += @(, ("Authenticated Users", "ReadAndExecute", 'Allow'))
+            }
 
-        if ($readUser) {
             $readUser | ForEach-Object {
                 $permissions += @(, ("$_", "ReadAndExecute", 'Allow'))
             }
-        }
 
-        if ($writeUser) {
             $writeUser | ForEach-Object {
-                $permissions += @(, ("$_", "Modify", 'Allow'))
+                $permissions += @(, ("$_", "FullControl", 'Allow'))
             }
         }
     }
-
-    # zakazani dedeni a odebrani zdedenych prav
-    $acl.SetAccessRuleProtection($true, $false)
 
     $permissions | ForEach-Object {
         $ace = New-Object System.Security.AccessControl.FileSystemAccessRule $_
@@ -126,22 +156,23 @@ function Set-Permissions {
 
     # reset ACL na obsahu slozky (pro pripad, ze nekdo upravil NTFS prava)
     # pozn. ownership nemenim
-    if (Test-Path $path -PathType Container) {
-        # Start the job that will reset permissions for each file, don't even start if there are no direct sub-files
-        $SubFiles = Get-ChildItem $Path -File
-        If ($SubFiles) {
-            Start-Job -ScriptBlock { $args[0] | ForEach-Object { icacls.exe $_.FullName /Reset /C } } -ArgumentList $SubFiles
-        }
+    #TODO nekdy se na tomto kroku zaseklo, odkomentovat po vyreseni
+    # if (Test-Path $path -PathType Container) {
+    #     # Start the job that will reset permissions for each file, don't even start if there are no direct sub-files
+    #     $SubFiles = Get-ChildItem $Path -File
+    #     If ($SubFiles) {
+    #         Start-Job -ScriptBlock { $args[0] | ForEach-Object { icacls.exe $_.FullName /Reset /C } } -ArgumentList $SubFiles
+    #     }
 
-        # Now go through each $Path's direct folder (if there's any) and start a process to reset the permissions, for each folder.
-        $SubFolders = Get-ChildItem $Path -Directory
-        If ($SubFolders) {
-            Foreach ($SubFolder in $SubFolders) {
-                # Start a process rather than a job, icacls should take way less memory than Powershell+icacls
-                Start-Process icacls -WindowStyle Hidden -ArgumentList """$($SubFolder.FullName)"" /Reset /T /C" -PassThru
-            }
-        }
-    }
+    #     # Now go through each $Path's direct folder (if there's any) and start a process to reset the permissions, for each folder.
+    #     $SubFolders = Get-ChildItem $Path -Directory
+    #     If ($SubFolders) {
+    #         Foreach ($SubFolder in $SubFolders) {
+    #             # Start a process rather than a job, icacls should take way less memory than Powershell+icacls
+    #             Start-Process icacls -WindowStyle Hidden -ArgumentList """$($SubFolder.FullName)"" /Reset /T /C" -PassThru
+    #         }
+    #     }
+    # }
 }
 
 Function Copy-Folder {
@@ -213,9 +244,9 @@ $moduleDstFolder = Join-Path $env:systemroot "System32\WindowsPowerShell\v1.0\Mo
 # skupina ktera ma pravo cist obsah DFS repozitare (i lokalni kopie)
 # zaroven pouzivam pro detekci, co jsem nakopiroval timto skriptem == NERUSIT (nebo adekvatne upravit cely skript)
 # PRI ZMENE ZMENIT I V SET-PERMISSIONS kde je hardcoded, aby i nadale fungovala spravne detekce
-[string] $readUser = "TODONAHRADITzaNETBIOSVASIDOMENY\repo_reader"
+[string] $readUser = "repo_reader"
 # skupina ktera ma pravo editovat obsah DFS repozitare (i lokalni kopie)
-[string] $writeUser = "TODONAHRADITzaNETBIOSVASIDOMENY\repo_writer"
+[string] $writeUser = "repo_writer"
 
 if (!(Test-Path $moduleSrcFolder -ErrorAction SilentlyContinue)) {
     throw "Cesta s moduly ($moduleSrcFolder) neni dostupna!"
@@ -232,7 +263,7 @@ if (Test-Path $moduleDstFolder -ea SilentlyContinue) {
 
         $repoModuleInDestination | ForEach-Object {
             if ($sourceModuleName -notcontains $_) {
-                "mazu $_"
+                "mazu nadbytecny modul $_"
                 Remove-Item (Join-Path $moduleDstFolder $_) -Force -Confirm:$false -Recurse
             }
         }
@@ -258,6 +289,7 @@ Get-ChildItem $moduleSrcFolder -Directory | ForEach-Object {
             }
 
             if ($result.copied) {
+                "nastavuji NTFS prava"
                 Set-Permissions $moduleDstPath -readUser $readUser -writeUser $writeUser
             }
         } catch {
@@ -273,6 +305,7 @@ Get-ChildItem $moduleSrcFolder -Directory | ForEach-Object {
             "Pri kopirovani $($_.FullName) se vyskytl problem`n$($result.errMsg)"
         }
 
+        "nastavuji NTFS prava"
         Set-Permissions $moduleDstPath -readUser $readUser -writeUser $writeUser
     }
 }
@@ -299,7 +332,6 @@ Import-Module Variables -ErrorAction "Continue"
 $profileSrc = Join-Path $repoSrc "profile.ps1"
 $profileDst = Join-Path $env:systemroot "System32\WindowsPowerShell\v1.0\profile.ps1"
 $profileDstFolder = Split-Path $profileDst -Parent
-# dle NTFS poznam, zdali byl profil nakopirovan timto skriptem
 $isOurProfile = Get-Acl -Path $profileDst -ea silentlyContinue | Where-Object { $_.accessToString -like "*$readUser*" }
 
 if (Test-Path $profileSrc -ea SilentlyContinue) {
@@ -316,12 +348,14 @@ if (Test-Path $profileSrc -ea SilentlyContinue) {
             if ($sourceModified -ne $destinationModified) {
                 "nakopiruji {0} do {1}" -f $profileSrc, $profileDstFolder
                 Copy-Item $profileSrc $profileDstFolder -Force -Confirm:$false
+                "nastavuji NTFS prava"
                 Set-Permissions $profileDst -readUser $readUser -writeUser $writeUser
             }
         } else {
             # soubor v cili neexistuje, nakopiruji
             "nakopiruji {0} do {1}" -f $profileSrc, $profileDstFolder
             Copy-Item $profileSrc $profileDstFolder -Force -Confirm:$false
+            "nastavuji NTFS prava"
             Set-Permissions $profileDst -readUser $readUser -writeUser $writeUser
         }
     } else {
@@ -352,7 +386,7 @@ Custom adresar v repozitari obsahuje slozky, ktere se maji kopirovat JEN NA VYBR
 To na jake stroje se budou kopirovat, je receno v promenne $config, ktera je definovana v customConfig.ps1!
 Data se na klientech kopiruji do C:\Windows\Scripts\
 
-V kazdem adresari (folderName) se na klientovi automaticky navic vytvori Log adresar s modify pravy (pro ucet v customNTFS nebo Auth users), aby skripty mohly logovat sve vystupy.
+V kazdem adresari (folderName) se na klientovi automaticky navic vytvori Log adresar s modify pravy (pro customDestinationNTFS nebo Auth users), aby skripty mohly logovat sve vystupy.
 Log adresar se ignoruje pri porovnavani obsahu remote repo vs lokalni kopie a pri synchronizaci zmen je zachovan.
 !!! pokud spoustene skripty generuji nejake soubory, at je ukladaji do tohoto Log adresare, jinak dojde pri kazde synchronizaci s remote repo ke smazani teto slozky (porovnavam velikosti adresaru v repo a lokalu)
 #>
@@ -361,12 +395,13 @@ $customConfig = Join-Path $repoSrc "Custom\customConfig.ps1"
 
 if (!(Test-Path $customConfig -ErrorAction SilentlyContinue)) {
     Import-Module Scripts -Function Send-Email
-    Send-Email -subject "Sync of PS scripts: Custom" -body "Hi,`non $env:COMPUTERNAME script $($MyInvocation.ScriptName) detected missing config file $customConfig. Even if you do not want to copy any Custom folders to any server, create empty $customConfig."
+    Send-Email -subject "Sync of PS scripts: Custom" -body "Hi,`non $env:COMPUTERNAME script $($MyInvocation.ScriptName) detected missing config file $customConfig. Event if you do not want to copy any Custom folders to any server, create empty $customConfig."
     throw "Missing Custom config file"
 }
 
 # nactu customConfig.ps1 skript respektive $config promennou v nem definovanou
 # nastaveni Custom sekce schvalne definuji v samostatnem souboru kvuli lepsi prehlednosti a editovatelnosti
+"zpristupnim `$config promennou"
 . $customConfig
 
 # zdrojova slozka custom dat
@@ -374,10 +409,11 @@ $customSrcFolder = Join-Path $repoSrc "Custom"
 # cilova slozka custom dat
 $customDstFolder = Join-Path $env:systemroot "Scripts"
 
+
+#
+# zjistim, u kterych Custom slozek, je uvedeny tento stroj
 $hostname = $env:COMPUTERNAME
-# vyfiltruji z $config pouze objekty odpovidajici tomuto stroji
 $thisPCCustom = @()
-# jake Custom slozky se maji kopirovat na tento stroj
 $thisPCCustFolder = @()
 
 $config | ForEach-Object {
@@ -394,6 +430,7 @@ Get-ChildItem $customDstFolder -Directory -ErrorAction SilentlyContinue | ForEac
     if ($folder.name -notin $thisPCCustFolder) {
 
         try {
+            "mazu jit nepotrebnou $($folder.FullName)"
             Remove-Item $folder.FullName -Recurse -Force -Confirm:$false -ErrorAction Stop
             # obsah adresare muze byt zrovna pouzivan == nepovede se jej smazat == email poslu pouze pokud se povedlo
             Import-Module Scripts -Function Send-Email
@@ -414,6 +451,17 @@ if ($thisPCCustom) {
         $folderSrcPath = Join-Path $customSrcFolder $_.folderName
         $folderDstPath = Join-Path $customDstFolder $_.folderName
 
+        # zmenim cilove umisteni, pokud vyzadovano
+        if ($_.customLocalDestination) {
+            if ($_.copyJustContent) {
+                $folderDstPath = $_.customLocalDestination
+            } else {
+                $folderDstPath = Join-Path $_.customLocalDestination $_.folderName
+            }
+
+            [Void][System.IO.Directory]::CreateDirectory("$folderDstPath")
+        }
+
         # kontrola, ze existuje zdrojovy adresar (to ze je v config neznamena, ze realne existuje)
         if (!(Test-Path $folderSrcPath -ErrorAction SilentlyContinue)) {
             Import-Module Scripts -Function Send-Email
@@ -429,87 +477,80 @@ if ($thisPCCustom) {
         }
 
         # kontrola, ze zadany account jde na danem stroji pouzit
-        $customNTFS = $_.customNTFS
+        $customNTFS = $_.customDestinationNTFS
         # $customNTFSWithoutDomain = ($customNTFS -split "\\")[-1]
         if ($customNTFS) {
-            if ($customNTFS.getType().name -ne "String") {
-                Import-Module Scripts -Function Send-Email
-                Send-Email -subject "Sync of PS scripts: Multiple accounts defined" -body "Hi,`nin `$config configuration it is forbidden to define multiple customNTFS accounts!`nSynchronization of $folderSrcPath will not work until you solve this problem."
-                throw "Multiple accounts in `$customNTFS"
-            }
+            #TODO toto nelze pouzit pro gMSA ucty, upravit
+            # if (!(Get-WmiObject -Class win32_userAccount -Filter "name=`'$customNTFSWithoutDomain`'")) {
+            #     Import-Module Scripts -Function Send-Email
+            #     Send-Email -subject "Sync of PS scripts: Missing account" -body "Hi,`non $env:COMPUTERNAME it is not possible to grant NTFS permission to $folderDstPath to account $customNTFS. Is `$config configuration correct?`nSynchronization of $folderSrcPath will not work until you solve this problem."
+            #     throw "Non existing account $customNTFS"
+            # }
         }
 
-        # nakopirovani
         $change = 0
-        if (Test-Path $folderDstPath -ea SilentlyContinue) {
-            # adresar v cili jiz existuje
-            # jestli je potreba provest jeji zmeny necham posoudit robocopy
+        $customLogFolder = Join-Path $folderDstPath "Log"
 
-            # Log adresar nechci pri mirroru smazat, proto exclude
-            $excludeFolder = Join-Path $folderDstPath "Log"
+        #
+        # nakopiruji Custom slozku do zadaneho cile
+        if ($_.copyJustContent) {
+            # kopiruji pouze obsah slozky
+            # nemohu tak pouzit robocopy mirror, protoze se da cekat, ze v cili budou i jine soubory
             "nakopiruji {0} do {1}" -f $folderSrcPath, $folderDstPath
-            $result = Copy-Folder $folderSrcPath $folderDstPath -mirror -excludeFolder $excludeFolder
+            $result = Copy-Folder $folderSrcPath $folderDstPath
+        } else {
+            # kopiruji celou slozku
+            "nakopiruji {0} do {1}" -f $folderSrcPath, $folderDstPath
+            $result = Copy-Folder $folderSrcPath $folderDstPath -mirror -excludeFolder $customLogFolder
 
             # vypisi smazane soubory
             if ($result.deleted) {
-                Write-Output "Smazal jsem jiz nepotrebne soubory:`n$(($result.deleted) -join "`n")"
+                "Smazal jsem jiz nepotrebne soubory:`n$(($result.deleted) -join "`n")"
             }
+        }
 
-            if ($result.failures) {
-                # neskoncim s chybou, protoze se da cekat, ze pri dalsim pokusu uz to projde (ted muze napr bezet skript z teto slozky atp)
-                "Pri kopirovani $folderSrcPath se vyskytl problem`n$($result.errMsg)"
-            }
+        if ($result.failures) {
+            # neskoncim s chybou, protoze se da cekat, ze pri dalsim pokusu uz to projde (ted muze napr bezet skript z teto slozky atp)
+            "Pri kopirovani $folderSrcPath se vyskytl problem`n$($result.errMsg)"
+        }
 
-            if ($result.copied) {
-                ++$change
-            }
-
-        } else {
-            # adresar v cili neexistuje, nakopiruji
-            "nakopiruji {0} do {1}" -f $folderSrcPath, $folderDstPath
-            $result = Copy-Folder $folderSrcPath $folderDstPath
-
-            if ($result.failures) {
-                throw "Pri kopirovani $folderSrcPath do $folderDstPath se vyskytl problem`n$($result.errMsg)"
-            }
-
+        if ($result.copied) {
             ++$change
         }
 
         #
-        # doslo ke zmene v Custom datech == nastavim znovu NTFS prava
-        if ($change) {
+        # vytvorim Log adresar pokud dava smysl
+        if (!$_.copyJustContent -or ($_.copyJustContent -and !$_.customLocalDestination)) {
+            ???? asi takto???
+            #FIXME doresit ze je computerName a customShareDestination a zaroven copyJustContent..do Scripts se nakopiruje ale log se nevytvori coz pozdeji vede k chybe ZAKAZAT TAKOVOU MOZNOST obzvlast pokud jde jeden folderName definvoat vickrat OteSTOVAT
+            [Void][System.IO.Directory]::CreateDirectory("$customLogFolder")
+        }
+
+        #
+        # nastavim NTFS prava
+        # delam pokazde (commit mohl zmenit customDestinationNTFS aniz by se zmenil obsah slozky, tzn nelze menit pouze pri zmene dat
+        # pokud zadana custom destinace, nastavim prava pouze pokud je definovano customDestinationNTFS a zaroven nekopiruji pouze obsah slozky (bylo by slozite/pomale/kontraproduktivni?!)
+        if (!($_.customLocalDestination) -or ($_.customLocalDestination -and $_.customDestinationNTFS -and !($_.copyJustContent))) {
             $permParam = @{path = $folderDstPath; readUser = $readUser, "Administrators"; writeUser = $writeUser, "Administrators" }
             if ($customNTFS) {
-                $permParam.readUser = $customNTFS, "Administrators"
+                $permParam.readUser = "Administrators", $customNTFS
                 $permParam.justGivenUser = $true
             }
 
             try {
+                "nastavim prava na $folderDstPath"
                 Set-Permissions @permParam
             } catch {
                 Import-Module Scripts -Function Send-Email
                 Send-Email -subject "Sync of PS scripts: Set permission error" -body "Hi,`nthere was failure:`n$_`n`n when set up permission (read: $readUser, write: $writeUser) on folder $folderDstPath"
                 throw "NTFS permission set up failure (read: $readUser, write: $writeUser) on $folderDstPath"
             }
-        }
 
-        #
-        # vytvorim navic Log adresar a nastavim na nem Modify pro ucet v customNTFS ci Authenticated Users
-        # aby Custom skripty mohly i pres omezena NTFS prava logovat svuj vystup
-        $logFolder = Join-Path $folderDstPath "Log"
-
-        if (!(Test-Path $logFolder -ErrorAction SilentlyContinue)) {
-            ++$logDidntExist
-            New-Item $logFolder -ItemType Directory -Force -Confirm:$false
-        }
-
-        # doslo ke zmene v Custom datech == doslo k resetu NTFS na celem obsahu == nastavim znovu NTFS prava na Log adresari
-        if ($logDidntExist -or $change) {
-            $permParam = @{ path = $logFolder; readUser = $readUser; writeUser = $writeUser }
+            # nastavim i na Log podadresari
+            $permParam = @{ path = $customLogFolder; readUser = $readUser; writeUser = $writeUser }
             if ($customNTFS) {
                 $permParam.readUser = "Administrators"
-                $permParam.writeUser = $customNTFS, "Administrators"
+                $permParam.writeUser = "Administrators", $customNTFS
                 $permParam.justGivenUser = $true
             } else {
                 # nezadal custom ucet tzn nevim pod kym to pobezi tzn nastavim write pro Authenticated Users
@@ -517,11 +558,27 @@ if ($thisPCCustom) {
             }
 
             try {
+                "nastavim prava na $customLogFolder"
                 Set-Permissions @permParam
             } catch {
                 Import-Module Scripts -Function Send-Email
-                Send-Email -subject "Sync of PS scripts: Set permission error" -body "Hi,`nthere was failure:`n$_`n`n when set up permission (read: $readUser, write: $writeUser) on folder $logFolder"
-                throw "NTFS permission set up failure (read: $readUser, write: $writeUser) on $logFolder"
+                Send-Email -subject "Sync of PS scripts: Set permission error" -body "Hi,`nthere was failure:`n$_`n`n when set up permission (read: $readUser, write: $writeUser) on folder $customLogFolder"
+                throw "NTFS permission set up failure (read: $readUser, write: $writeUser) on $customLogFolder"
+            }
+
+        } elseif ($_.customLocalDestination -and !$_.customDestinationNTFS -and !$_.copyJustContent) {
+            #FIXME otestovat
+            # nemaji se nastavit zadna custom prava
+            # pro jistotu udelam reset NTFS prav (mohl jsem je jiz v minulosti nastavit)
+            # ale pouze pokud na danem adresari najdu read_user ACL == nastavil jsem v minulosti custom prava
+            # pozn.: detekuji tedy dle NTFS opravneni (pokud by se nenastavovalo, bude potreba zvolit jinou metodu detekce!)
+            $folderhasCustomNTFS = Get-Acl -path $folderDstPath | ? { $_.accessToString -like "*$readUser*" }
+            if ($folderhasCustomNTFS) {
+                "adresar $folderDstPath ma custom NTFS i kdyz je jiz nema mit, zresetuji NTFS prava"
+                Set-Permissions -path $folderDstPath -resetACL
+
+                "zresetuji i na Log podadresari"
+                Set-Permissions -path $customLogFolder -resetACL
             }
         }
     }

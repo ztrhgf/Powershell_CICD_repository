@@ -13,7 +13,7 @@ git config core.hooksPath ".\.githooks"
 - pro nastaveni git hooks (kvuli kontrole syntaxe, pushi comitu a kontrole auto-merge)
 
 git config --global user.name "mujlogin"
-git config --global user.email "mujlogin@kentico.com"
+git config --global user.email "mujlogin@somedomain.com"
 - pouzije se jako jmeno autora commitu
 - oboje musi byt nastaveno, aby se zobrazovaly mnou definovane GIT chyby a ne "Make sure you configure your user.name ..."
 
