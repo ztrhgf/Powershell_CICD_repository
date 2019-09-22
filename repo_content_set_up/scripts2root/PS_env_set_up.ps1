@@ -565,7 +565,6 @@ if ($thisPCCustom) {
             }
 
         } elseif ($_.customLocalDestination -and !$_.customDestinationNTFS -and !$_.copyJustContent) {
-            #FIXME otestovat
             # nemaji se nastavit zadna custom prava
             # pro jistotu udelam reset NTFS prav (mohl jsem je jiz v minulosti nastavit)
             # ale pouze pokud na danem adresari najdu read_user ACL == nastavil jsem v minulosti custom prava
