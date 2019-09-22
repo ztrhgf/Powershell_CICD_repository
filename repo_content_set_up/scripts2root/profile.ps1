@@ -84,7 +84,7 @@ Register-ArgumentCompleter -CommandName ((Get-Command -Module Scripts).name) -Pa
 $serverSB = {
     param ($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
 
-    $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"LDAP://DC=kontoso,DC=com"), '(objectCategory=computer)', ('name', 'description'))
+    $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"OU=Servers,LDAP://DC=kontoso,DC=com"), '(objectCategory=computer)', ('name', 'description'))
     ($searcher.findall() | ? { $_.properties.name -match $wordToComplete -or $_.properties.description -match $wordToComplete }).properties.name
     $searcher.Dispose()
 }
@@ -94,7 +94,7 @@ Register-ArgumentCompleter -CommandName Invoke-MSTSC -ParameterName computerName
 $clientSB = {
     param ($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
 
-    $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"LDAP://DC=kontoso,DC=com"), '(objectCategory=computer)', ('name'))
+    $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"LDAP://OU=Clients,DC=kontoso,DC=com"), '(objectCategory=computer)', ('name'))
     ($searcher.findall()).properties.name | ? { $_ -match $wordToComplete }
     $searcher.Dispose()
 }
