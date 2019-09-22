@@ -8,7 +8,7 @@ Just clone (don't use "Download ZIP"!) this repository and follow step by step t
 
 ## [Unreleased]
 - support defining multiple object with same folderName key in $config
-- support "\" in folderName key in $config
+- support "\\" in folderName key in $config
 - add automatic script signing
 
 
