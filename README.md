@@ -3,7 +3,7 @@ Repository contains necessary files to create your own company CI/CD-like Powers
 
 Just clone (don't use "Download ZIP"!) this repository and follow step by step tutorial in attached Powerpoint presentation.
 
-In case you found any bug or have improvement suggestion, please contact me at ztrhgf<at>seznam.cz.
+In case you found any bug or have improvement suggestion, please contact me at ztrhgf'at'seznam.cz.
   
 ## Main features:
 - unified Powershell environment across whole company
