@@ -3,6 +3,27 @@ Repository contains necessary files to create your own company CI/CD-like Powers
 
 Just clone (don't use "Download ZIP"!) this repository and follow step by step tutorial in attached Powerpoint presentation.
 
+In case you found any bug or have improvement suggestion, please contact me at ztrhgf<at>seznam.cz.
+  
+## Main features:
+- unified Powershell environment across whole company
+  - same modules, functions and variables across all Powershell sessions (local and remote)
+  - one global Powershell profile to unify user experience
+- fully automated
+  - using GIT hooks, Powershell scripts, one GPO and VSC editor
+- all is managed from Visual Studio Code editor
+  - great IDE
+  - GUI for GIT
+  - code auto-format
+  - after commiting changes, they are automatically: pushed to cloud repository >> downloaded to local server >> distributed to DFS share >> and from it, on clients in your Active Directory
+- validation of scripts before each commit
+  - best practices, syntax errors, ...
+- automated generation of psm modules (from ps1 scripts)
+- possibility to automatically copy chosen content to just specified computers
+  - to specific folder
+  - with specific NTFS permissions
+- ...
+  
 
 # Changelog
 
