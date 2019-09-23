@@ -34,10 +34,10 @@ $destination = "TODONAHRADIT" # sitova cesta k DFS repozitari (napr.: \\mojedome
 # skupina ktera ma pravo editovat obsah DFS repozitare (i lokalni kopie)
 [string] $writeUser = "repo_writer"
 
-#TODO vyhodit z Update-Repo definice promennych read write user a zde definovanych funkci
-#TODO zrusit pozdejsi importy customConfig
 
-function Update-Repo {
+#
+# pomocne funkce
+function _updateRepo {
     <#
     .SYNOPSIS
         Funkce pro nakopirovani lokalnich !commitnutych! zmen z GIT repozitare do naseho remote DFS repozitare.
@@ -61,14 +61,14 @@ function Update-Repo {
         Cesta k lokalne ulozenemu GIT repozitari.
 
     .PARAMETER destination
-        Cesta do DFS repozitare.
+        Cesta do centralniho (DFS) repozitare.
 
     .PARAMETER force
         Vykopiruje vsechny soubory, at uz doslo k jejich modifikaci ci nikoli.
         Stale se vsak preskoci soubory, ktere jsou rozpracovane (modifikovane, ale necomitnute ci untracked)!
 
     .EXAMPLE
-        Update-Repo -source C:\DATA\repo\Powershell\ -destination \\somedomain\repository
+        _updateRepo -source C:\DATA\repo\Powershell\ -destination \\somedomain\repository
     #>
 
     [CmdletBinding()]
@@ -117,94 +117,6 @@ function Update-Repo {
         # pokud se nepodari, zkusim import ze systemoveho umisteni PS modulu
         # chyby ignorujeme, protoze na fresh stroji, modul bude az po prvnim spusteni PS_env_set_up potazmo tohoto skriptu, ne driv :)
         Import-Module Variables -ErrorAction "Continue"
-    }
-
-    # skupina ktera ma pravo cist obsah DFS repozitare (i lokalni kopie)
-    [string] $readUser = "repo_reader"
-    # skupina ktera ma pravo editovat obsah DFS repozitare (i lokalni kopie)
-    [string] $writeUser = "repo_writer"
-
-
-    function _setPermissions {
-        [cmdletbinding()]
-        param (
-            [Parameter(Mandatory = $true)]
-            [string] $path
-            ,
-            [string[]] $readUser
-            ,
-            [string[]] $writeUser
-            ,
-            [switch] $resetACL
-        )
-
-        if (!(Test-Path $path)) {
-            throw "zadana cesta neexistuje"
-        }
-
-        $permissions = @()
-
-        if (Test-Path $path -PathType Container) {
-            # je to adresar
-
-            # vytvorim prazdne ACL
-            $acl = New-Object System.Security.AccessControl.DirectorySecurity
-
-            if ($resetACL) {
-                # reset ACL, tzn zruseni explicitnich ACL a povoleni dedeni
-                $acl.SetAccessRuleProtection($false, $false)
-            } else {
-                # zakazani dedeni a odebrani zdedenych prav
-                $acl.SetAccessRuleProtection($true, $false)
-
-                $readUser | % {
-                    $permissions += @(, ("$_", "ReadAndExecute", 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
-                }
-
-                $writeUser | % {
-                    $permissions += @(, ("$_", "FullControl", 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
-                }
-            }
-        } else {
-            # je to soubor
-
-            # vytvorim prazdne ACL
-            $acl = New-Object System.Security.AccessControl.FileSecurity
-
-            if ($resetACL) {
-                # reset ACL, tzn zruseni explicitnich ACL a povoleni dedeni
-                $acl.SetAccessRuleProtection($false, $false)
-            } else {
-                # zakazani dedeni a odebrani zdedenych prav
-                $acl.SetAccessRuleProtection($true, $false)
-
-                $readUser | % {
-                    $permissions += @(, ("$_", "ReadAndExecute", 'Allow'))
-                }
-
-                $writeUser | % {
-                    $permissions += @(, ("$_", "FullControl", 'Allow'))
-                }
-            }
-        }
-
-        # naplneni noveho ACL
-        $permissions | % {
-            $ace = New-Object System.Security.AccessControl.FileSystemAccessRule $_
-            try {
-                $acl.AddAccessRule($ace)
-            } catch {
-                Write-Warning "Pravo se nepodarilo nastavit. Existuje zadany ucet?"
-            }
-        }
-
-        # nastaveni ACL
-        try {
-            # Set-Acl nejde pouzit protoze bug https://stackoverflow.com/questions/31611103/setting-permissions-on-a-windows-fileshare
-            (Get-Item $path).SetAccessControl($acl)
-        } catch {
-            throw "nepodarilo se nastavit opravneni: $_"
-        }
     }
 
 
@@ -357,7 +269,7 @@ function Update-Repo {
     # a az ten nakopiruji do remote repozitare + ostatni zmenene moduly
     #
 
-    # do $configHash si znacim, jake moduly se maji (a z ceho generovat) kvuli zavolani funkce Export-ScriptsToModule
+    # do $configHash si znacim, jake moduly se maji (a z ceho generovat) kvuli zavolani funkce _exportScriptsToModule
     $configHash = @{ }
 
     if ($force) {
@@ -395,7 +307,7 @@ function Update-Repo {
     if ($configHash.Keys.count) {
         ++$somethingChanged
 
-        Export-ScriptsToModule -configHash $configHash -dontIncludeRequires
+        _exportScriptsToModule -configHash $configHash -dontIncludeRequires
     }
 
 
@@ -514,10 +426,10 @@ function Update-Repo {
                         $destProfile = (Join-Path $destination "profile.ps1")
                         if ($computerWithProfile) {
                             # computer AD ucty maji $ za svym jmenem, pridam
-                            [string[]] $readUser = $computerWithProfile | % { $_ + "$" }
+                            [string[]] $readUserP = $computerWithProfile | % { $_ + "$" }
 
-                            "omezuji NTFS prava na $destProfile (pristup pouze pro: $($readUser -join ', '))"
-                            _setPermissions $destProfile -readUser $readUser -writeUser $writeUser
+                            "omezuji NTFS prava na $destProfile (pristup pouze pro: $($readUserP -join ', '))"
+                            _setPermissions $destProfile -readUser $readUserP -writeUser $writeUser
                         } else {
                             "nastavuji vychozi prava na $destProfile"
                             _setPermissions $destProfile -resetACL
@@ -588,19 +500,12 @@ function Update-Repo {
         # aby mely pristup pouze stroje, ktere maji dany obsah stahnout dle $config atributu computerName
         # slozky, ktere nemaji definovan computerName budou mit vychozi nastaveni
         # pozn. nastavuji pokazde, protoze pokud by v customConfig byly nejake cilove stroje definovany clenstvim v AD skupine ci OU, tak nemam sanci to jinak poznat
-        $customConfig = Join-Path $customSource "customConfig.ps1"
-
-        if (!(Test-Path $customConfig -ea SilentlyContinue)) {
-            Write-Warning "$customConfig neexistuje, to je na 99% problem!"
-        } else {
-            # nactu customConfig.ps1 skript respektive $config promennou v nem definovanou
-            . $customConfig
-        }
 
         foreach ($folder in (Get-ChildItem $customDestination -Directory)) {
             $folder = $folder.FullName
             $folderName = Split-Path $folder -Leaf
 
+            # pozn.: $config jsem dostal dot sourcingem customConfig.ps1 skriptu
             $configData = $config | ? { $_.folderName -eq $folderName }
             if ($configData -and ($configData.computerName -or $configData.customSourceNTFS)) {
                 # pro danou slozku je definovano, kam se ma kopirovat
@@ -609,15 +514,15 @@ function Update-Repo {
                 # custom share NTFS prava maji prednost pred omezenim prav na stroje, kam se ma kopirovat
                 # tzn pokud je definovano oboje, nastavim co je v customSourceNTFS atributu
                 if ($configData.customSourceNTFS) {
-                    [string[]] $readUser = $configData.customSourceNTFS
+                    [string[]] $readUserC = $configData.customSourceNTFS
                 } else {
-                    [string[]] $readUser = $configData.computerName
+                    [string[]] $readUserC = $configData.computerName
                     # computer AD ucty maji $ za svym jmenem, pridam
-                    $readUser = $readUser | % { $_ + "$" }
+                    $readUserC = $readUserC | % { $_ + "$" }
                 }
 
-                "omezuji NTFS prava na $folder (pristup pouze pro: $($readUser -join ', '))"
-                _setPermissions $folder -readUser $readUser -writeUser $writeUser
+                "omezuji NTFS prava na $folder (pristup pouze pro: $($readUserC -join ', '))"
+                _setPermissions $folder -readUser $readUserC -writeUser $writeUser
             } else {
                 # pro danou slozku neni definovano, kam se ma kopirovat
                 # zresetuji prava na vychozi
@@ -647,7 +552,7 @@ function Update-Repo {
     }
 }
 
-function Export-ScriptsToModule {
+function _exportScriptsToModule {
     <#
     .SYNOPSIS
         Funkce pro vytvoreni PS modulu z PS funkci ulozenych v ps1 souborech v zadanem adresari.
@@ -677,7 +582,7 @@ function Export-ScriptsToModule {
         Prepinac rikajici, ze se do modulu nepridaji pripadne #requires modulu skriptu.
 
     .EXAMPLE
-        Export-ScriptsToModule @{"C:\DATA\POWERSHELL\repo\scripts" = "c:\DATA\POWERSHELL\repo\modules\Scripts"}
+        _exportScriptsToModule @{"C:\DATA\POWERSHELL\repo\scripts" = "c:\DATA\POWERSHELL\repo\modules\Scripts"}
     #>
 
     [CmdletBinding()]
@@ -1191,8 +1096,9 @@ function _setPermissions {
     }
 }
 
-
+# zabalim vse do try catch, abych v pripade chyby mohl poslat email s upozornenim
 try {
+    #
     # kontrola, ze mam pravo zapisu do DFS repo
     try {
         $rFile = Join-Path $destination Get-Random
@@ -1269,14 +1175,14 @@ try {
             . $customConfig
         }
 
-        Update-Repo -source $PS_repo -destination $destination -force
+        _updateRepo -source $PS_repo -destination $destination -force
     } catch {
         _emailAndExit "Pri rozkopirovani zmen do DFS repo se vyskytla chyba:`n$_"
     }
 
     #
     # nakopiruji do sdilenych slozek Custom data, ktera maji definovano customShareDestination
-    # nejde o synchronizaci DFS repozitare, ale jinde nedavalo smysl
+    # pozn.: nejde o synchronizaci DFS repozitare, ale jinde nedavalo smysl
     "synchronizace Custom dat, jejichz cilem je sdilena slozka"
     $folderToUnc = $config | ? { $_.customShareDestination }
 
