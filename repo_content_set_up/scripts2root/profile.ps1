@@ -68,8 +68,9 @@ $PSDefaultParameterValues = @{
 # TAB completition
 #
 
-# automaticke doplneni jmena domenoveho stroje do computerName parametru v jakemkoli prikazu z modulu Scripts
-# zadany string hleda jak v name, tak description
+# doplneni dynamicky ziskane hodnoty ve vybranych parametrech vybranych funkci stiskem TAB
+#TODONAHRADIT LDAP cesty dle OU ve vasi organizaci, jinak nebude fungovat
+
 $computerSB = {
     param ($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
 
@@ -77,29 +78,54 @@ $computerSB = {
     ($searcher.findall() | ? { $_.properties.name -match $wordToComplete -or $_.properties.description -match $wordToComplete }).properties.name
     $searcher.Dispose()
 }
-Register-ArgumentCompleter -CommandName ((Get-Command -Module Scripts).name) -ParameterName computerName -ScriptBlock $computerSB
-
-# omezeni automatickeho doplneni computerName parametru na jmena serveru (ve vybranych funkcich)
+# TAB doplneni jmena domenoveho stroje do computerName parametru v jakemkoli prikazu z modulu Scripts
 # zadany string hleda jak v name, tak description
+Register-ArgumentCompleter -CommandName ((Get-Command -Module Scripts).name) -ParameterName computerName -ScriptBlock $computerSB
+# TAB doplneni jmena domenoveho stroje do identity parametru v prikazech z modulu ActiveDirectory, ktere pracuji s computer objekty
+Register-ArgumentCompleter -CommandName ((Get-Command -Module ActiveDirectory -Noun *computer*).name) -ParameterName identity -ScriptBlock $computerSB
+
 $serverSB = {
     param ($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
 
-    $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"OU=Servers,LDAP://DC=kontoso,DC=com"), '(objectCategory=computer)', ('name', 'description'))
+    $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"LDAP://OU=Server,DC=kontoso,DC=com"), '(objectCategory=computer)', ('name', 'description'))
     ($searcher.findall() | ? { $_.properties.name -match $wordToComplete -or $_.properties.description -match $wordToComplete }).properties.name
     $searcher.Dispose()
 }
+# ukazka omezeni TAB doplneni computerName parametru na jmena serveru (ve vybranych funkcich)
+# zadany string hleda jak v name, tak description
 Register-ArgumentCompleter -CommandName Invoke-MSTSC -ParameterName computerName -ScriptBlock $serverSB
 
-# omezeni automatickeho doplneni computerName parametru na jmena klientskych stroju (ve vybranych funkcich)
 $clientSB = {
     param ($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
 
-    $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"LDAP://OU=Clients,DC=kontoso,DC=com"), '(objectCategory=computer)', ('name'))
+    $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"LDAP://OU=Client,DC=kontoso,DC=com"), '(objectCategory=computer)', ('name'))
     ($searcher.findall()).properties.name | ? { $_ -match $wordToComplete }
     $searcher.Dispose()
 }
+# ukazka omezeni automatickeho doplneni computerName parametru na jmena klientskych stroju (ve vybranych funkcich)
 Register-ArgumentCompleter -CommandName Assign-Computer -ParameterName computerName -ScriptBlock $clientSB
 
+$userSB = {
+    param ($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
+
+    $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"LDAP://OU=User,DC=kontoso,DC=com"), '(objectCategory=user)', ('name', 'samaccountname'))
+    ($searcher.findall() | ? { $_.properties.name -match $wordToComplete }).properties.samaccountname
+    $searcher.Dispose()
+}
+# TAB doplneni userName parametru na user login v jakemkoli prikazu z modulu Scripts
+Register-ArgumentCompleter -CommandName ((Get-Command -Module Scripts).name) -ParameterName userName -ScriptBlock $userSB
+# TAB doplneni identity parametru na user login v prikazech z modulu ActiveDirectory, ktere pracuji s user objekty
+Register-ArgumentCompleter -CommandName ((Get-Command -Module ActiveDirectory -Noun *user*).name) -ParameterName identity -ScriptBlock $userSB
+
+$groupSB = {
+    param ($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
+
+    $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"LDAP://OU=Groups,DC=kontoso,DC=com"), '(objectCategory=group)', ('name', 'description'))
+    ($searcher.findall() | ? { $_.properties.name -match $wordToComplete -or $_.properties.description -match $wordToComplete }).properties.name
+    $searcher.Dispose()
+}
+# TAB doplneni identity parametru na group name v prikazech z modulu ActiveDirectory, ktere pracuji s group objekty
+Register-ArgumentCompleter -CommandName ((Get-Command -Module ActiveDirectory -Noun *group*).name) -ParameterName identity -ScriptBlock $groupSB
 
 
 
