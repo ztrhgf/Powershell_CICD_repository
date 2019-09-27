@@ -17,7 +17,6 @@
     ze moduly jsou dostupne i v remote session a take pod lokalnimi uzivateli (bez pristupu do site),
     navic u nekterych modulu pouzivajicich dll knihovny, byl problem se spoustenim z UNC
 
-    
     .NOTES
     Author: Ondřej Šebela - ztrhgf@seznam.cz
 #>
@@ -32,6 +31,9 @@ $ErrorActionPreference = 'stop'
 # cesta k DFS repozitari
 $repoSrc = "\\TODONAHRADIT" # cesta do centralniho (DFS) repo napr.: \\contoso\repository
 
+"start synchronizing data from $repoSrc"
+
+$hostname = $env:COMPUTERNAME
 
 # pokud prestanu nastavovat specificka prava pro vybranou AD skupinu, bude potreba upravit detekci techto custom modulu viz nize!
 function Set-Permissions {
@@ -252,23 +254,6 @@ if (!(Test-Path $moduleSrcFolder -ErrorAction SilentlyContinue)) {
     throw "Cesta s moduly ($moduleSrcFolder) neni dostupna!"
 }
 
-#
-# smazani lokalnich souboru/slozek, ktere jiz v centralnim repo neexistuji
-if (Test-Path $moduleDstFolder -ea SilentlyContinue) {
-    # dohledam soubory/slozky, ktere jsem v minulosti nakopiroval do cilove slozky
-    # pozn.: poznam je dle NTFS opravneni (pokud by se nenastavovalo, bude potreba zvolit jinou metodu detekce!)
-    $repoModuleInDestination = Get-ChildItem $moduleDstFolder -Directory | Get-Acl | Where-Object { $_.accessToString -like "*$readUser*" } | Select-Object -exp PSChildName
-    if ($repoModuleInDestination) {
-        $sourceModuleName = @((Get-ChildItem $moduleSrcFolder -Directory).Name)
-
-        $repoModuleInDestination | ForEach-Object {
-            if ($sourceModuleName -notcontains $_) {
-                "mazu nadbytecny modul $_"
-                Remove-Item (Join-Path $moduleDstFolder $_) -Force -Confirm:$false -Recurse
-            }
-        }
-    }
-}
 
 #
 # nakopirovani zmenenych PS modulu (po celych adresarich)
@@ -279,7 +264,7 @@ Get-ChildItem $moduleSrcFolder -Directory | ForEach-Object {
         # kopirovany modul jiz v cili existuje
         # jestli je potreba provest nejake zmeny necham posoudit robocopy
         try {
-            "nakopiruji {0} do {1}" -f $_.FullName, $moduleDstPath
+            "nakopiruji modul {0} do {1}" -f $_.Name, (Split-Path $moduleDstPath -Parent)
 
             $result = Copy-Folder $_.FullName $moduleDstPath -mirror
 
@@ -297,7 +282,7 @@ Get-ChildItem $moduleSrcFolder -Directory | ForEach-Object {
         }
     } else {
         # modul v cili neexistuje, nakopiruji
-        "nakopiruji {0} do {1}" -f $_.FullName, $moduleDstPath
+        "nakopiruji modul {0} do {1}" -f $_.Name, (Split-Path $moduleDstPath -Parent)
         $result = Copy-Folder $_.FullName $moduleDstPath
 
         if ($result.failures) {
@@ -346,16 +331,16 @@ if (Test-Path $profileSrc -ea SilentlyContinue) {
             $destinationModified = (Get-Item $profileDst).LastWriteTime
             # doslo ke zmene, nahradim stary za novy
             if ($sourceModified -ne $destinationModified) {
-                "nakopiruji {0} do {1}" -f $profileSrc, $profileDstFolder
+                "nakopiruji globalni PS profil do {1}" -f $profileDstFolder
                 Copy-Item $profileSrc $profileDstFolder -Force -Confirm:$false
-                "nastavuji NTFS prava"
+                "nastavuji prava na $profileDst"
                 Set-Permissions $profileDst -readUser $readUser -writeUser $writeUser
             }
         } else {
             # soubor v cili neexistuje, nakopiruji
-            "nakopiruji {0} do {1}" -f $profileSrc, $profileDstFolder
+            "nakopiruji globalni PS profil do {1}" -f $profileDstFolder
             Copy-Item $profileSrc $profileDstFolder -Force -Confirm:$false
-            "nastavuji NTFS prava"
+            "nastavuji prava na $profileDst"
             Set-Permissions $profileDst -readUser $readUser -writeUser $writeUser
         }
     } else {
@@ -378,7 +363,7 @@ if (Test-Path $profileSrc -ea SilentlyContinue) {
 
 
 #
-# SYNCHRONIZACE PER SERVER DAT (obsah slozky Custom)
+# SYNCHRONIZACE CUSTOM DAT
 #
 
 <#
@@ -401,7 +386,7 @@ if (!(Test-Path $customConfig -ErrorAction SilentlyContinue)) {
 
 # nactu customConfig.ps1 skript respektive $config promennou v nem definovanou
 # nastaveni Custom sekce schvalne definuji v samostatnem souboru kvuli lepsi prehlednosti a editovatelnosti
-"zpristupnim `$config promennou"
+"dot sourcuji customConfig.ps1 (abych zpristupnil `$config promennou)"
 . $customConfig
 
 # zdrojova slozka custom dat
@@ -409,17 +394,29 @@ $customSrcFolder = Join-Path $repoSrc "Custom"
 # cilova slozka custom dat
 $customDstFolder = Join-Path $env:systemroot "Scripts"
 
-
-#
-# zjistim, u kterych Custom slozek, je uvedeny tento stroj
-$hostname = $env:COMPUTERNAME
+# objekty reprezentujici Custom slozky, ktere se maji kopirovat na tento stroj
 $thisPCCustom = @()
+# jmena Custom slozek, ktere se maji kopirovat do \Windows\Scripts\
 $thisPCCustFolder = @()
+# jmena Custom slozek, ktere se maji nakopirovat do systemoveho Modules adresare
+$thisPCCustToModules = @()
 
 $config | ForEach-Object {
     if ($hostname -in $_.computerName) {
         $thisPCCustom += $_
-        $thisPCCustFolder += $_.folderName
+
+        if (!$_.customLocalDestination) {
+            # pridam pouze pokud se kopiruji do vychozi slozky (Scripts)
+            $thisPCCustFolder += $_.folderName
+        }
+
+        $normalizedModuleDstFolder = $moduleDstFolder -replace "\\$"
+        $modulesFolderRegex = "^" + ([regex]::Escape($normalizedModuleDstFolder)) + "$"
+        $normalizedCustomLocalDestination = $_.customLocalDestination -replace "\\$"
+        if ($_.customLocalDestination -and $normalizedCustomLocalDestination -match $modulesFolderRegex -and (!$_.copyJustContent -or ($_.copyJustContent -and $_.customDestinationNTFS))) {
+            # pozn. pokud ma copyJustContent ale ne customDestinationNTFS, tak se nenastavi prava pro $read_user >> adresar se nebude automaticky mazat, tzn je zbytecne pro nej delat vyjimku
+            $thisPCCustToModules += $_.folderName
+        }
     }
 }
 
@@ -428,7 +425,6 @@ $config | ForEach-Object {
 Get-ChildItem $customDstFolder -Directory -ErrorAction SilentlyContinue | ForEach-Object {
     $folder = $_
     if ($folder.name -notin $thisPCCustFolder) {
-
         try {
             "mazu jit nepotrebnou $($folder.FullName)"
             Remove-Item $folder.FullName -Recurse -Force -Confirm:$false -ErrorAction Stop
@@ -496,11 +492,11 @@ if ($thisPCCustom) {
         if ($_.copyJustContent) {
             # kopiruji pouze obsah slozky
             # nemohu tak pouzit robocopy mirror, protoze se da cekat, ze v cili budou i jine soubory
-            "nakopiruji {0} do {1}" -f $folderSrcPath, $folderDstPath
+            "nakopiruji obsah Custom slozky {0} do {1}" -f (Split-Path $folderSrcPath -leaf), $folderDstPath
             $result = Copy-Folder $folderSrcPath $folderDstPath
         } else {
             # kopiruji celou slozku
-            "nakopiruji {0} do {1}" -f $folderSrcPath, $folderDstPath
+            "nakopiruji Custom slozku {0} do {1}" -f (Split-Path $folderSrcPath -leaf), (Split-Path $folderDstPath -Parent)
             $result = Copy-Folder $folderSrcPath $folderDstPath -mirror -excludeFolder $customLogFolder
 
             # vypisi smazane soubory
@@ -580,3 +576,24 @@ if ($thisPCCustom) {
         }
     }
 } # konec nakopirovani pozadovanych Custom slozek
+
+
+
+#
+# smazani lokalnich Modulu, ktere jiz v centralnim repo neexistuji
+# zamerne az za Custom sekci, abych nemusel 2x nacitat customConfig
+if (Test-Path $moduleDstFolder -ea SilentlyContinue) {
+    # dohledam soubory/slozky, ktere jsem v minulosti nakopiroval do lokalnich Modules
+    # pozn.: poznam je dle NTFS opravneni (pokud by se nenastavovalo, bude potreba zvolit jinou metodu detekce!)
+    $repoModuleInDestination = Get-ChildItem $moduleDstFolder -Directory | Get-Acl | Where-Object { $_.accessToString -like "*$readUser*" } | Select-Object -exp PSChildName
+    if ($repoModuleInDestination) {
+        $sourceModuleName = @((Get-ChildItem $moduleSrcFolder -Directory).Name)
+
+        $repoModuleInDestination | ForEach-Object {
+            if ($sourceModuleName -notcontains $_ -and $thisPCCustToModules -notcontains $_) {
+                "mazu nadbytecny modul $_"
+                Remove-Item (Join-Path $moduleDstFolder $_) -Force -Confirm:$false -Recurse
+            }
+        }
+    }
+}
