@@ -259,39 +259,23 @@ if (!(Test-Path $moduleSrcFolder -ErrorAction SilentlyContinue)) {
 # nakopirovani zmenenych PS modulu (po celych adresarich)
 Get-ChildItem $moduleSrcFolder -Directory | ForEach-Object {
     $moduleDstPath = Join-Path $moduleDstFolder $_.Name
-
-    if (Test-Path $moduleDstPath -ea SilentlyContinue) {
-        # kopirovany modul jiz v cili existuje
-        # jestli je potreba provest nejake zmeny necham posoudit robocopy
-        try {
-            "nakopiruji modul {0} do {1}" -f $_.Name, (Split-Path $moduleDstPath -Parent)
-
-            $result = Copy-Folder $_.FullName $moduleDstPath -mirror
-
-            if ($result.failures) {
-                # neskoncim s chybou, protoze se da cekat, ze pri dalsim pokusu uz to projde (ted muze napr bezet skript z teto slozky atp)
-                "Pri kopirovani $($_.FullName) se vyskytl problem`n$($result.errMsg)"
-            }
-
-            if ($result.copied) {
-                "nastavuji NTFS prava"
-                Set-Permissions $moduleDstPath -readUser $readUser -writeUser $writeUser
-            }
-        } catch {
-            "nepovedlo se zesynchronizovat $moduleDstPath, chyba byla`n$_"
-        }
-    } else {
-        # modul v cili neexistuje, nakopiruji
+    # jestli je potreba provest nejake zmeny necham posoudit robocopy
+    try {
         "nakopiruji modul {0} do {1}" -f $_.Name, (Split-Path $moduleDstPath -Parent)
-        $result = Copy-Folder $_.FullName $moduleDstPath
+
+        $result = Copy-Folder $_.FullName $moduleDstPath -mirror
 
         if ($result.failures) {
             # neskoncim s chybou, protoze se da cekat, ze pri dalsim pokusu uz to projde (ted muze napr bezet skript z teto slozky atp)
             "Pri kopirovani $($_.FullName) se vyskytl problem`n$($result.errMsg)"
         }
 
-        "nastavuji NTFS prava"
-        Set-Permissions $moduleDstPath -readUser $readUser -writeUser $writeUser
+        if ($result.copied) {
+            "nastavuji NTFS prava"
+            Set-Permissions $moduleDstPath -readUser $readUser -writeUser $writeUser
+        }
+    } catch {
+        "nepovedlo se zesynchronizovat $moduleDstPath, chyba byla`n$_"
     }
 }
 
