@@ -36,6 +36,9 @@ In case you found any bug or have improvement suggestion, please contact me at z
 - add automatic script signing
 
 
+## [2.0.1] - 2019-27-9
+- minor fixes
+
 
 ## [2.0.0] - 2019-22-9
 ### Breaking change
