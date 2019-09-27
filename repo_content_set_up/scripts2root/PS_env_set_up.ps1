@@ -1,3 +1,5 @@
+#Requires -Version 3.0
+
 <#
     .SYNOPSIS
     Skript slouzi k synchronizaci:
