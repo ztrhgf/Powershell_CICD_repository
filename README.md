@@ -36,11 +36,17 @@ In case you found any bug or have improvement suggestion, please contact me at z
 - add automatic script signing
 
 
-## [2.0.1] - 2019-27-9
+## [2.0.2] - 2019-10-1
+### Added
+- check, that commited scripts are compatible with Powershell 3.0 (defined in PSScriptAnalyzerSettings.psd1, so edit it, if you wish to check PS Core compatibility etc)
+
+
+## [2.0.1] - 2019-9-27
+### Bug fixes
 - minor fixes
 
 
-## [2.0.0] - 2019-22-9
+## [2.0.0] - 2019-9-22
 ### Breaking change
 - $config key customNTFS was renamed to customDestinationNTFS
 - $config key customShareNTFS was renamed to customSourceNTFS
@@ -61,21 +67,21 @@ In case you found any bug or have improvement suggestion, please contact me at z
 - Update-Repo and Export-ScriptsToModule functions was moved to Repo_sync.ps1 
 
 
-## [1.0.3] - 2019-2-9
+## [1.0.3] - 2019-9-2
 ### Added
 - Possibility to define custom share NTFS rights for folders in Custom. Intended for limiting read access to folders stored in share/DFS, in case the folder doesn't have computerName attribute in customConfig, etc access isn't limited already.
 
 
-## [1.0.2] - 2019-30-8
+## [1.0.2] - 2019-8-30
 ### Changed
 - Later import of the Variables module in PS_env_set_up.ps1 script. To work with current data when synchronyzing profile and Custom section.
 
 
-## [1.0.1] - 2019-30-8
+## [1.0.1] - 2019-8-30
 ### Added
 - Granting access to folders in DFS repository "Custom" to just computers, which should download this content. Non other machines can access it.
 
 
-## [1.0.0] - 2019-29-8
+## [1.0.0] - 2019-8-29
 ### Added
 - Initial commit
