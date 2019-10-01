@@ -242,7 +242,7 @@ try {
 
                 # kontrola, ze jsou pouzity pouze validni klice
                 $validKey = "computerName", "folderName", "customDestinationNTFS", "customSourceNTFS", "customLocalDestination", "customShareDestination", "copyJustContent"
-                if ($nonvalidKey = Compare-Object $key $validKey | ? { $_.sideIndicator -match "<=" } | Select-Object -exp inputObject) {
+                if ($nonvalidKey = Compare-Object $key $validKey | ? { $_.sideIndicator -match "<=" } | Select-Object -ExpandProperty inputObject) {
                     _ErrorAndExit "V customConfig.ps1 skriptu promenna `$config obsahuje nepovolene klice ($($nonvalidKey -join ', ')). Povolene jsou pouze $($validKey -join ', ')"
                 }
 
@@ -348,6 +348,7 @@ try {
         }
 
         $ps1Error = @()
+        $ps1CompatWarning = @()
 
         $psFilesToCommit | ForEach-Object {
             $script = $_
@@ -365,8 +366,14 @@ try {
             }
 
             #
-            # kontrola syntaxe a dodrzovani best practices
-            $ps1Error += Invoke-ScriptAnalyzer $script -Severity Error, ParseError
+            # kontrola
+            # - syntaxe a dodrzovani best practices
+            # - kompatibility s Powershell 3.0
+            #   - viz https://devblogs.microsoft.com/powershell/using-psscriptanalyzer-to-check-powershell-version-compatibility/
+            $scriptAnalyzerResult = Invoke-ScriptAnalyzer $script -Settings .\PSScriptAnalyzerSettings.psd1
+            $ps1CompatWarning += $scriptAnalyzerResult | ? { $_.RuleName -in "PSUseCompatibleCommands", "PSUseCompatibleSyntax" -and $_.Severity -in "Warning", "Error", "ParseError" }
+            $ps1Error += $scriptAnalyzerResult | ? { $_.Severity -in "Error", "ParseError" }
+
 
             #
             # upozorneni pokud skript obsahuje FIXME komentar (krizek udelan pres [char] aby nehlasilo samo sebe)
@@ -462,6 +469,12 @@ try {
                 $ps1Error = $ps1Error | Select-Object Scriptname, Line, Column, Message | Format-List | Out-String -Width 1200
                 _ErrorAndExit "Byly nalezeny nasledujici vazne prohresky proti psani PS skriptu:`n$ps1Error`n`nVyres a znovu comitni"
             }
+        }
+
+        if ($ps1CompatWarning) {
+            # ps1 v commitu obsahuji nekompatibilni prikazy se zadanou verzi PS (dle nastaveni v .vscode\PSScriptAnalyzerSettings.psd1)
+            $ps1CompatWarning = $ps1CompatWarning | Select-Object Scriptname, Line, Column, Message | Format-List | Out-String -Width 1200
+            _WarningAndExit "Byly nalezeny problemy s kompatibilitou vuci PS 3.0:`n$ps1CompatWarning`n`nSkutecne pokracovat v commitu?"
         }
     } # konec kontrol ps1 a psm1 souboru
 

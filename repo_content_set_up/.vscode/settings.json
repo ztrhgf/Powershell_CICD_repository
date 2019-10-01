@@ -71,5 +71,7 @@
             "type": "whole-line",
             "iconColour": "yellow"
         }
-    }
+    },
+    // konfigurace kontroly skriptu (kompatibilita se zadanymi verzemi PS atd)
+    "powershell.scriptAnalysis.settingsPath": "PSScriptAnalyzerSettings.psd1"
 }
