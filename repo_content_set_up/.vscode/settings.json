@@ -47,7 +47,7 @@
     "powershell.startAutomatically": true,
     "gitlens.advanced.similarityThreshold": 90,
     "gitlens.advanced.telemetry.enabled": false,
-    "git.promptToSaveFilesBeforeCommit": false,
+    "git.promptToSaveFilesBeforeCommit": "always",
     "git.autofetch": true,
     "git.fetchOnPull": true,
     // kvuli autostash pokud dojde k preruseni commitu, muze byt potreba obsah stash rucne obnovit skrze prikaz: git stash pop
