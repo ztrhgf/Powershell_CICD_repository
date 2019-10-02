@@ -20,6 +20,8 @@ In case you found any bug or have improvement suggestion, please contact me at z
   - to specific folder
   - with specific NTFS permissions
 - easy to use (fully managed from Visual Studio Code editor)
+- idiot-proof
+  - warn about modification of functions and variables used in other scripts in repository etc
 - ...
   
 
