@@ -7,24 +7,19 @@ In case you found any bug or have improvement suggestion, please contact me at z
 
 
   
-## Main features:
+# Main features:
 - unified Powershell environment across whole company
   - same modules, functions and variables across all Powershell sessions (local and remote)
   - one global Powershell profile to unify user experience
-- fully automated (validation, code formatting and distribution of repository content)
-  - using GIT hooks, Powershell scripts, one GPO and VSC editor
-  - all you have to do, is commit change, everything else is automated
-  - after successful commit, content is automatically: pushed to GIT repository >> pulled to local server and processed >> distributed to DFS share >> and from it, downloaded to clients in your Active Directory
-- easy to use (fully managed from Visual Studio Code editor)
-  - great IDE
-  - GUI for GIT
-  - code auto-format
-- validation of scripts before each commit
-  - best practices, syntax errors, ...
-- automated generation of psm modules (from ps1 scripts)
-- possibility to automatically copy chosen content to just specified computers
+- fully automated (code validation, formatting and distribution)
+  - using GIT hooks, Powershell scripts, GPO and VSC editor
+  - automation is not applicable to code writing and making commits :)
+  - after successful commit, content is automatically:
+  pushed to GIT repository >> pulled to local server and processed >> distributed to DFS share >> and from it, downloaded to clients in your Active Directory
+- possibility to synchronize chosen content to just specified computers
   - to specific folder
   - with specific NTFS permissions
+- easy to use (fully managed from Visual Studio Code editor)
 - ...
   
 
@@ -32,8 +27,8 @@ In case you found any bug or have improvement suggestion, please contact me at z
 
 ## [Unreleased]
 - support defining multiple object with same folderName key in $config
-- support "\\" in folderName key in $config
-- add automatic script signing
+- support "\" in folderName key in $config
+- automatic script signing
 
 
 ## [2.0.2] - 2019-10-1
