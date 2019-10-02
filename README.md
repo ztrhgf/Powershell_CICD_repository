@@ -29,7 +29,7 @@ In case you found any bug or have improvement suggestion, please contact me at z
 
 ## [Unreleased]
 - support defining multiple object with same folderName key in $config
-- support "\" in folderName key in $config
+- support "\\" in folderName key in $config
 - automatic script signing
 
 
