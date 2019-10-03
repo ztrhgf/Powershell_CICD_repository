@@ -32,6 +32,12 @@ Start-Transcript -Path "$env:SystemRoot\temp\PS_env_set_up.log" -Force
 $ErrorActionPreference = 'stop'
 # cesta k DFS repozitari
 $repoSrc = "\\TODONAHRADIT" # cesta do centralniho (DFS) repo napr.: \\contoso\repository
+# skupina ktera ma pravo cist obsah DFS repozitare (i lokalni kopie)
+# zaroven pouzivam pro detekci, co jsem nakopiroval timto skriptem == NERUSIT (nebo adekvatne upravit cely skript)
+# PRI ZMENE ZMENIT I V SET-PERMISSIONS kde je hardcoded, aby i nadale fungovala spravne detekce
+[string] $readUser = "repo_reader"
+# skupina ktera ma pravo editovat obsah DFS repozitare (i lokalni kopie)
+[string] $writeUser = "repo_writer"
 
 "start synchronizing data from $repoSrc"
 
@@ -239,59 +245,94 @@ Function Copy-Folder {
 
 
 
+
+
+#
+# IMPORT PROMENNYCH z Variables modulu
+#
+
+# kvuli Custom sekci (resp. aby slo pouzivat v definici computerName promenne) a kvuli specifikovani kam se ma kopirovat profile.ps1
+# chybu ignorujeme, protoze na fresh stroji, modul bude az po prvnim spusteni tohoto skriptu, ne driv :)
+# pozn.: importuji z DFS share, abych pracoval s nejnovejsimi daty
+try {
+    Import-Module (Join-Path $repoSrc "modules\Variables") -ErrorAction Stop
+} catch {
+    # pokud selze, zkusim pouzit lokalni kopii modulu Variables
+    # muze napr selhat, protoze je umisteno v share
+    "modul Variables se nepodarilo nacist z DFS, zkusim pouzit lokalni kopii"
+    Import-Module "Variables" -ErrorAction SilentlyContinue
+}
+
+
+
+
 #
 # SYNCHRONIZACE MODULU
 #
 
 $moduleSrcFolder = Join-Path $repoSrc "modules"
 $moduleDstFolder = Join-Path $env:systemroot "System32\WindowsPowerShell\v1.0\Modules\"
-# skupina ktera ma pravo cist obsah DFS repozitare (i lokalni kopie)
-# zaroven pouzivam pro detekci, co jsem nakopiroval timto skriptem == NERUSIT (nebo adekvatne upravit cely skript)
-# PRI ZMENE ZMENIT I V SET-PERMISSIONS kde je hardcoded, aby i nadale fungovala spravne detekce
-[string] $readUser = "repo_reader"
-# skupina ktera ma pravo editovat obsah DFS repozitare (i lokalni kopie)
-[string] $writeUser = "repo_writer"
 
 if (!(Test-Path $moduleSrcFolder -ErrorAction SilentlyContinue)) {
     throw "Cesta s moduly ($moduleSrcFolder) neni dostupna!"
 }
 
+$customModulesScript = Join-Path $moduleSrcFolder "modulesConfig.ps1"
 
-#
-# nakopirovani zmenenych PS modulu (po celych adresarich)
-Get-ChildItem $moduleSrcFolder -Directory | ForEach-Object {
-    $moduleDstPath = Join-Path $moduleDstFolder $_.Name
-    # jestli je potreba provest nejake zmeny necham posoudit robocopy
-    try {
-        "nakopiruji modul {0} do {1}" -f $_.Name, (Split-Path $moduleDstPath -Parent)
+# nactu modulesConfig.ps1 skript respektive $modulesConfig promennou v nem definovanou
+# schvalne definuji v samostatnem souboru kvuli lepsi prehlednosti a editovatelnosti
+try {
+    "dot sourcuji modulesConfig.ps1 (abych zpristupnil `$modulesConfig promennou)"
+    . $customModulesScript
+} catch {
+    "nepovedlo se nacist $customModulesScript"
+    "chyba byla $_"
+}
 
-        $result = Copy-Folder $_.FullName $moduleDstPath -mirror
+# jmena modulu, ktere maji omezeno, kam se maji kopirovat
+$customModules = @()
+# jmena modulu, ktere se maji kopirovat na tento stroj
+$thisPCModules = @()
 
-        if ($result.failures) {
-            # neskoncim s chybou, protoze se da cekat, ze pri dalsim pokusu uz to projde (ted muze napr bezet skript z teto slozky atp)
-            "Pri kopirovani $($_.FullName) se vyskytl problem`n$($result.errMsg)"
-        }
+$modulesConfig | ForEach-Object {
+    $customModules += $_.folderName
 
-        if ($result.copied) {
-            "nastavuji NTFS prava"
-            Set-Permissions $moduleDstPath -readUser $readUser -writeUser $writeUser
-        }
-    } catch {
-        "nepovedlo se zesynchronizovat $moduleDstPath, chyba byla`n$_"
+    if ($hostname -in $_.computerName) {
+        $thisPCModules += $_.folderName
     }
 }
 
 
-
-
 #
-# IMPORT PROMENNYCH
-#
+# nakopirovani zmenenych PS modulu (po celych adresarich)
+foreach ($module in (Get-ChildItem $moduleSrcFolder -Directory)) {
+    $moduleName = $module.Name
 
-# kvuli Custom sekci (resp. aby slo pouzivat v definici computerName promenne) a kvuli specifikovani kam se ma kopirovat profile.ps1
-# chybu ignorujeme, protoze na fresh stroji, modul bude az po prvnim spusteni tohoto skriptu, ne driv :)
-# pozn.: import delam az po nakopirovani aktualizovanych modulu, abych pracoval s nejnovejsimi daty
-Import-Module Variables -ErrorAction "Continue"
+    if ($moduleName -notin $customModules -or ($moduleName -in $customModules -and $moduleName -in $thisPCModules)) {
+        $moduleDstPath = Join-Path $moduleDstFolder $moduleName
+        # jestli je potreba provest nejake zmeny necham posoudit robocopy
+        try {
+            "nakopiruji modul {0}" -f $moduleName
+
+            $result = Copy-Folder $module.FullName $moduleDstPath -mirror
+
+            if ($result.failures) {
+                # neskoncim s chybou, protoze se da cekat, ze pri dalsim pokusu uz to projde (ted muze napr bezet skript z teto slozky atp)
+                "Pri kopirovani $($module.FullName) se vyskytl problem`n$($result.errMsg)"
+            }
+
+            if ($result.copied) {
+                "byla zmena, nastavim NTFS prava"
+                Set-Permissions $moduleDstPath -readUser $readUser -writeUser $writeUser
+            }
+        } catch {
+            "nepovedlo se zesynchronizovat $moduleDstPath, chyba byla`n$_"
+        }
+    } else {
+        "modul $moduleName se nema na tento stroj kopirovat"
+    }
+}
+
 
 
 

@@ -242,7 +242,7 @@ try {
 
                 # kontrola, ze jsou pouzity pouze validni klice
                 $validKey = "computerName", "folderName", "customDestinationNTFS", "customSourceNTFS", "customLocalDestination", "customShareDestination", "copyJustContent"
-                if ($nonvalidKey = Compare-Object $key $validKey | ? { $_.sideIndicator -match "<=" } | Select-Object -ExpandProperty inputObject) {
+                if ($key -and ($nonvalidKey = Compare-Object $key $validKey | ? { $_.sideIndicator -match "<=" } | Select-Object -ExpandProperty inputObject)) {
                     _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig obsahuje nepovolene klice ($($nonvalidKey -join ', ')). Povolene jsou pouze $($validKey -join ', ')"
                 }
 
@@ -315,6 +315,97 @@ try {
             # chyba pokud definuji u jednoho computerName a druheho customSourceNTFS (prepsaly by se DFS permissn)
             _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig definuje vickrat folderName '$($duplicatesFolder -join ', ')'."
             # _WarningAndExit "V customConfig.ps1 skriptu promenna `$customConfig definuje vickrat folderName '$($duplicatesFolder -join ', ')'. Budte si 100% jisti, ze nedojde ke konfliktu kvuli prekryvajicim nastavenim.`n`nPokracovat?"
+        }
+    }
+
+
+
+    #
+    # kontrola obsahu promenne $modulesConfig z modulesConfig.ps1
+    # pozn.: zamerne nedotsourcuji modulesConfig.ps1 ale kontroluji pres AST, protoze pokud by plnil nejake promenne z AD, tak pri editaci na nedomenovem stroji, by hazelo chyby
+    "- kontrola obsahu promenne `$modulesConfig z modulesConfig.ps1"
+    if ($filesToCommitNoDEL | Where-Object { $_ -match "modules\\modulesConfig\.ps1" }) {
+        $modulesConfigScript = Join-Path $rootFolder "modules\modulesConfig.ps1"
+        $AST = [System.Management.Automation.Language.Parser]::ParseFile($modulesConfigScript, [ref]$null, [ref]$null)
+        $variables = $AST.FindAll( { $args[0] -is [System.Management.Automation.Language.VariableExpressionAst ] }, $true)
+        $configVar = $variables | ? { $_.variablepath.userpath -eq "modulesConfig" }
+        if (!$configVar) {
+            _ErrorAndExit "modulesConfig.ps1 nedefinuje promennou `$modulesConfig. To musi i kdyby mela byt prazdna."
+        }
+
+        # prava strana promenne $modulesConfig resp. prvky pole
+        $configValueItem = $configVar.parent.right.expression.subexpression.statements.pipelineelements.expression.elements
+        if (!$configValueItem) {
+            # pokud obsahuje pouze jeden objekt, musim vycist primo expression
+            $configValueItem = $configVar.parent.right.expression.subexpression.statements.pipelineelements.expression
+        }
+
+        if ($configValueItem) {
+            # kontrola, ze obsahuje pouze prvky typu psobject
+            if ($configValueItem | ? { $_.type.typename.name -ne "PSCustomObject" }) {
+                _ErrorAndExit "V modulesConfig.ps1 skriptu promenna `$modulesConfig musi obsahovat pole PSCustomObject prvku, coz aktualne neplati."
+            }
+
+            # sem poznacim vsechny adresare, ktere $modulesConfig nastavuje
+            $folderNames = @()
+
+            # zkontroluji jednotlive objekty pole (kazdy objekt by mel definovat nastaveni pro jednu Custom slozku)
+            $configValueItem | % {
+                $item = $_
+                $folderName = ($item.child.keyvaluepairs | ? { $_.item1.value -eq "folderName" }).item2.pipelineelements.extent.text -replace '"' -replace "'"
+
+                # kontrola, ze folderName neobsahuje zanorenou slozku
+                if ($folderName -match "\\") {
+                    _ErrorAndExit "V modulesConfig.ps1 skriptu promenna `$modulesConfig definuje folderName '$folderName'. To ale nesmi obsahovat zanorene slozky tzn. '\'"
+                }
+
+                $item.child.keyvaluepairs | % {
+                    $key = $_.item1.value
+                    $value = $_.item2.pipelineelements.extent.text -replace '"' -replace "'"
+
+                    # kontrola, ze jsou pouzity pouze validni klice
+                    $validKey = "computerName", "folderName"
+                    if ($key -and ($nonvalidKey = Compare-Object $key $validKey | ? { $_.sideIndicator -match "<=" } | Select-Object -ExpandProperty inputObject)) {
+                        _ErrorAndExit "V modulesConfig.ps1 skriptu promenna `$modulesConfig obsahuje nepovolene klice ($($nonvalidKey -join ', ')). Povolene jsou pouze $($validKey -join ', ')"
+                    }
+
+                    # kontrola, ze folderName obsahuje max jednu hodnotu
+                    if ($key -in ("folderName") -and ($value -split ',').count -ne 1) {
+                        _ErrorAndExit "V modulesConfig.ps1 skriptu promenna `$modulesConfig obsahuje v objektu pro nastaveni '$folderName' v klici $key vic hodnot. Hodnota klice je '$value'"
+                    }
+                }
+
+                $keys = $item.child.keyvaluepairs.item1.value
+                # objekt neobsahuje povinny klic folderName
+                if ($keys -notcontains "folderName") {
+                    _ErrorAndExit "V modulesConfig.ps1 skriptu promenna `$modulesConfig neobsahuje u nejakeho objektu povinny klic folderName."
+                }
+
+                $folderNames += $folderName
+
+                # zkontroluji, ze folderName odpovida realne existujicimu adresari v Modules
+                $unixFolderPath = 'modules/{0}' -f ($folderName -replace "\\", "/")
+                $folderAlreadyInRepo = _startProcess git "show `"HEAD:$unixFolderPath`""
+                if ($folderAlreadyInRepo -match "^fatal: ") {
+                    # hledany adresar v GITu neni
+                    $folderAlreadyInRepo = ""
+                }
+                $windowsFolderPath = $unixFolderPath -replace "/", "\"
+                $folderInActualCommit = $filesToCommitNoDEL | Where-Object { $_ -cmatch [regex]::Escape($windowsFolderPath) }
+                if (!$folderAlreadyInRepo -and !$folderInActualCommit) {
+                    _WarningAndExit "V modulesConfig.ps1 skriptu promenna `$modulesConfig obsahuje objekt pro nastaveni '$folderName', ale dany adresar neni v remote GIT repo\Modules ani v aktualnim commitu (nazev je case sensitive!).`n`nSkutecne pokracovat?"
+                }
+            }
+
+            # upozornim na slozky, ktere jsou definovane vickrat
+            $ht = @{ }
+            $folderNames | % { $ht["$_"] += 1 }
+            $duplicatesFolder = $ht.keys | ? { $ht["$_"] -gt 1 } | % { $_ }
+            if ($duplicatesFolder) {
+                _ErrorAndExit "V modulesConfig.ps1 skriptu promenna `$modulesConfig definuje vickrat folderName '$($duplicatesFolder -join ', ')'."
+            }
+        } else {
+            "   - `$modulesConfig nic neobsahuje"  
         }
     }
 
