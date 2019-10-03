@@ -617,7 +617,7 @@ if (Test-Path $moduleDstFolder -ea SilentlyContinue) {
         $sourceModuleName = @((Get-ChildItem $moduleSrcFolder -Directory).Name)
 
         $repoModuleInDestination | ForEach-Object {
-            if ($sourceModuleName -notcontains $_ -and $thisPCCustToModules -notcontains $_) {
+            if (($sourceModuleName -notcontains $_ -and $thisPCCustToModules -notcontains $_) -or ($customModules -contains $_ -and $thisPCModules -notcontains $_)) {
                 "mazu nadbytecny modul $_"
                 Remove-Item (Join-Path $moduleDstFolder $_) -Force -Confirm:$false -Recurse
             }
