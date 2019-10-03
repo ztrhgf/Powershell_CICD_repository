@@ -28,6 +28,7 @@ In case you found any bug or have improvement suggestion, please contact me at z
 # Changelog
 
 ## [Unreleased]
+- add posibility to synchronize specified modules to just chosen computers (to behave similarly as Custom section)
 - support defining multiple object with same folderName key in $config
 - support "\\" in folderName key in $config
 - automatic script signing
