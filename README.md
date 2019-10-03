@@ -33,6 +33,12 @@ In case you found any bug or have improvement suggestion, please contact me at z
 - automatic script signing
 
 
+## [2.0.3] - 2019-10-3
+### Changed 
+- $config variable defined in customConfig.ps1 renamed to $customConfig to honor name of the script file and be more unique
+- repo_sync.ps1 now sync changes to DFS everytime, not just in case, some new data was pulled from cloud repo
+
+
 ## [2.0.2] - 2019-10-1
 ### Added
 - check, that commited scripts are compatible with Powershell 3.0 (defined in PSScriptAnalyzerSettings.psd1, so edit it, if you wish to check PS Core compatibility etc)
