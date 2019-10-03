@@ -1,8 +1,8 @@
 <#
 Zde se definuje, co se ma dit s obsahem slozky Custom.
 Tzn na jake stroje, do jakeho umisteni a s jakymi pravy (vse definovano v $customConfig viz nize) se ma obsah kopirovat.
-Standardne se obsah kopiruje do C:\Windows\Scripts a dochazi automaticky k mazani toho, co tam jiz byt nema1.
-Tento skript se dot sourcuje v PS_env_set_up.ps1 a nesmi proto obsahovat nic krome promenne config.ps1!
+Standardne se obsah kopiruje do C:\Windows\Scripts a dochazi automaticky k mazani toho, co tam jiz byt nema.
+Tento skript se dot sourcuje v PS_env_set_up.ps1 a nesmi proto obsahovat nic krome promenne customConfig!
 
 Jak ma vypadat $customConfig a co muze obsahovat: 
 $customConfig je pole objektu, kde kazdy objekt reprezentuje jednu slozku v Custom adresari.
