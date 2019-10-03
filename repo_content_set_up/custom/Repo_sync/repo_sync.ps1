@@ -1129,13 +1129,13 @@ try {
             # abych zachytil pripadne chyby pouzivam _startProcess
             _startProcess git -argumentList "fetch --all" # downloads the latest from remote without trying to merge or rebase anything.
 
-            # ukoncim pokud nedoslo k zadne zmene
-            # ! pripadne manualni upravy v DFS repo se tim padem prepisi az po zmene v cloud repo, ne driv !
-            $status = _startProcess git -argumentList "status"
-            if ($status -match "Your branch is up to date with") {
-                "nedoslo k zadnym zmenam, ukoncuji"
-                exit
-            }
+            # # ukoncim pokud nedoslo k zadne zmene
+            # # ! pripadne manualni upravy v DFS repo se tim padem prepisi az po zmene v cloud repo, ne driv !
+            # $status = _startProcess git -argumentList "status"
+            # if ($status -match "Your branch is up to date with") {
+            #     "nedoslo k zadnym zmenam, ukoncuji"
+            #     exit
+            # }
 
             _startProcess git -argumentList "reset --hard origin/master" # resets the master branch to what you just fetched. The --hard option changes all the files in your working tree to match the files in origin/master
             _startProcess git -argumentList "clean -fd" # odstraneni untracked souboru a adresaru (vygenerovane moduly z scripts2module atp)
