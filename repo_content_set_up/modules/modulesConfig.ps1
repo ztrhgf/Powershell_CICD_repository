@@ -13,8 +13,9 @@ Objekt pak obsahuje nasledujici klice:
         jmeno slozky (ktera se nachazi v Modules adresari)
 
     - computerName
-        na jake stroje se ma slozka synchronizovat (je mozne pouzit i promennou (napr. z Variables modulu) obsahujici seznam stroju)
-        nikam jinam se kopirovat nebude a pokud nekde jiz je, tak dojde k jejimu smazani!
+        na jake stroje se ma slozka POUZE synchronizovat (je mozne pouzit i promennou (napr. z Variables modulu) obsahujici seznam stroju)
+        !nikam jinam se kopirovat nebude a pokud jiz byla nekam drive nakopirovana, tak dojde k jejimu smazani!
+
 
 
 PRIKLADY:
@@ -23,8 +24,8 @@ $modulesConfig = @(
     [PSCustomObject]@{
         folderName   = "ConfluencePS"
         computerName = "PC-1"
-    }
-    ,[PSCustomObject]@{
+    },
+    [PSCustomObject]@{
         folderName   = "Posh-SSH"
         computerName = $adminPC
     }
