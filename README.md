@@ -29,16 +29,19 @@ In case you found any bug or have improvement suggestion, please contact me at z
 # Changelog
 
 ## [Unreleased]
-- add posibility to synchronize specified modules to just chosen computers (to behave similarly as Custom section)
 - support defining multiple object with same folderName key in $config
 - support "\\" in folderName key in $config
 - automatic script signing
 
 
 ## [2.0.3] - 2019-10-3
+### Added
+- possibility to sync modules just to chosen computers (defined in modulesConfig.ps1)
 ### Changed 
 - $config variable defined in customConfig.ps1 renamed to $customConfig to honor name of the script file and be more unique
 - repo_sync.ps1 now sync changes to DFS everytime, not just in case, some new data was pulled from cloud repo
+### Bug fixes
+- minor fixes
 
 
 ## [2.0.2] - 2019-10-1
