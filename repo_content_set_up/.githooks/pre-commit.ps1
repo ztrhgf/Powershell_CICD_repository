@@ -198,19 +198,19 @@ try {
 
 
     #
-    # kontrola obsahu promenne $config z customConfig.ps1
+    # kontrola obsahu promenne $customConfig z customConfig.ps1
     # pozn.: zamerne nedotsourcuji customConfig.ps1 ale kontroluji pres AST, protoze pokud by plnil nejake promenne z AD, tak pri editaci na nedomenovem stroji, by hazelo chyby
-    "- kontrola obsahu promenne `$config z customConfig.ps1"
+    "- kontrola obsahu promenne `$customConfig z customConfig.ps1"
     if ($filesToCommitNoDEL | Where-Object { $_ -match "custom\\customConfig\.ps1" }) {
-        $customConfig = Join-Path $rootFolder "Custom\customConfig.ps1"
-        $AST = [System.Management.Automation.Language.Parser]::ParseFile($customConfig, [ref]$null, [ref]$null)
+        $customConfigScript = Join-Path $rootFolder "Custom\customConfig.ps1"
+        $AST = [System.Management.Automation.Language.Parser]::ParseFile($customConfigScript, [ref]$null, [ref]$null)
         $variables = $AST.FindAll( { $args[0] -is [System.Management.Automation.Language.VariableExpressionAst ] }, $true)
-        $configVar = $variables | ? { $_.variablepath.userpath -eq "config" }
+        $configVar = $variables | ? { $_.variablepath.userpath -eq "customConfig" }
         if (!$configVar) {
-            _ErrorAndExit "customConfig.ps1 nedefinuje promennou `$config. To musi i kdyby mela byt prazdna."
+            _ErrorAndExit "customConfig.ps1 nedefinuje promennou `$customConfig. To musi i kdyby mela byt prazdna."
         }
 
-        # prava strana promenne $config resp. prvky pole
+        # prava strana promenne $customConfig resp. prvky pole
         $configValueItem = $configVar.parent.right.expression.subexpression.statements.pipelineelements.expression.elements
         if (!$configValueItem) {
             # pokud obsahuje pouze jeden objekt, musim vycist primo expression
@@ -219,10 +219,10 @@ try {
 
         # kontrola, ze obsahuje pouze prvky typu psobject
         if ($configValueItem | ? { $_.type.typename.name -ne "PSCustomObject" }) {
-            _ErrorAndExit "V customConfig.ps1 skriptu promenna `$config musi obsahovat pole PSCustomObject prvku, coz aktualne neplati."
+            _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig musi obsahovat pole PSCustomObject prvku, coz aktualne neplati."
         }
 
-        # sem poznacim vsechny adresare, ktere $config nastavuje
+        # sem poznacim vsechny adresare, ktere $customConfig nastavuje
         $folderNames = @()
 
         # zkontroluji jednotlive objekty pole (kazdy objekt by mel definovat nastaveni pro jednu Custom slozku)
@@ -233,7 +233,7 @@ try {
             # kontrola, ze folderName neobsahuje zanorenou slozku
             #TODO dodelat podporu, aby to slo
             if ($folderName -match "\\") {
-                _ErrorAndExit "V customConfig.ps1 skriptu promenna `$config definuje folderName '$folderName'. To ale nesmi obsahovat zanorene slozky tzn. '\'"
+                _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig definuje folderName '$folderName'. To ale nesmi obsahovat zanorene slozky tzn. '\'"
             }
 
             $item.child.keyvaluepairs | % {
@@ -243,48 +243,48 @@ try {
                 # kontrola, ze jsou pouzity pouze validni klice
                 $validKey = "computerName", "folderName", "customDestinationNTFS", "customSourceNTFS", "customLocalDestination", "customShareDestination", "copyJustContent"
                 if ($nonvalidKey = Compare-Object $key $validKey | ? { $_.sideIndicator -match "<=" } | Select-Object -ExpandProperty inputObject) {
-                    _ErrorAndExit "V customConfig.ps1 skriptu promenna `$config obsahuje nepovolene klice ($($nonvalidKey -join ', ')). Povolene jsou pouze $($validKey -join ', ')"
+                    _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig obsahuje nepovolene klice ($($nonvalidKey -join ', ')). Povolene jsou pouze $($validKey -join ', ')"
                 }
 
                 # kontrola, ze folderName, customLocalDestination, customShareDestination obsahuji max jednu hodnotu)
                 if ($key -in ("folderName", "customLocalDestination", "customShareDestination") -and ($value -split ',').count -ne 1) {
-                    _ErrorAndExit "V customConfig.ps1 skriptu promenna `$config obsahuje v objektu pro nastaveni '$folderName' v klici $key vic hodnot. Hodnota klice je '$value'"
+                    _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig obsahuje v objektu pro nastaveni '$folderName' v klici $key vic hodnot. Hodnota klice je '$value'"
                 }
 
                 # kontrola, ze customShareDestination je v UNC tvaru
                 if ($key -match "customShareDestination" -and $value -notmatch "^\\\\") {
-                    _ErrorAndExit "V customConfig.ps1 skriptu promenna `$config neobsahuje v objektu pro nastaveni '$folderName' v klici $key UNC cestu. Hodnota klice je '$value'"
+                    _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig neobsahuje v objektu pro nastaveni '$folderName' v klici $key UNC cestu. Hodnota klice je '$value'"
                 }
 
                 # kontrola, ze customLocalDestination je lokalni cesta
                 # pozn.: regulak zamerne extremne jednoduchy aby slo pouzit promenne v ceste
                 if ($key -match "customLocalDestination" -and $value -match "^\\\\") {
-                    _ErrorAndExit "V customConfig.ps1 skriptu promenna `$config neobsahuje v objektu pro nastaveni '$folderName' v klici $key lokalni cestu. Hodnota klice je '$value'"
+                    _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig neobsahuje v objektu pro nastaveni '$folderName' v klici $key lokalni cestu. Hodnota klice je '$value'"
                 }
             }
 
             $keys = $item.child.keyvaluepairs.item1.value
             # objekt neobsahuje povinny klic folderName
             if ($keys -notcontains "folderName") {
-                _ErrorAndExit "V customConfig.ps1 skriptu promenna `$config neobsahuje u nejakeho objektu povinny klic folderName."
+                _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig neobsahuje u nejakeho objektu povinny klic folderName."
             }
 
             $folderNames += $folderName
 
             # upozornim na potencialni problem s nastavenim share prav
             if ($keys -contains "computerName" -and $keys -contains "customSourceNTFS") {
-                _WarningAndExit "V customConfig.ps1 skriptu promenna `$config obsahuje v objektu pro nastaveni '$folderName' jak computerName, tak customSourceNTFS. To je bezpecne pouze pokud customSourceNTFS obsahuje vsechny stroje z computerName (plus neco navic).`n`nSkutecne pokracovat v commitu?"
+                _WarningAndExit "V customConfig.ps1 skriptu promenna `$customConfig obsahuje v objektu pro nastaveni '$folderName' jak computerName, tak customSourceNTFS. To je bezpecne pouze pokud customSourceNTFS obsahuje vsechny stroje z computerName (plus neco navic).`n`nSkutecne pokracovat v commitu?"
             }
 
             # kontrola, ze neni pouzita nepodporovana kombinace klicu
             if ($keys -contains "copyJustContent" -and $keys -contains "computerName" -and $keys -notcontains "customLocalDestination") {
-                _ErrorAndExit "V customConfig.ps1 skriptu promenna `$config obsahuje v objektu pro nastaveni '$folderName' copyJustContent a computerName, ale ne customLocalDestination. Do vychozi slozky (Scripts) se vzdy kopiruji cele slozky."
+                _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig obsahuje v objektu pro nastaveni '$folderName' copyJustContent a computerName, ale ne customLocalDestination. Do vychozi slozky (Scripts) se vzdy kopiruji cele slozky."
             }
 
             # kontrola, ze neni pouzita nepodporovana kombinace klicu
             if ($keys -contains "copyJustContent" -and $keys -contains "customDestinationNTFS" -and ($keys -contains "customLocalDestination" -or $keys -contains "customShareDestination")) {
                 # kdyz se kopiruje do Scripts, tak se copyJustContent ignoruje tzn se custom prava pouziji
-                _ErrorAndExit "V customConfig.ps1 skriptu promenna `$config obsahuje v objektu pro nastaveni '$folderName' customDestinationNTFS, ale to nelze, protoze je zaroven nastaveno copyJustContent a proto se prava nenastavuji."
+                _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig obsahuje v objektu pro nastaveni '$folderName' customDestinationNTFS, ale to nelze, protoze je zaroven nastaveno copyJustContent a proto se prava nenastavuji."
             }
 
             # zkontroluji, ze folderName odpovida realne existujicimu adresari v Custom
@@ -297,12 +297,12 @@ try {
             $windowsFolderPath = $unixFolderPath -replace "/", "\"
             $folderInActualCommit = $filesToCommitNoDEL | Where-Object { $_ -cmatch [regex]::Escape($windowsFolderPath) }
             if (!$folderAlreadyInRepo -and !$folderInActualCommit) {
-                _ErrorAndExit "V customConfig.ps1 skriptu promenna `$config obsahuje objekt pro nastaveni '$folderName', ale dany adresar neni v remote GIT repo\Custom ani v aktualnim commitu (nazev je case sensitive!). Zpusobilo by chybu na klientech."
+                _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig obsahuje objekt pro nastaveni '$folderName', ale dany adresar neni v remote GIT repo\Custom ani v aktualnim commitu (nazev je case sensitive!). Zpusobilo by chybu na klientech."
             }
         }
 
         if ($folderNames -notcontains "Repo_sync") {
-            _ErrorAndExit "V customConfig.ps1 skriptu promenna `$config musi obsahovat PSCustomObject pro definici Repo_sync. To je potreba, aby fungovalo plneni MGM >> share."
+            _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig musi obsahovat PSCustomObject pro definici Repo_sync. To je potreba, aby fungovalo plneni MGM >> share."
         }
 
         # upozornim na slozky, ktere jsou definovane vickrat
@@ -313,8 +313,8 @@ try {
             #TODO dodelat podporu pro definovani jedne slozky vickrat
             # chyba pokud definuji computerName (prepsaly by se DFS permissn), leda ze bych do repo_sync dodelal merge tech prav ;)
             # chyba pokud definuji u jednoho computerName a druheho customSourceNTFS (prepsaly by se DFS permissn)
-            _ErrorAndExit "V customConfig.ps1 skriptu promenna `$config definuje vickrat folderName '$($duplicatesFolder -join ', ')'."
-            # _WarningAndExit "V customConfig.ps1 skriptu promenna `$config definuje vickrat folderName '$($duplicatesFolder -join ', ')'. Budte si 100% jisti, ze nedojde ke konfliktu kvuli prekryvajicim nastavenim.`n`nPokracovat?"
+            _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig definuje vickrat folderName '$($duplicatesFolder -join ', ')'."
+            # _WarningAndExit "V customConfig.ps1 skriptu promenna `$customConfig definuje vickrat folderName '$($duplicatesFolder -join ', ')'. Budte si 100% jisti, ze nedojde ke konfliktu kvuli prekryvajicim nastavenim.`n`nPokracovat?"
         }
     }
 

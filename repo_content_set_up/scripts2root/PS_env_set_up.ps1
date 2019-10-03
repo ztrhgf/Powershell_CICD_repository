@@ -354,7 +354,7 @@ if (Test-Path $profileSrc -ea SilentlyContinue) {
 
 <#
 Custom adresar v repozitari obsahuje slozky, ktere se maji kopirovat JEN NA VYBRANE stroje.
-To na jake stroje se budou kopirovat, je receno v promenne $config, ktera je definovana v customConfig.ps1!
+To na jake stroje se budou kopirovat, je receno v promenne $customConfig, ktera je definovana v customConfig.ps1!
 Data se na klientech kopiruji do C:\Windows\Scripts\
 
 V kazdem adresari (folderName) se na klientovi automaticky navic vytvori Log adresar s modify pravy (pro customDestinationNTFS nebo Auth users), aby skripty mohly logovat sve vystupy.
@@ -362,18 +362,18 @@ Log adresar se ignoruje pri porovnavani obsahu remote repo vs lokalni kopie a pr
 !!! pokud spoustene skripty generuji nejake soubory, at je ukladaji do tohoto Log adresare, jinak dojde pri kazde synchronizaci s remote repo ke smazani teto slozky (porovnavam velikosti adresaru v repo a lokalu)
 #>
 
-$customConfig = Join-Path $repoSrc "Custom\customConfig.ps1"
+$customConfigScript = Join-Path $repoSrc "Custom\customConfig.ps1"
 
-if (!(Test-Path $customConfig -ErrorAction SilentlyContinue)) {
+if (!(Test-Path $customConfigScript -ErrorAction SilentlyContinue)) {
     Import-Module Scripts -Function Send-Email
-    Send-Email -subject "Sync of PS scripts: Custom" -body "Hi,`non $env:COMPUTERNAME script $($MyInvocation.ScriptName) detected missing config file $customConfig. Event if you do not want to copy any Custom folders to any server, create empty $customConfig."
+    Send-Email -subject "Sync of PS scripts: Custom" -body "Hi,`non $env:COMPUTERNAME script $($MyInvocation.ScriptName) detected missing config file $customConfigScript. Event if you do not want to copy any Custom folders to any server, create empty $customConfigScript."
     throw "Missing Custom config file"
 }
 
-# nactu customConfig.ps1 skript respektive $config promennou v nem definovanou
+# nactu customConfig.ps1 skript respektive $customConfig promennou v nem definovanou
 # nastaveni Custom sekce schvalne definuji v samostatnem souboru kvuli lepsi prehlednosti a editovatelnosti
-"dot sourcuji customConfig.ps1 (abych zpristupnil `$config promennou)"
-. $customConfig
+"dot sourcuji customConfig.ps1 (abych zpristupnil `$customConfig promennou)"
+. $customConfigScript
 
 # zdrojova slozka custom dat
 $customSrcFolder = Join-Path $repoSrc "Custom"
@@ -387,7 +387,7 @@ $thisPCCustFolder = @()
 # jmena Custom slozek, ktere se maji nakopirovat do systemoveho Modules adresare
 $thisPCCustToModules = @()
 
-$config | ForEach-Object {
+$customConfig | ForEach-Object {
     if ($hostname -in $_.computerName) {
         $thisPCCustom += $_
 
@@ -465,7 +465,7 @@ if ($thisPCCustom) {
             #TODO toto nelze pouzit pro gMSA ucty, upravit
             # if (!(Get-WmiObject -Class win32_userAccount -Filter "name=`'$customNTFSWithoutDomain`'")) {
             #     Import-Module Scripts -Function Send-Email
-            #     Send-Email -subject "Sync of PS scripts: Missing account" -body "Hi,`non $env:COMPUTERNAME it is not possible to grant NTFS permission to $folderDstPath to account $customNTFS. Is `$config configuration correct?`nSynchronization of $folderSrcPath will not work until you solve this problem."
+            #     Send-Email -subject "Sync of PS scripts: Missing account" -body "Hi,`non $env:COMPUTERNAME it is not possible to grant NTFS permission to $folderDstPath to account $customNTFS. Is `$customConfig configuration correct?`nSynchronization of $folderSrcPath will not work until you solve this problem."
             #     throw "Non existing account $customNTFS"
             # }
         }
@@ -571,7 +571,7 @@ if ($thisPCCustom) {
 if (Test-Path $moduleDstFolder -ea SilentlyContinue) {
     # dohledam soubory/slozky, ktere jsem v minulosti nakopiroval do lokalnich Modules
     # pozn.: poznam je dle NTFS opravneni (pokud by se nenastavovalo, bude potreba zvolit jinou metodu detekce!)
-    $repoModuleInDestination = Get-ChildItem $moduleDstFolder -Directory | Get-Acl | Where-Object { $_.accessToString -like "*$readUser*" } | Select-Object -exp PSChildName
+    $repoModuleInDestination = Get-ChildItem $moduleDstFolder -Directory | Get-Acl | Where-Object { $_.accessToString -like "*$readUser*" } | Select-Object -ExpandProperty PSChildName
     if ($repoModuleInDestination) {
         $sourceModuleName = @((Get-ChildItem $moduleSrcFolder -Directory).Name)
 

@@ -497,7 +497,7 @@ function _updateRepo {
 
 
         # omezeni NTFS prav
-        # aby mely pristup pouze stroje, ktere maji dany obsah stahnout dle $config atributu computerName
+        # aby mely pristup pouze stroje, ktere maji dany obsah stahnout dle $customConfig atributu computerName
         # slozky, ktere nemaji definovan computerName budou mit vychozi nastaveni
         # pozn. nastavuji pokazde, protoze pokud by v customConfig byly nejake cilove stroje definovany clenstvim v AD skupine ci OU, tak nemam sanci to jinak poznat
 
@@ -505,8 +505,8 @@ function _updateRepo {
             $folder = $folder.FullName
             $folderName = Split-Path $folder -Leaf
 
-            # pozn.: $config jsem dostal dot sourcingem customConfig.ps1 skriptu
-            $configData = $config | ? { $_.folderName -eq $folderName }
+            # pozn.: $customConfig jsem dostal dot sourcingem customConfig.ps1 skriptu
+            $configData = $customConfig | ? { $_.folderName -eq $folderName }
             if ($configData -and ($configData.computerName -or $configData.customSourceNTFS)) {
                 # pro danou slozku je definovano, kam se ma kopirovat
                 # omezim nalezite pristup
@@ -1164,15 +1164,15 @@ try {
     #
     # zmeny nakopiruji do DFS repo
     try {
-        # nactu $config
+        # nactu $customConfig
         $customSource = Join-Path $PS_repo "custom"
-        $customConfig = Join-Path $customSource "customConfig.ps1"
+        $customConfigScript = Join-Path $customSource "customConfig.ps1"
 
-        if (!(Test-Path $customConfig -ea SilentlyContinue)) {
-            Write-Warning "$customConfig neexistuje, to je na 99,99% problem!"
+        if (!(Test-Path $customConfigScript -ea SilentlyContinue)) {
+            Write-Warning "$customConfigScript neexistuje, to je na 99,99% problem!"
         } else {
-            # nactu customConfig.ps1 skript respektive $config promennou v nem definovanou
-            . $customConfig
+            # nactu customConfig.ps1 skript respektive $customConfig promennou v nem definovanou
+            . $customConfigScript
         }
 
         _updateRepo -source $PS_repo -destination $destination -force
@@ -1184,7 +1184,7 @@ try {
     # nakopiruji do sdilenych slozek Custom data, ktera maji definovano customShareDestination
     # pozn.: nejde o synchronizaci DFS repozitare, ale jinde nedavalo smysl
     "synchronizace Custom dat, jejichz cilem je sdilena slozka"
-    $folderToUnc = $config | ? { $_.customShareDestination }
+    $folderToUnc = $customConfig | ? { $_.customShareDestination }
 
     foreach ($configData in $folderToUnc) {
         $folderName = $configData.folderName
@@ -1201,7 +1201,7 @@ try {
             continue
         }
 
-        # kontrola, ze existuje zdrojova slozka (to ze je v $config neznamena, ze realne existuje)
+        # kontrola, ze existuje zdrojova slozka (to ze je v $customConfig neznamena, ze realne existuje)
         if (!(Test-Path $folderSource -ea SilentlyContinue)) {
             Write-Warning "$folderSource neexistuje, preskakuji"
             continue

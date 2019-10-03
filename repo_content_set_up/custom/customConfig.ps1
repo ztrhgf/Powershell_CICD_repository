@@ -1,11 +1,11 @@
 <#
 Zde se definuje, co se ma dit s obsahem slozky Custom.
-Tzn na jake stroje, do jakeho umisteni a s jakymi pravy (vse definovano v $config viz nize) se ma obsah kopirovat.
+Tzn na jake stroje, do jakeho umisteni a s jakymi pravy (vse definovano v $customConfig viz nize) se ma obsah kopirovat.
 Standardne se obsah kopiruje do C:\Windows\Scripts a dochazi automaticky k mazani toho, co tam jiz byt nema1.
 Tento skript se dot sourcuje v PS_env_set_up.ps1 a nesmi proto obsahovat nic krome promenne config.ps1!
 
-Jak ma vypadat $config a co muze obsahovat: 
-$config je pole objektu, kde kazdy objekt reprezentuje jednu slozku v Custom adresari.
+Jak ma vypadat $customConfig a co muze obsahovat: 
+$customConfig je pole objektu, kde kazdy objekt reprezentuje jednu slozku v Custom adresari.
 Objekt pak obsahuje nasledujici klice:
 
     - folderName
@@ -70,7 +70,7 @@ Objekt pak obsahuje nasledujici klice:
 
 PRIKLADY:
 
-$config = @(
+$customConfig = @(
     [PSCustomObject]@{
         folderName   = "slozkaX"
         computerName = "APP-1", $servers_app
@@ -107,7 +107,7 @@ Log adresar se ignoruje pri porovnavani obsahu remote repo vs lokalni kopie a pr
 !!! pokud spoustene skripty generuji nejake soubory, at je ukladaji do tohoto Log adresare, jinak dojde pri kazde synchronizaci s remote repo k jejich smazani (protoze robocopy mirror).
 #>
 
-$config = @(
+$customConfig = @(
     [PSCustomObject]@{
         folderName   = "Repo_sync"
         computerName = $RepoSyncServer
