@@ -16,10 +16,11 @@ In case you found any bug or have improvement suggestion, please contact me at z
   - automation is not applicable to code writing and making commits :)
   - after successful commit, content is automatically:
   pushed to GIT repository >> pulled to local server and processed >> distributed to DFS share >> and from it, downloaded to clients in your Active Directory
-- possibility to synchronize chosen content to just specified computers
+- possibility to synchronize chosen content to just specific computers
   - to specific folder
   - with specific NTFS permissions
 - easy to use (fully managed from Visual Studio Code editor)
+- GIT knowledge not needed
 - idiot-proof
   - warn about modification of functions and variables used in other scripts in repository etc
 - customizable (everything is written in Powershell)
