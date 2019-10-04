@@ -23,15 +23,22 @@ In case you found any bug or have improvement suggestion, please contact me at z
 - idiot-proof
   - warn about modification of functions and variables used in other scripts in repository etc
 - customizable (everything is written in Powershell)
+- automatic script signing
 - ...
   
 
 # Changelog
 
 ## [Unreleased]
-- support defining multiple object with same folderName key in $config
-- support "\\" in folderName key in $config
-- automatic script signing
+- support defining multiple object with same folderName key in $customConfig
+- support nesting of folders in Custom folder
+
+
+
+## [2.0.4] - 2019-10-4
+### Added
+- possibility to automatically sign Powershell code
+  - just set up and uncomment definition of $signingCert variable in repo_sync.ps1 
 
 
 ## [2.0.3] - 2019-10-3
