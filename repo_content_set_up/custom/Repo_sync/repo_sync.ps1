@@ -34,6 +34,7 @@ $destination = "TODONAHRADIT" # sitova cesta k DFS repozitari (napr.: \\mojedome
 # skupina ktera ma pravo editovat obsah DFS repozitare (i lokalni kopie)
 [string] $writeUser = "repo_writer"
 
+#TODONAHRADIT nastavte a odkomentujte radek s definici $signingCert pokud chcete, aby se vam automaticky danym certifikatem podepisovaly vase skripty
 # certificate which will be used to sign ps1, psm1, psd1 and ps1xml files
 # USE ONLY IF YOU KNOW, WHAT ARE YOU DOING
 # tutorial how to create self signed certificate http://woshub.com/how-to-sign-powershell-script-with-a-code-signing-certificate/
