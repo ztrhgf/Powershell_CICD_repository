@@ -7,7 +7,7 @@
     - nakopiruje do cilove sdilene slozky (DFS) ze ktere si obsah stahuji klienti
 
     BACHA aby fungovalo, je potreba mit na repo_puller uctu nastaveno alternate credentials v GIT web rozhrani a ty mit vyexportovane do login.xml pod uctem, pod kterym pobezi tento skript
-
+    
     .NOTES
     Author: Ondřej Šebela - ztrhgf@seznam.cz
 #>
@@ -34,6 +34,15 @@ $destination = "TODONAHRADIT" # sitova cesta k DFS repozitari (napr.: \\mojedome
 # skupina ktera ma pravo editovat obsah DFS repozitare (i lokalni kopie)
 [string] $writeUser = "repo_writer"
 
+# certificate which will be used to sign ps1, psm1, psd1 and ps1xml files
+# USE ONLY IF YOU KNOW, WHAT ARE YOU DOING
+# tutorial how to create self signed certificate http://woshub.com/how-to-sign-powershell-script-with-a-code-signing-certificate/
+# set correct path to signing certificate and uncomment to start signing
+# $signingCert = Get-PfxCertificate -FilePath C:\Test\Mysign.pfx # something like this, if you want to use locally stored pfx certificate
+# $signingCert = (Get-ChildItem cert:\LocalMachine\my –CodeSigningCert)[0] # something like this, if certificate is in store
+if ($signingCert -and $signingCert.EnhancedKeyUsageList.friendlyName -ne "Code Signing") {
+    throw "Certificate $($signingCert.DnsNameList) is not valid Code Signing certificate"
+}
 
 #
 # pomocne funkce
@@ -348,6 +357,13 @@ function _updateRepo {
             $excludeFile2 = $excludeFile
         }
 
+        # podepsani skriptu
+        if ($signingCert) {
+            Get-ChildItem $modules -Recurse -Include *.ps1, *.psm1, *.psd1, *.ps1xml -File | % {
+                Set-AuthenticodeSignature -Certificate $signingCert -FilePath $_.FullName
+            }
+        }
+
         # zamerne kopiruji i nezmenene moduly, kdyby nekdo udelal zmenu primo v remote repo, abych ji prepsal
         # result bude obsahovat smazane soubory a pripadne chyby
         # pres Invoke-Expression musim delat, aby se spravne aplikoval obsah excludeFile
@@ -419,6 +435,11 @@ function _updateRepo {
                 Write-Output (" - " + ([System.IO.Path]::GetFileName("$item")))
 
                 try {
+                    # podepsani skriptu
+                    if ($signingCert -and $item -match "ps1$|psd1$|psm1$|ps1xml$") {
+                        Set-AuthenticodeSignature -Certificate $signingCert -FilePath $item
+                    }
+
                     Copy-Item $item $destination -Force -ErrorAction Stop
 
                     # u profile.ps1 omezim pristup (skrze NTFS prava) pouze na stroje, na nez se ma kopirovat
@@ -436,7 +457,7 @@ function _updateRepo {
                         }
                     }
                 } catch {
-                    Write-Error "Pri kopirovani root skriptu $item doslo k chybe:`n`n$_`n`nOpetovne spustte rozkopirovani prikazem:`n$($MyInvocation.Line) -force"
+                    Write-Error "Pri kopirovani root skriptu $item doslo k chybe:`n`n$_`n`nOpetovne spustte rozkopirovani prikazem:`n$($MyInvocation.Line)"
                 }
             }
         }
@@ -479,6 +500,13 @@ function _updateRepo {
         Write-Output "Kopiruji Custom data z $customSource do $customDestination`n"
         # pres Invoke-Expression musim delat, aby se spravne aplikoval obsah excludeFile
         # /S tzn nekopiruji prazdne adresare
+
+        # podepsani skriptu
+        if ($signingCert) {
+            Get-ChildItem $customSource -Recurse -Include *.ps1, *.psm1, *.psd1, *.ps1xml -File | % {
+                Set-AuthenticodeSignature -Certificate $signingCert -FilePath $_.FullName
+            }
+        }
 
         $result = Invoke-Expression "Robocopy.exe $customSource $customDestination /S /MIR /NFL /NDL /NJH /NJS /R:4 /W:5 /XF $excludeFile /XD $excludeFolder"
 
