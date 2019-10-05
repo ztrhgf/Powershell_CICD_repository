@@ -89,7 +89,7 @@ $customConfig = @(
     [PSCustomObject]@{
         folderName   = "slozkaZ"
         customShareDestination = "\\DFS\root\skripty"
-        customDestinationNTFS   = "APP-1$, APP-2$, domain admins"
+        customDestinationNTFS   = "APP-1$", "APP-2$", "domain admins"
     },
     [PSCustomObject]@{
         folderName   = "slozkaW"
