@@ -33,6 +33,7 @@ In case you found any bug or have improvement suggestion, please contact me at z
 ## [Unreleased]
 - support defining multiple object with same folderName key in $customConfig
 - support nesting of folders in Custom folder
+- support for Pester testing
 
 
 
