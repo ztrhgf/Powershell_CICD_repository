@@ -21,7 +21,7 @@ In case you found any bug or have improvement suggestion, please contact me at z
   - warn about modification of functions and variables used in other scripts in repository etc
 - customizable (everything is written in Powershell)
 - automatic script signing (if enabled)
-- ...
+- check [examples](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md) for getting better insight
   
 # How works distribution of content
 - after successful commit, content is automatically:
