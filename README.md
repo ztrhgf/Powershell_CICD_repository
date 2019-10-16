@@ -1,4 +1,4 @@
-# Powershell_CICD_repository
+# PowerShell based CI/CD like solution for (not just) PowerShell content management :) 
 Repository contains necessary files to create your own company CI/CD-like Powershell repository.
 
 To set this up please follow [instructions](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20-%20INITIAL%20CONFIGURATION.md)
@@ -8,19 +8,20 @@ In case you found any bug or have improvement suggestion, please contact me at z
 
   
 # Main features:
-- unified Powershell environment across whole company
+- **unified Powershell environment across whole company**
   - same modules, functions and variables across all Powershell sessions (local and remote)
   - one global Powershell profile to unify user experience
-- fully automated (code validation, formatting and distribution)
+- **fully automated (code validation, formatting and content distribution)**
   - using GIT hooks, Powershell scripts, GPO and VSC editor
   - automation is not applicable to code writing and making commits :)
-- possibility to distribute just chosen content to just specific computers (to specific folder (with specific NTFS permissions))
-- easy to use (fully managed from Visual Studio Code editor)
-- no paid tools needed
+- possibility to **distribute selected content to selected computers** (to specified folder (with specified NTFS permissions))
+- can be used to **distribute any kind of content** (ps1, exe, ini, whatever) across company
+- **easy to use** (fully managed from Visual Studio Code editor)
+- **no paid tools needed**
 - GIT knowledge not needed
-- idiot-proof
+- **idiot-proof**
   - warn about modification of functions and variables used in other scripts in repository etc
-- customizable (everything is written in Powershell)
+- **customizable** (everything is written in Powershell)
 - automatic script signing (if enabled)
 - check [examples](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md) for getting better insight
   
