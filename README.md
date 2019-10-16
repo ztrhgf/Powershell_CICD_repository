@@ -1,7 +1,7 @@
 # Powershell_CICD_repository
 Repository contains necessary files to create your own company CI/CD-like Powershell repository.
 
-Just clone (don't use "Download ZIP"!) this repository and follow step by step tutorial in attached Powerpoint presentation.
+To set this up please follow [instructions](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20-%20INITIAL%20CONFIGURATION.md)
 
 In case you found any bug or have improvement suggestion, please contact me at ztrhgf'at'seznam.cz.
 
