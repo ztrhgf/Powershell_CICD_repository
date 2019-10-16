@@ -1,25 +1,17 @@
-###########
-##### JAK ZACIT PRACOVAT S TIMTO REPO
-- nainstalujte si Visual Studio Code
-- nainstalujte si nejnovejsi GIT for Windows (pri instalaci zvolte vychozi hodnoty) HLAVNE komponentu "git credential manager"
-- naklonujte repozitar (v GIT BASH konzoli prikazem "git clone httpsurlvasehorepo")
-- nastavte repozitar viz nize!
+NECESSARY INITIAL CONFIGURATION:
 
-
-###########
-##### CO JE POTREBA PROVEST PO NAKLONOVANI TOHOTO REPOZITARE
-v rootu tohoto repozitare spustte v konzoli:
+- in root of this repository run in CMD:
 git config core.hooksPath ".\.githooks"
-- pro nastaveni git hooks (kvuli kontrole syntaxe, pushi comitu a kontrole auto-merge)
+	- to set up automation of GIT through git hooks
 
-git config --global user.name "mujlogin"
-git config --global user.email "mujlogin@somedomain.com"
-- pouzije se jako jmeno autora commitu
-- oboje musi byt nastaveno, aby se zobrazovaly mnou definovane GIT chyby a ne "Make sure you configure your user.name ..."
+git config --global user.name "myLogin"
 
-- pro nastaveni git username (pouzije se jako jmeno autora commitu)
+git config --global user.email "myLogin@somedomain.com"
 
-(v admin CMD otevrene v rootu repozitare!)
+
+
+- in root or this repository run in ADMIN CMD:
 mkdir %userprofile%\AppData\Roaming\Code\User\snippets
 mklink %userprofile%\AppData\Roaming\Code\User\snippets\powershell.json %cd%\powershell.json
-- aby vam ve VSC fungovalo doplnovani powershell snippetu
+	- to set up TAB completition of Powershell snippets in VSC
+	- (if you set this up for another account, use absolute path instead %userprofile%)
