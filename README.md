@@ -26,9 +26,8 @@ In case you found any bug or have improvement suggestion, please contact me at z
 # How works distribution of content
 - after successful commit, content is automatically:
   - pushed to GIT repository
-  - pulled to local server and processed
-  - distributed to DFS share
-  - and from it, downloaded to clients in your Active Directory
+  - pulled to local server, processed and distributed to DFS share
+  - from DFS share is content downloaded to clients in your Active Directory
   
 # How works code validation
 - after you commit your changes, pre-commit git hook initiate checks defined in pre-commit.ps1
