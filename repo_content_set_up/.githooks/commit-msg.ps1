@@ -1,5 +1,7 @@
-# skript kontroluje tvar commit message
-# pokud neodpovida tvaru "text: text", skonci chybou a ke commitu nedojde
+<#
+script automatically checks format of commit message
+in case format is not "text: text", ends with error and commit will be aborted
+#>
 
 param ($commitPath)
 
@@ -12,7 +14,7 @@ function _ErrorAndExit {
         Add-Type -AssemblyName System.Windows.Forms
     }
 
-    Write-Host $message
+    $message
     $null = [System.Windows.Forms.MessageBox]::Show($this, $message, 'ERROR', 'ok', 'Error')
     exit 1
 }
@@ -21,10 +23,10 @@ try {
     $commitMsg = Get-Content $commitPath -TotalCount 1
 
     if ($commitMsg -notmatch "[^:]+: [^:]+" -and $commitMsg -notmatch "Merge branch ") {
-        _ErrorAndExit "Nazev commitu neni ve tvaru: 'text: text'`n`nPresneji 'jmenoZmenenehoSouboru: co jsem v nem zmenil'`n napr.:`n'Get-ComputerInfo: pridan vypis diskovych chyb'`n`nPS:`nmisto jmenoZmenenehoSouboru muze byt jmeno modulu ci oblasti, ktere se zmena tyka"
+        _ErrorAndExit "Name of commit isn't in correct format: 'text: text'`n`nFor example:`n'Get-ComputerInfo: added force switch'"
     }
 } catch {
-    _ErrorAndExit "Doslo k chybe:`n$_"
+    _ErrorAndExit "There was an error:`n$_"
 }
 
-Write-Host "HOTOVO"
+"DONE"

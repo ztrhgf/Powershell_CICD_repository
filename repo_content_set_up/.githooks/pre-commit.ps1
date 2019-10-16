@@ -1,14 +1,14 @@
 ﻿<#
-skript se automaticky spousti pri vytvoreni commmitu
-zkontroluje:
-    jestli neni potreba provest git pull a upozorni
-    syntaxi, format, pojmenovani, dodrzovani best practices, absenci zavadnnych znaku ps1 souboru
-    kodovani textovych souboru
-    ze commit neobsahuje modul, ktery se zaroven automaticky generuje
-upozorni na:
-    mazane funkce, pokud jsou nekde pouzity
-    mazane/modifikovane promenne z Variables modulu, pokud jsou nekde pouzity
-    menene parametry funkci, pokud jsou nekde pouzity
+script is automatically run (thanks to git pre commit hook) when new commit is created
+check:
+    if git pull is needed
+    syntax, format, name convention, fulfill of best practices, problematic character
+    encoding of text files
+    etc
+notify user about:
+    deleted functions if used somewhere
+    deleted/modified variables from Variables module if used somewhere
+    modified function parameter if used somewhere
 #>
 
 $ErrorActionPreference = "stop"
@@ -138,7 +138,7 @@ try {
     } catch {
         $err = $_
         if ($err -match "is not recognized as the name of a cmdlet") {
-            _ErrorAndExit "Nepodarilo se zjistit aktualnost repozitare. Zrejme GIT neni nainstalovan. Chyba byla:`n$err"
+            _ErrorAndExit "Recency of repository can't be checked. Is GIT installed? Error was:`n$err"
         } else {
             _ErrorAndExit $err
         }
@@ -148,43 +148,45 @@ try {
     #
     # kontrola, ze repo obsahuje aktualni data
     # automaticky provest git pull v pre-commit nelze, protoze commit pak konci chybou fatal: cannot lock ref 'HEAD': is at cfd4a815a.. but expected 37936..
-    "- kontrola, ze repo obsahuje aktualni data"
+    "- check, that repository contains actual data"
     if ($repoStatus -match "Your branch is behind") {
-        _ErrorAndExit "Repozitar neobsahuje aktualni data. Stahnete je (git pull ci ikona sipek v VSC) a zkuste znovu."
+        _ErrorAndExit "Repository doesn't contain actual data. Pull them (git pull or sync icon in VSC) and try again."
     }
 
 
     #
     # kontrola, ze commitovany soubor neni zaroven zmodifikovany mimo staging area
     # dost se tim zjednodusuje prace s repo (kontroly, ziskavani predchozi verze souboru atp)
-    "- kontrola, ze commitovany soubor neni zaroven zmodifikovany mimo staging area"
+    "- check, that commited file isn't modified outside staging area"
     if ($modifiedNonstagedFile -and $filesToCommit) {
         $modifiedNonstagedFile | ForEach-Object {
-            if ($filesToCommit -contains $_) { _ErrorAndExit "Neni povoleno commitovat soubor ($_), ktery obsahuje dalsi nestagovane upravy.`nBud dalsi upravy pridejte do staging area nebo je zruste." }
+            if ($filesToCommit -contains $_) {
+                _ErrorAndExit "It is not allowed to commit file which contains another non staged modifications ($_).`nAdd this file to staging area (+ icon) or remove these modifications."
+            }
         }
     }
 
 
     #
     # chyba, pokud commit maze dulezite soubory
-    "- chyba, pokud commit maze dulezite soubory"
+    "- exit if commit deletes important files"
     if ($commitedDeletedFile | Where-Object { $_ -match "custom/customConfig\.ps1" }) {
-        _ErrorAndExit "Mazete customConfig, ktery je nutny pro fungovani Custom sekce repozitare. To na 99,99% nechcete udelat!"
+        _ErrorAndExit "You are deleting customConfig, which is needed for Custom section to work. On 99,99% you don't want do this!"
     }
 
     if ($commitedDeletedFile | Where-Object { $_ -match "scripts2root/PS_env_set_up\.ps1" }) {
-        _ErrorAndExit "Mazete PS_env_set_up, ktery je nutny pro deploy obsahu na klienty. To na 99,99% nechcete udelat!"
+        _ErrorAndExit "You are deleting PS_env_set_up, which is needed for deploy of repository content to clients. On 99,99% you don't want do this!"
     }
 
     if ($commitedDeletedFile | Where-Object { $_ -match "modules/Variables/Variables\.psm1" }) {
-        _ErrorAndExit "Mazete modul Variables, to na 99,99% nechcete udelat!"
+        _ErrorAndExit "You are deleting module Variables, which contains important variables like RepoSyncServer, computerWithProfile etc. On 99,99% you don't want do this!"
     }
 
 
     #
     # kontrola, ze commit neobsahuje modul, ktery se zaroven generuje automaticky z scripts2module
     # do DFS by se nakopiroval pouze jeden z nich
-    "- kontrola, ze commit neobsahuje modul, ktery se zaroven generuje automaticky z scripts2module"
+    "- check that commit doesn't contain module which is in the same time generated from content of scripts2module"
     if ($module2commit = $filesToCommit -match "^modules/") {
         # ulozim pouze jmeno modulu
         $module2commit = ($module2commit -split "/")[1]
@@ -192,7 +194,7 @@ try {
         $generatedModule = Get-ChildItem "scripts2module" -Directory -Name
 
         if ($conflictedModule = $module2commit | Where-Object { $_ -in $generatedModule }) {
-            _ErrorAndExit "Neni mozne commitovat modul ($($conflictedModule -join ', ')), ktery se zaroven generuje z obsahu scripts2module."
+            _ErrorAndExit "It's not possible to commit module ($($conflictedModule -join ', ')), which is in the same time generated from content of scripts2module."
         }
     }
 
@@ -200,14 +202,14 @@ try {
     #
     # kontrola obsahu promenne $customConfig z customConfig.ps1
     # pozn.: zamerne nedotsourcuji customConfig.ps1 ale kontroluji pres AST, protoze pokud by plnil nejake promenne z AD, tak pri editaci na nedomenovem stroji, by hazelo chyby
-    "- kontrola obsahu promenne `$customConfig z customConfig.ps1"
+    "- check of content of variable `$customConfig in customConfig.ps1"
     if ($filesToCommitNoDEL | Where-Object { $_ -match "custom\\customConfig\.ps1" }) {
         $customConfigScript = Join-Path $rootFolder "Custom\customConfig.ps1"
         $AST = [System.Management.Automation.Language.Parser]::ParseFile($customConfigScript, [ref]$null, [ref]$null)
         $variables = $AST.FindAll( { $args[0] -is [System.Management.Automation.Language.VariableExpressionAst ] }, $true)
         $configVar = $variables | ? { $_.variablepath.userpath -eq "customConfig" }
         if (!$configVar) {
-            _ErrorAndExit "customConfig.ps1 nedefinuje promennou `$customConfig. To musi i kdyby mela byt prazdna."
+            _ErrorAndExit "customConfig.ps1 is not defining variable `$customConfig. It has to, at least empty one."
         }
 
         # prava strana promenne $customConfig resp. prvky pole
@@ -219,7 +221,7 @@ try {
 
         # kontrola, ze obsahuje pouze prvky typu psobject
         if ($configValueItem | ? { $_.type.typename.name -ne "PSCustomObject" }) {
-            _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig musi obsahovat pole PSCustomObject prvku, coz aktualne neplati."
+            _ErrorAndExit "In customConfig.ps1 script variable `$customConfig has to contain array of PSCustomObject items, which it hasn't."
         }
 
         # sem poznacim vsechny adresare, ktere $customConfig nastavuje
@@ -233,7 +235,7 @@ try {
             # kontrola, ze folderName neobsahuje zanorenou slozku
             #TODO dodelat podporu, aby to slo
             if ($folderName -match "\\") {
-                _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig definuje folderName '$folderName'. To ale nesmi obsahovat zanorene slozky tzn. '\'"
+                _ErrorAndExit "In customConfig.ps1 script variable `$customConfig defines folderName '$folderName'. FolderName can't contain \ in it's name."
             }
 
             $item.child.keyvaluepairs | % {
@@ -243,48 +245,48 @@ try {
                 # kontrola, ze jsou pouzity pouze validni klice
                 $validKey = "computerName", "folderName", "customDestinationNTFS", "customSourceNTFS", "customLocalDestination", "customShareDestination", "copyJustContent"
                 if ($key -and ($nonvalidKey = Compare-Object $key $validKey | ? { $_.sideIndicator -match "<=" } | Select-Object -ExpandProperty inputObject)) {
-                    _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig obsahuje nepovolene klice ($($nonvalidKey -join ', ')). Povolene jsou pouze $($validKey -join ', ')"
+                    _ErrorAndExit "In customConfig.ps1 script variable `$customConfig contains unnaproved keys: ($($nonvalidKey -join ', ')). Approved are only: $($validKey -join ', ')"
                 }
 
                 # kontrola, ze folderName, customLocalDestination, customShareDestination obsahuji max jednu hodnotu)
                 if ($key -in ("folderName", "customLocalDestination", "customShareDestination") -and ($value -split ',').count -ne 1) {
-                    _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig obsahuje v objektu pro nastaveni '$folderName' v klici $key vic hodnot. Hodnota klice je '$value'"
+                    _ErrorAndExit "In customConfig.ps1 script variable `$customConfig contains in object that defines '$folderName' in key $key more than one values. Values in key are: $($value -join ', ')"
                 }
 
                 # kontrola, ze customShareDestination je v UNC tvaru
                 if ($key -match "customShareDestination" -and $value -notmatch "^\\\\") {
-                    _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig neobsahuje v objektu pro nastaveni '$folderName' v klici $key UNC cestu. Hodnota klice je '$value'"
+                    _ErrorAndExit "In customConfig.ps1 script variable `$customConfig doesn't contain in object that defines '$folderName' in key $key UNC path. Value of key is '$value'"
                 }
 
                 # kontrola, ze customLocalDestination je lokalni cesta
                 # pozn.: regulak zamerne extremne jednoduchy aby slo pouzit promenne v ceste
                 if ($key -match "customLocalDestination" -and $value -match "^\\\\") {
-                    _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig neobsahuje v objektu pro nastaveni '$folderName' v klici $key lokalni cestu. Hodnota klice je '$value'"
+                    _ErrorAndExit "In customConfig.ps1 script variable `$customConfig doesn't contain in object that defines '$folderName' in key $key local path. Value of key is '$value'"
                 }
             }
 
             $keys = $item.child.keyvaluepairs.item1.value
             # objekt neobsahuje povinny klic folderName
             if ($keys -notcontains "folderName") {
-                _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig neobsahuje u nejakeho objektu povinny klic folderName."
+                _ErrorAndExit "In customConfig.ps1 script variable `$customConfig doesn't contain mandatory key folderName at some of objects."
             }
 
             $folderNames += $folderName
 
             # upozornim na potencialni problem s nastavenim share prav
             if ($keys -contains "computerName" -and $keys -contains "customSourceNTFS") {
-                _WarningAndExit "V customConfig.ps1 skriptu promenna `$customConfig obsahuje v objektu pro nastaveni '$folderName' jak computerName, tak customSourceNTFS. To je bezpecne pouze pokud customSourceNTFS obsahuje vsechny stroje z computerName (plus neco navic).`n`nSkutecne pokracovat v commitu?"
+                _WarningAndExit "In customConfig.ps1 script variable `$customConfig contains in object that defines '$folderName' computerName and also customSourceNTFS. This is safe only in case, when customSourceNTFS contains all computers from computerName (and more).`n`nAre you sure you want to continue in commit?"
             }
 
             # kontrola, ze neni pouzita nepodporovana kombinace klicu
             if ($keys -contains "copyJustContent" -and $keys -contains "computerName" -and $keys -notcontains "customLocalDestination") {
-                _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig obsahuje v objektu pro nastaveni '$folderName' copyJustContent a computerName, ale ne customLocalDestination. Do vychozi slozky (Scripts) se vzdy kopiruji cele slozky."
+                _ErrorAndExit "In customConfig.ps1 script variable `$customConfig contains in object that defines '$folderName' copyJustContent and computerName, but no customLocalDestination. To destination folder (Scripts) are always copied whole folders."
             }
 
             # kontrola, ze neni pouzita nepodporovana kombinace klicu
             if ($keys -contains "copyJustContent" -and $keys -contains "customDestinationNTFS" -and ($keys -contains "customLocalDestination" -or $keys -contains "customShareDestination")) {
                 # kdyz se kopiruje do Scripts, tak se copyJustContent ignoruje tzn se custom prava pouziji
-                _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig obsahuje v objektu pro nastaveni '$folderName' customDestinationNTFS, ale to nelze, protoze je zaroven nastaveno copyJustContent a proto se prava nenastavuji."
+                _ErrorAndExit "In customConfig.ps1 script variable `$customConfig contains in object that defines '$folderName' customDestinationNTFS, but that's not possible, because copyJustContent is also used and therefore NTFS rights are not configuring."
             }
 
             # zkontroluji, ze folderName odpovida realne existujicimu adresari v Custom
@@ -297,12 +299,12 @@ try {
             $windowsFolderPath = $unixFolderPath -replace "/", "\"
             $folderInActualCommit = $filesToCommitNoDEL | Where-Object { $_ -cmatch [regex]::Escape($windowsFolderPath) }
             if (!$folderAlreadyInRepo -and !$folderInActualCommit) {
-                _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig obsahuje objekt pro nastaveni '$folderName', ale dany adresar neni v remote GIT repo\Custom ani v aktualnim commitu (nazev je case sensitive!). Zpusobilo by chybu na klientech."
+                _ErrorAndExit "In customConfig.ps1 script variable `$customConfig contains object that defines '$folderName', but given folder is neither in remote GIT repository\Custom nor in actual commit (name is case sensitive!). It would cause error on clients."
             }
         }
 
         if ($folderNames -notcontains "Repo_sync") {
-            _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig musi obsahovat PSCustomObject pro definici Repo_sync. To je potreba, aby fungovalo plneni MGM >> share."
+            _ErrorAndExit "In customConfig.ps1 script variable `$customConfig has to contain PSCustomObject that defines Repo_sync. It is necesarry for transfer data from MGM server to DFS share works."
         }
 
         # upozornim na slozky, ktere jsou definovane vickrat
@@ -313,8 +315,8 @@ try {
             #TODO dodelat podporu pro definovani jedne slozky vickrat
             # chyba pokud definuji computerName (prepsaly by se DFS permissn), leda ze bych do repo_sync dodelal merge tech prav ;)
             # chyba pokud definuji u jednoho computerName a druheho customSourceNTFS (prepsaly by se DFS permissn)
-            _ErrorAndExit "V customConfig.ps1 skriptu promenna `$customConfig definuje vickrat folderName '$($duplicatesFolder -join ', ')'."
-            # _WarningAndExit "V customConfig.ps1 skriptu promenna `$customConfig definuje vickrat folderName '$($duplicatesFolder -join ', ')'. Budte si 100% jisti, ze nedojde ke konfliktu kvuli prekryvajicim nastavenim.`n`nPokracovat?"
+            _ErrorAndExit "In customConfig.ps1 script variable `$customConfig defines folderName multiple times '$($duplicatesFolder -join ', ')'."
+            # _WarningAndExit "In customConfig.ps1 script variable `$customConfig definuje vickrat folderName '$($duplicatesFolder -join ', ')'. Budte si 100% jisti, ze nedojde ke konfliktu kvuli prekryvajicim nastavenim.`n`nPokracovat?"
         }
     }
 
@@ -323,14 +325,14 @@ try {
     #
     # kontrola obsahu promenne $modulesConfig z modulesConfig.ps1
     # pozn.: zamerne nedotsourcuji modulesConfig.ps1 ale kontroluji pres AST, protoze pokud by plnil nejake promenne z AD, tak pri editaci na nedomenovem stroji, by hazelo chyby
-    "- kontrola obsahu promenne `$modulesConfig z modulesConfig.ps1"
+    "- check content of variable `$modulesConfig in modulesConfig.ps1"
     if ($filesToCommitNoDEL | Where-Object { $_ -match "modules\\modulesConfig\.ps1" }) {
         $modulesConfigScript = Join-Path $rootFolder "modules\modulesConfig.ps1"
         $AST = [System.Management.Automation.Language.Parser]::ParseFile($modulesConfigScript, [ref]$null, [ref]$null)
         $variables = $AST.FindAll( { $args[0] -is [System.Management.Automation.Language.VariableExpressionAst ] }, $true)
         $configVar = $variables | ? { $_.variablepath.userpath -eq "modulesConfig" }
         if (!$configVar) {
-            _ErrorAndExit "modulesConfig.ps1 nedefinuje promennou `$modulesConfig. To musi i kdyby mela byt prazdna."
+            _ErrorAndExit "modulesConfig.ps1 doesn't define variable `$modulesConfig."
         }
 
         # prava strana promenne $modulesConfig resp. prvky pole
@@ -343,7 +345,7 @@ try {
         if ($configValueItem) {
             # kontrola, ze obsahuje pouze prvky typu psobject
             if ($configValueItem | ? { $_.type.typename.name -ne "PSCustomObject" }) {
-                _ErrorAndExit "V modulesConfig.ps1 skriptu promenna `$modulesConfig musi obsahovat pole PSCustomObject prvku, coz aktualne neplati."
+                _ErrorAndExit "In modulesConfig.ps1 script variable `$modulesConfig has to contain array of PSCustomObject items."
             }
 
             # sem poznacim vsechny adresare, ktere $modulesConfig nastavuje
@@ -356,7 +358,7 @@ try {
 
                 # kontrola, ze folderName neobsahuje zanorenou slozku
                 if ($folderName -match "\\") {
-                    _ErrorAndExit "V modulesConfig.ps1 skriptu promenna `$modulesConfig definuje folderName '$folderName'. To ale nesmi obsahovat zanorene slozky tzn. '\'"
+                    _ErrorAndExit "In modulesConfig.ps1 script variable `$modulesConfig key folderName '$folderName' contains '\', but that's not allowed."
                 }
 
                 $item.child.keyvaluepairs | % {
@@ -366,19 +368,19 @@ try {
                     # kontrola, ze jsou pouzity pouze validni klice
                     $validKey = "computerName", "folderName"
                     if ($key -and ($nonvalidKey = Compare-Object $key $validKey | ? { $_.sideIndicator -match "<=" } | Select-Object -ExpandProperty inputObject)) {
-                        _ErrorAndExit "V modulesConfig.ps1 skriptu promenna `$modulesConfig obsahuje nepovolene klice ($($nonvalidKey -join ', ')). Povolene jsou pouze $($validKey -join ', ')"
+                        _ErrorAndExit "In modulesConfig.ps1 script variable `$modulesConfig contains unnaproved keys ($($nonvalidKey -join ', ')). Approved are just: $($validKey -join ', ')"
                     }
 
                     # kontrola, ze folderName obsahuje max jednu hodnotu
                     if ($key -in ("folderName") -and ($value -split ',').count -ne 1) {
-                        _ErrorAndExit "V modulesConfig.ps1 skriptu promenna `$modulesConfig obsahuje v objektu pro nastaveni '$folderName' v klici $key vic hodnot. Hodnota klice je '$value'"
+                        _ErrorAndExit "In modulesConfig.ps1 script variable `$modulesConfig contains in object that defines '$folderName' in key $key more than one value. Value of key is $($value -join ', ')"
                     }
                 }
 
                 $keys = $item.child.keyvaluepairs.item1.value
                 # objekt neobsahuje povinny klic folderName
                 if ($keys -notcontains "folderName") {
-                    _ErrorAndExit "V modulesConfig.ps1 skriptu promenna `$modulesConfig neobsahuje u nejakeho objektu povinny klic folderName."
+                    _ErrorAndExit "In modulesConfig.ps1 script variable `$modulesConfig doesn't contain mandatory key folderName at some object."
                 }
 
                 $folderNames += $folderName
@@ -393,7 +395,7 @@ try {
                 $windowsFolderPath = $unixFolderPath -replace "/", "\"
                 $folderInActualCommit = $filesToCommitNoDEL | Where-Object { $_ -cmatch [regex]::Escape($windowsFolderPath) }
                 if (!$folderAlreadyInRepo -and !$folderInActualCommit) {
-                    _WarningAndExit "V modulesConfig.ps1 skriptu promenna `$modulesConfig obsahuje objekt pro nastaveni '$folderName', ale dany adresar neni v remote GIT repo\Modules ani v aktualnim commitu (nazev je case sensitive!).`n`nSkutecne pokracovat?"
+                    _WarningAndExit "In modulesConfig.ps1 script variable `$modulesConfig contains object that defines '$folderName', but given folder in neither in remote GIT repository\Modules nor in actual commit (name is case sensitive!).`n`nDo you really want to continue in commit?"
                 }
             }
 
@@ -402,17 +404,17 @@ try {
             $folderNames | % { $ht["$_"] += 1 }
             $duplicatesFolder = $ht.keys | ? { $ht["$_"] -gt 1 } | % { $_ }
             if ($duplicatesFolder) {
-                _ErrorAndExit "V modulesConfig.ps1 skriptu promenna `$modulesConfig definuje vickrat folderName '$($duplicatesFolder -join ', ')'."
+                _ErrorAndExit "In modulesConfig.ps1 script variable `$modulesConfig defines folderName multiple times '$($duplicatesFolder -join ', ')'."
             }
         } else {
-            "   - `$modulesConfig nic neobsahuje"  
+            "   - `$modulesConfig contains nothing"
         }
     }
 
 
     #
     # kontrola kodovani u textovych souboru urcenych ke commitu
-    "- kontrola kodovani ..."
+    "- check encoding ..."
     # textove soubory ke commitu
     $textFilesToCommit = $filesToCommitNoDEL | Where-Object { $_ -match '\.ps1$|\.psm1$|\.psd1$|\.txt$' }
     if ($textFilesToCommit) {
@@ -421,7 +423,7 @@ try {
         $textFilesToCommit | ForEach-Object {
             $fileEnc = (_GetFileEncoding $_).bodyName
             if ($fileEnc -notin "US-ASCII", "ASCII", "UTF-8" ) {
-                _WarningAndExit "Soubor $_ je kodovany v '$fileEnc', takze nebude fungovat git diff.`nIdealne jej ulozte s kodovanim UTF-8 with BOM, pripadne UTF-8.`n`nSkutecne pokracovat v commitu?"
+                _WarningAndExit "File $_ is encoded in '$fileEnc', so git diff wont work.`nIdeal is to save it using UTF-8 with BOM, or UTF-8.`n`nDo you really want to continue in commit?"
             }
         }
     }
@@ -429,13 +431,13 @@ try {
 
     #
     # kontroly ps1 a psm1 souboru
-    "- kontrola syntaxe, zavadnych znaku, FIXME, dodrzovani best practices, formatu, jmena, zmen v parametrech,..."
+    "- check syntax, problematic characters, FIXME, best practices, format, name , changes in function parameters,..."
     $psFilesToCommit = $filesToCommitNoDEL | Where-Object { $_ -match '\.ps1$|\.psm1$' }
     if ($psFilesToCommit) {
         try {
             $null = Get-Command Invoke-ScriptAnalyzer
         } catch {
-            _ErrorAndExit "Neni dostupny modul PSScriptAnalyzer (respektive prikaz Invoke-ScriptAnalyzer). Neni mozne zkontrolovat syntax ps1 skriptu."
+            _ErrorAndExit "Module PSScriptAnalyzer isn't available (respective command Invoke-ScriptAnalyzer). It's not possible to check syntax of ps1 scripts."
         }
 
         $ps1Error = @()
@@ -453,7 +455,7 @@ try {
             $problematicLine = (Get-Content $script) -match $regex
             if ($problematicLine) {
                 $problematicLine = $problematicLine.Trim()
-                _ErrorAndExit "Skript $([System.IO.Path]::GetFileName($script)) obsahuje problematicke znaky (en dash misto klasicke pomlcky?).`nNa radcich:`n`n$($problematicLine -join "`n`n")"
+                _ErrorAndExit "File $([System.IO.Path]::GetFileName($script)) contains problematic character (en dash instead of dash?).`nOn row:`n`n$($problematicLine -join "`n`n")"
             }
 
             #
@@ -469,7 +471,7 @@ try {
             #
             # upozorneni pokud skript obsahuje FIXME komentar (krizek udelan pres [char] aby nehlasilo samo sebe)
             if ($fixme = Get-Content $script | ? { $_ -match ("\s*" + [char]0x023 + "\s*" + "FIXME\b") }) {
-                _WarningAndExit "Soubor $script obsahuje FIXME:`n$($fixme.trim() -join "`n").`n`nSkutecne pokracovat v commitu?"
+                _WarningAndExit "File $script contains FIXME:`n$($fixme.trim() -join "`n").`n`nDo you really want to continue in commit?"
             }
 
             #
@@ -481,14 +483,14 @@ try {
                 #
                 # kontrola, ze existuje pouze end block
                 if ($ast.BeginBlock -or $ast.ProcessBlock) {
-                    _ErrorAndExit "Soubor $script neni ve spravnem tvaru. Musi obsahovat pouze definici jedne funkce (pripadne Set-Alias, komentar ci requires)!"
+                    _ErrorAndExit "File $script is not in correct format. It has to contain just definition of one function with the same name (plus Set-Alias, comments or requires)!"
                 }
 
                 #
                 # kontrola, ze neobsahuje kus kodu, ktery by se stejne pri generovani modulu zahodil (protoze tam nema co delat)
                 $ast.EndBlock.Statements | ForEach-Object {
                     if ($_.gettype().name -ne "FunctionDefinitionAst" -and !($_ -match "^\s*Set-Alias .+")) {
-                        _ErrorAndExit "Soubor $script neni ve spravnem tvaru. Musi obsahovat pouze definici jedne funkce (pripadne Set-Alias, komentar ci requires)!"
+                        _ErrorAndExit "File $script is not in correct format. It has to contain just definition of one function with the same name (plus Set-Alias, comments or requires)!"
                     }
                 }
 
@@ -505,7 +507,7 @@ try {
                 #
                 # kontrola, ze definuje pouze jednu funkci
                 if ($functionDefinition.count -ne 1) {
-                    _ErrorAndExit "Soubor $script bud neobsahuje zadnou funkci ci obsahuje vic nez jednu. To neni povoleno."
+                    _ErrorAndExit "File $script either doesn't contain any function definition or contain more than one."
                 }
 
                 #
@@ -513,7 +515,7 @@ try {
                 $fileName = [System.IO.Path]::GetFileNameWithoutExtension($script)
                 $functionName = $functionDefinition.name
                 if ($fileName -ne $functionName) {
-                    _ErrorAndExit "Soubor $script se musi jmenovat stejne, jako funkce v nem obsazena ($functionName)."
+                    _ErrorAndExit "File $script has to be named exactly the same as function that it defines ($functionName)."
                 }
 
                 #
@@ -525,7 +527,7 @@ try {
                 $scriptUnixPath = $script -replace ([regex]::Escape((Get-Location))) -replace "\\", "/" -replace "^/"
                 $lastCommitContent = _startProcess git "show HEAD:$scriptUnixPath"
                 if (!$lastCommitContent -or $lastCommitContent -match "^fatal: ") {
-                    Write-Warning "Nepovedlo se dohledat predchozi verzi $scriptUnixPath kvuli kontrole zmenenych parametru"
+                    Write-Warning "Previous version of $scriptUnixPath cannot be found (to check modified parameters)."
                 } else {
                     $AST = [System.Management.Automation.Language.Parser]::ParseInput(($lastCommitContent -join "`n"), [ref]$null, [ref]$null)
                     $prevParameter = $AST.FindAll( { $args[0] -is [System.Management.Automation.Language.ParamBlockAst] }, $true) | Where-Object { $_.parent.parent.name -eq $functionName }
@@ -543,7 +545,7 @@ try {
                         # git vraci s unix lomitky, zmenim na zpetna
                         $fileUsed = $fileUsed -replace "/", "\"
 
-                        _WarningAndExit "Funkce $functionName u niz jste zmenili vstupni parametry je pouzita v nasledujicich skriptech:`n$($fileUsed -join "`n")`n`nSkutecne pokracovat v commitu?"
+                        _WarningAndExit "Function $functionName which has changed parameters is used in following scripts:`n$($fileUsed -join "`n")`n`nDo you really want to continue in commit?"
                     }
                 }
             }
@@ -554,18 +556,18 @@ try {
             if (!($ps1Error | Where-Object { $_.ruleName -ne "PSAvoidUsingConvertToSecureStringWithPlainText" })) {
                 # ps1 v commitu obsahuji pouze chyby ohledne pouziti plaintext hesla
                 $ps1Error = $ps1Error | Select-Object -ExpandProperty ScriptName -Unique
-                _WarningAndExit "Nasledujici skripty pouzivaji ConvertTo-SecureString, coz neni bezpecne:`n$($ps1Error -join "`n")`n`nSkutecne pokracovat v commitu?"
+                _WarningAndExit "Following scripts are using ConvertTo-SecureString, which is unsafe:`n$($ps1Error -join "`n")`n`nDo you really want to continue in commit?"
             } else {
                 # ps1 v commitu obsahuji zavazne poruseni pravidel psani PS skriptu
                 $ps1Error = $ps1Error | Select-Object Scriptname, Line, Column, Message | Format-List | Out-String -Width 1200
-                _ErrorAndExit "Byly nalezeny nasledujici vazne prohresky proti psani PS skriptu:`n$ps1Error`n`nVyres a znovu comitni"
+                _ErrorAndExit "Following serious misdemeanors agains best practices were found:`n$ps1Error`n`nFix and commit again."
             }
         }
 
         if ($ps1CompatWarning) {
             # ps1 v commitu obsahuji nekompatibilni prikazy se zadanou verzi PS (dle nastaveni v .vscode\PSScriptAnalyzerSettings.psd1)
             $ps1CompatWarning = $ps1CompatWarning | Select-Object Scriptname, Line, Column, Message | Format-List | Out-String -Width 1200
-            _WarningAndExit "Byly nalezeny problemy s kompatibilitou vuci PS 3.0:`n$ps1CompatWarning`n`nSkutecne pokracovat v commitu?"
+            _WarningAndExit "Compatibility issues with PS 3.0 were found:`n$ps1CompatWarning`n`nDo you really want to continue in commit?"
         }
     } # konec kontrol ps1 a psm1 souboru
 
@@ -587,7 +589,7 @@ try {
                 # git vraci s unix lomitky, zmenim na zpetna
                 $fileFuncUsed = $fileFuncUsed -replace "/", "\"
 
-                _WarningAndExit "Mazana funkce $funcName je pouzita v nasledujicich skriptech:`n$($fileFuncUsed -join "`n")`n`nSkutecne pokracovat v commitu?"
+                _WarningAndExit "Deleted function $funcName is used in following scripts:`n$($fileFuncUsed -join "`n")`n`nDo you really want to continue in commit?"
             }
         }
         #TODO kontrola funkci v profile.ps1? viz AST sekce https://devblogs.microsoft.com/scripting/learn-how-it-pros-can-use-the-powershell-ast/
@@ -597,7 +599,7 @@ try {
     #
     # kontrola modulu Variables
     if ([string]$variablesModule = $filesToCommit -match "Variables\.psm1") {
-        Write-Host "- kontroly modulu Variables ..."
+        "- check module Variables ..."
 
         #
         # pomoci AST ziskam vsechny promenne definovane v commitovanem modulu Variables
@@ -626,7 +628,7 @@ try {
         # pomoci AST ziskam vsechny promenne definovane v predchozi verzi modulu Variables
         $lastCommitContent = _startProcess git "show HEAD:$variablesModuleUnixPath"
         if (!$lastCommitContent -or $lastCommitContent -match "^fatal: ") {
-            Write-Warning "Nepovedlo se dohledat predchozi verzi modulu Variables kvuli kontrole zmenenych promennych"
+            Write-Warning "Previous version of module Variables cannot be found (to check changed variables)."
         } else {
             $AST = [System.Management.Automation.Language.Parser]::ParseInput(($lastCommitContent -join "`n"), [ref]$null, [ref]$null)
             $prevVariables = $AST.FindAll( { $args[0] -is [System.Management.Automation.Language.VariableExpressionAst ] }, $true)
@@ -652,7 +654,7 @@ try {
         # kontrola, ze modul nedefinuje jednu promennou vickrat
         $duplicateVariable = $actVariables | Group-Object name | Where-Object { $_.count -gt 1 } | Select-Object -ExpandProperty name
         if ($duplicateVariable) {
-            _ErrorAndExit "V modulu Variables jsou nasledujici promenne definovany vic nez jednou: $($duplicateVariable -join ', ')`n`nVyres a znovu comitni"
+            _ErrorAndExit "In module Variables are following variables defined more than once: $($duplicateVariable -join ', ')`n`nFix and commit again."
         }
 
 
@@ -670,7 +672,7 @@ try {
                     # git vraci s unix lomitky, zmenim na zpetna
                     $fileUsed = $fileUsed -replace "/", "\"
 
-                    _WarningAndExit "Mazana promenna $varName je pouzita v nasledujicich skriptech:`n$($fileUsed -join "`n")`n`nSkutecne pokracovat v commitu?"
+                    _WarningAndExit "Deleted variable $varName is used in following scripts:`n$($fileUsed -join "`n")`n`nDo you really want to continue in commit?"
                 }
             }
         }
@@ -692,7 +694,7 @@ try {
                     # git vraci s unix lomitky, zmenim na zpetna
                     $fileUsed = $fileUsed -replace "/", "\"
 
-                    _WarningAndExit "Modifikovana promenna $varName je pouzita v nasledujicich skriptech:`n$($fileUsed -join "`n")`n`nSkutecne pokracovat v commitu?"
+                    _WarningAndExit "Modified variable $varName is used in following scripts:`n$($fileUsed -join "`n")`n`nDo you really want to continue in commit?"
                 }
             }
         }
@@ -704,7 +706,7 @@ try {
         $AST = [System.Management.Automation.Language.Parser]::ParseFile($variablesModule, [ref]$null, [ref]$null)
         $commands = $AST.FindAll( { $args[0] -is [System.Management.Automation.Language.CommandAst ] }, $true)
         if (!($commands.extent.text -match "Export-ModuleMember")) {
-            _ErrorAndExit "Modul Variables neexportuje zadne promenne skrze Export-ModuleMember.`n`nVyres a znovu comitni"
+            _ErrorAndExit "Module Variables doesn't export any variables using Export-ModuleMember.`n`nFix and commit again."
         }
     } # konec kontrol modulu Variables
 
@@ -714,18 +716,18 @@ try {
     # kontroly trvaji nekolik vterin, behem nichz mohl teoreticky nekdo jiny udelat push do repozitare
     $repoStatus = git.exe status -uno
     if ($repoStatus -match "Your branch is behind") {
-        _ErrorAndExit "Repozitar neobsahuje aktualni data. Stahnete je (git pull ci ikona sipek v VSC) a zkuste znovu."
+        _ErrorAndExit "Repository doesn't contain actual data. Pull them (git pull or sync icon in VSC) and try again."
     }
 } catch {
     $err = $_
     # vypisi i do git konzole kdyby se GUI okno s chybou nezobrazilo
-    Write-Host $err
+    $err
     if ($err -match "##_user_cancelled_##") {
         # uzivatelem iniciovane preruseni commitu
         exit 1
     } else {
-        _ErrorAndExit "Doslo k chybe:`n$err`n`nVyres a znovu comitni"
+        _ErrorAndExit "There was an error:`n$err`n`nFix and commit again."
     }
 }
 
-Write-Host "HOTOVO"
+"DONE"

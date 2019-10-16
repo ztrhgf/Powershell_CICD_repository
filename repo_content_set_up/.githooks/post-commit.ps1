@@ -1,4 +1,4 @@
-# skript provede push commitu do remote repozitare
+# script pushes commit to cloud repository
 
 $ErrorActionPreference = "stop"
 
@@ -9,7 +9,7 @@ function _ErrorAndExit {
         Add-Type -AssemblyName System.Windows.Forms
     }
 
-    Write-Host $message
+    $message
     $null = [System.Windows.Forms.MessageBox]::Show($this, $message, 'ERROR', 'ok', 'Error')
     exit 1
 }
@@ -45,11 +45,11 @@ try {
 
     #
     # pushnuti zmen do remote repozitare
-    Write-Host "- pushnu zmeny do repozitare"
+    "- push commit to cloud repository"
     $repoStatus = _startProcess git "push origin master"
     # kontrola, ze se push povedl
     if ($repoStatus -match "\[rejected\]") {
-        _ErrorAndExit "Pri pushnuti zmen do remote repozitare se vyskytla chyba:`n$repoStatus"
+        _ErrorAndExit "There was an error when trying to push commit to cloud repository:`n$repoStatus"
     }
 
     # poznacim aktualni commit (duvod viz post-merge.ps1)
@@ -57,8 +57,10 @@ try {
     # commit, ktery je aktualne posledni
     $actualLastCommit = git log -n 1 --pretty=format:"%H"
     $actualLastCommit | Out-File $lastCommitPath -Force
+
+    # rozkopirovani do DFS se deje ze spesl serveru, ktery udela pull pod servisnim uctem + zavola Update-Repo a tim dostane zmeny do DFS
 } catch {
-    _ErrorAndExit "Doslo k chybe:`n$_"
+    _ErrorAndExit "There ws an error:`n$_"
 }
 
-Write-Host "HOTOVO"
+"DONE"

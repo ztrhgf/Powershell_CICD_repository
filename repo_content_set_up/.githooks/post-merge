@@ -2,7 +2,7 @@
 echo "commit cancelled" # pri chybe zpracovani VSC automaticky vypise obsah prvniho echo, proto tento text i kdyz ve vypisu konzole bude mast
 echo "#####################"
 echo "###### POST-MERGE git hook"
-echo "###### Pokud v ramci pull doslo ke stazeni zmen v souborech, ktere zrovna edituji, upozornim na to"
+echo "###### Notify if pull automerges files, that are actually modified"
 exec powershell.exe -NoProfile -ExecutionPolicy Bypass -file ".\.githooks\post-merge.ps1"
 echo "#####################"
 exit

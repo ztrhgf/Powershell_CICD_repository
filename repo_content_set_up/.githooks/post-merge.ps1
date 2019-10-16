@@ -1,7 +1,9 @@
-# skript se automaticky spousti po provedeni git pull
-# upozorni na soubory, ktere mam aktualne rozdelane/modifikovane, a ktere byly zaroven modifikovany nejakym commitem
-# ktery byl stazen v ramci aktualne probehleho git pull == tzn doslo u nich k automerge
-# pozn.: je potreba kvuli pouziti VSC, pokud bych delal git pull v konzoli, tak tam se zmeny vypisi
+<#
+script is automatically launched (thank to git hook) after any git pull action
+notify user about files, that are currently modified and were automerged with changes downloaded when git pull occured
+
+It is needed because of VSC. If you make git pull in console, merged files would be outputed to console as well.
+#>
 
 $ErrorActionPreference = "stop"
 
@@ -12,7 +14,7 @@ function _ErrorAndExit {
         Add-Type -AssemblyName System.Windows.Forms
     }
 
-    Write-Host $message
+    $message
     $null = [System.Windows.Forms.MessageBox]::Show($this, $message, 'ERROR', 'ok', 'Error')
     exit 1
 }
@@ -32,10 +34,10 @@ try {
     # posledni commit, ktery se stahl pri predchozim git pull
     # do souboru musim znacit, protoze tento hook se spousti az po provedeni pull, tzn nevim jaky commit byl jako posledni pred provedenim pull :)
     $previousLastCommit = Get-Content $lastCommitPath -ea SilentlyContinue
-    Write-Host "prechodzi commit $previousLastCommit"
+    "previous commit $previousLastCommit"
     # commit, ktery je aktualne posledni (na ktery jsem se dostal po provedeni pull)
     $actualLastCommit = git log -n 1 --pretty=format:"%H"
-    Write-Host "aktualne pullnuty commit $actualLastCommit"
+    "now pulled commit $actualLastCommit"
     # poznacim jej, abych pri dalsim pull vedel, kde jsem skoncil
     $actualLastCommit | Out-File $lastCommitPath -Force
 
@@ -43,7 +45,7 @@ try {
         # jake soubory se zmenily od posledniho stazeni zmen, tzn. posledniho git pull
         $changedFileBetweenCommits = @(git diff --name-only $previousLastCommit $actualLastCommit)
         $prevCommitSubject = git log -1 $previousLastCommit --format="%s"
-        Write-Host "soubory zmenene od posledniho commitu (`"$prevCommitSubject`"):`n$($changedFileBetweenCommits -join "`n")"
+        "files changed since last commit (`"$prevCommitSubject`"):`n$($changedFileBetweenCommits -join "`n")"
 
         # jake mam aktualne rozdelane soubory
         # soubory ve staging area, tzn. urcene ke commitu
@@ -56,7 +58,7 @@ try {
         }
 
         $modifiedFile = $stagedFile + $modifiedNonstagedFile + $stashedFile
-        Write-Host "modifikovane soubory:`n$($modifiedFile -join "`n")"
+        "modified files:`n$($modifiedFile -join "`n")"
         # poznacim si soubory, ktere se stahly v ramci git pull a zaroven je mam rozdelane
         $possibleConflictingFile = @()
 
@@ -71,18 +73,18 @@ try {
         $possibleConflictingFile = $possibleConflictingFile | Select-Object -Unique
 
         if ($possibleConflictingFile) {
-            $message = "U nasledujicich souboru doslo k automergi zmen. Zkontrolujte, ze je ok.`n`n$($possibleConflictingFile -join "`n")`n`n`npozn.: zmeny probehly po commitu `"$prevCommitSubject`""
+            $message = "Following files were automerged with changes pulled from cloud repository. Check, that it is ok.`n`n$($possibleConflictingFile -join "`n")`n`n`nChanges happened after commit `"$prevCommitSubject`""
 
             if ( !([appdomain]::currentdomain.getassemblies().fullname -like "*System.Windows.Forms*")) {
                 Add-Type -AssemblyName System.Windows.Forms
             }
 
-            Write-Host $message
+            $message
             $null = [System.Windows.Forms.MessageBox]::Show($this, $message, 'ERROR', 'ok', 'Error')
         }
     }
 } catch {
-    _ErrorAndExit "Doslo k chybe:`n$_"
+    _ErrorAndExit "There was an error:`n$_"
 }
 
-Write-Host "HOTOVO"
+"DONE"
