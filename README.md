@@ -42,6 +42,10 @@ In case you found any bug or have improvement suggestion, please contact me at z
 - support for Pester testing
 
 
+## [2.0.5] - 2019-10-16
+### Changed
+- important comments and error messages changed to english
+
 
 ## [2.0.4] - 2019-10-4
 ### Added
