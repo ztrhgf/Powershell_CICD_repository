@@ -1,5 +1,5 @@
 # Powershell_CICD_repository
-Repository contains necessary files to create your own company CI/CD-like Powershell repository, which will provide unified Powershell environment across whole company.
+Repository contains necessary files to create your own company CI/CD-like Powershell repository.
 
 Just clone (don't use "Download ZIP"!) this repository and follow step by step tutorial in attached Powerpoint presentation.
 
@@ -14,19 +14,25 @@ In case you found any bug or have improvement suggestion, please contact me at z
 - fully automated (code validation, formatting and distribution)
   - using GIT hooks, Powershell scripts, GPO and VSC editor
   - automation is not applicable to code writing and making commits :)
-  - after successful commit, content is automatically:
-  pushed to GIT repository >> pulled to local server and processed >> distributed to DFS share >> and from it, downloaded to clients in your Active Directory
-- possibility to synchronize chosen content to just specific computers
-  - to specific folder
-  - with specific NTFS permissions
+- possibility to distribute just chosen content to just specific computers (to specific folder (with specific NTFS permissions))
 - easy to use (fully managed from Visual Studio Code editor)
 - GIT knowledge not needed
 - idiot-proof
   - warn about modification of functions and variables used in other scripts in repository etc
 - customizable (everything is written in Powershell)
-- automatic script signing
-- ...
+- automatic script signing (if enabled)
+- check [examples](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md) for getting better insight
   
+# How works distribution of content
+- after successful commit, content is automatically:
+  - pushed to GIT repository
+  - pulled to local server and processed
+  - distributed to DFS share
+  - and from it, downloaded to clients in your Active Directory
+  
+# How works code validation
+- after you commit your changes, pre-commit git hook initiate checks defined in pre-commit.ps1
+- onfly if all checks are passed, commit will be created and pushed
 
 # Changelog
 
