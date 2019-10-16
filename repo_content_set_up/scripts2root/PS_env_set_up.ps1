@@ -23,15 +23,16 @@
     Author: Ondřej Šebela - ztrhgf@seznam.cz
 #>
 
-#TODONAHRADIT upravte funkci Send-Email aby odpovidala vasemu prostredi, ci uplne zruste jeji pouziti
+#__TODO__ modify function Send-Email to suit your company environment or comment its usage here
 
 
 # pro lepsi debugging
 Start-Transcript -Path "$env:SystemRoot\temp\PS_env_set_up.log" -Force
 
 $ErrorActionPreference = 'stop'
-# cesta k DFS repozitari
-$repoSrc = "\\TODONAHRADIT" # cesta do centralniho (DFS) repo napr.: \\contoso\repository
+# UNC path to (DFS) repository ie \\someDomain\DFS\repository
+$repoSrc = "\\__TODO__"
+
 # skupina ktera ma pravo cist obsah DFS repozitare (i lokalni kopie)
 # zaroven pouzivam pro detekci, co jsem nakopiroval timto skriptem == NERUSIT (nebo adekvatne upravit cely skript)
 # PRI ZMENE ZMENIT I V SET-PERMISSIONS kde je hardcoded, aby i nadale fungovala spravne detekce

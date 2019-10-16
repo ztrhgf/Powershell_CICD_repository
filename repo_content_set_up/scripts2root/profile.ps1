@@ -69,7 +69,7 @@ $PSDefaultParameterValues = @{
 #
 
 # doplneni dynamicky ziskane hodnoty ve vybranych parametrech vybranych funkci stiskem TAB
-#TODONAHRADIT LDAP cesty dle OU ve vasi organizaci, jinak nebude fungovat
+#__TODO__ replace used LDAP:// paths according to your organization, otherwise TAB completition wont work
 
 $computerSB = {
     param ($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
@@ -87,7 +87,7 @@ Register-ArgumentCompleter -CommandName ((Get-Command -Module ActiveDirectory -N
 $serverSB = {
     param ($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
 
-    $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"LDAP://OU=Server,DC=kontoso,DC=com"), '(objectCategory=computer)', ('name', 'description'))
+    $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"LDAP://OU=Servers,DC=kontoso,DC=com"), '(objectCategory=computer)', ('name', 'description'))
     ($searcher.findall() | ? { $_.properties.name -match $wordToComplete -or $_.properties.description -match $wordToComplete }).properties.name
     $searcher.Dispose()
 }
@@ -98,7 +98,7 @@ Register-ArgumentCompleter -CommandName Invoke-MSTSC -ParameterName computerName
 $clientSB = {
     param ($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
 
-    $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"LDAP://OU=Client,DC=kontoso,DC=com"), '(objectCategory=computer)', ('name'))
+    $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"LDAP://OU=Clients,DC=kontoso,DC=com"), '(objectCategory=computer)', ('name'))
     ($searcher.findall()).properties.name | ? { $_ -match $wordToComplete }
     $searcher.Dispose()
 }

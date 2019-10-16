@@ -26,7 +26,7 @@ Import-Module Scripts -Function Send-Email -ErrorAction SilentlyContinue
 $lastSendEmail = Join-Path $logFolder "lastSendEmail"
 $treshold = 30
 
-$destination = "TODONAHRADIT" # sitova cesta k DFS repozitari (napr.: \\mojedomena\dfs\repository)
+$destination = "__TODO__" # UNC path to DFS repository (ie.: \\myDomain\dfs\repository)
 
 
 # skupina ktera ma pravo cist obsah DFS repozitare (i lokalni kopie)
@@ -34,7 +34,8 @@ $destination = "TODONAHRADIT" # sitova cesta k DFS repozitari (napr.: \\mojedome
 # skupina ktera ma pravo editovat obsah DFS repozitare (i lokalni kopie)
 [string] $writeUser = "repo_writer"
 
-#TODONAHRADIT nastavte a odkomentujte radek s definici $signingCert pokud chcete, aby se vam automaticky danym certifikatem podepisovaly vase skripty
+#__TODO__ configure and uncomment one of the rows that initialize variable $signingCert, if you want automatic code signing to happen (using specified certificate)
+
 # certificate which will be used to sign ps1, psm1, psd1 and ps1xml files
 # USE ONLY IF YOU KNOW, WHAT ARE YOU DOING
 # tutorial how to create self signed certificate http://woshub.com/how-to-sign-powershell-script-with-a-code-signing-certificate/
@@ -1177,12 +1178,12 @@ try {
     } else {
         # NEexistuje lokalni kopie repo
         # provedu git clone
-        #TODONAHRADIT do login.xml vyexportujte GIT credentials (alternate credentials), pripadne access token a (detaily viz https://docs.microsoft.com/cs-cz/azure/devops/repos/git/auth-overview?view=azure-devops) uctu, pod kterym budete stahovat obsah GIT repo (repo_puller). Navod viz slajdy
+        #__TODO__ to login.xml export GIT credentials (alternate credentials), or access token of repo_puller account (read only account which is used to clone your repository) (details here https://docs.microsoft.com/cs-cz/azure/devops/repos/git/auth-overview?view=azure-devops) how to export credentials here https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20-%20INITIAL%20CONFIGURATION.md
         $acc = Import-Clixml "$PSScriptRoot\login.xml"
         $l = $acc.UserName
         $p = $acc.GetNetworkCredential().Password
         try {
-            _startProcess git -argumentList "clone `"https://$l`:$p@TODONAHRADIT`" `"$PS_repo`"" # misto TODONAHRADIT dejteURL vaseho repo (neco jako: dev.azure.com/ztrhgf/WUG_show/_git/WUG_show). Vysledne URL pak bude vypadat cca takto https://altLogin:altHeslo@dev.azure.com/ztrhgf/WUG_show/_git/WUG_show)
+            _startProcess git -argumentList "clone `"https://$l`:$p@__TODO__`" `"$PS_repo`"" # instead __TODO__ use URL of your company repository (ie somethink like: dev.azure.com/ztrhgf/WUG_show/_git/WUG_show). Finished URL will be look like this: https://altLogin:altPassword@dev.azure.com/ztrhgf/WUG_show/_git/WUG_show)
         } catch {
             Remove-Item $PS_repo -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue
             _emailAndExit -body "Ahoj,`nnepovedlo se naklonovat git repo. Nezmenilo se heslo u servisniho uctu? Pripadne nagenerujte nove credentials do login.xml."
