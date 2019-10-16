@@ -1,18 +1,18 @@
 <#
     .SYNOPSIS
-    skript pro zpracovani a distribuci obsahu GIT repo z cloudoveho GIT repo do DFS lokace
-    funnguje tak, ze:
-    - lokalne klonuje obsah cloud GIT repo
-    - obsah zpracuje (vygeneruje moduly z scripts2module, rozkopiruje Custom obsah, ktery ma jit do sdilenych slozek,..)
-    - nakopiruje do cilove sdilene slozky (DFS) ze ktere si obsah stahuji klienti
+    script is inteded for processing of cloud repository content and distribution that content to DFS repository
+    how it works:
+    - pull/clone cloud repository locally
+    - process cloned content (generate PSM modules from scripts2module, copy Custom content to shares,..)
+    - copy processed content which is intended for clients to shared folder (DFS)
 
-    BACHA aby fungovalo, je potreba mit na repo_puller uctu nastaveno alternate credentials v GIT web rozhrani a ty mit vyexportovane do login.xml pod uctem, pod kterym pobezi tento skript
+    BEWARE, repo_puller account has to have alternate credentials created in cloud GIT repository and these credentials has to be exported to login.xml (under account which is used to run this script)
     
     .NOTES
     Author: Ondřej Šebela - ztrhgf@seznam.cz
 #>
 
-# pro lepsi debugging
+# for debugging purposes
 Start-Transcript -Path "$env:SystemRoot\temp\repo_sync.log" -Force
 
 $ErrorActionPreference = "stop"
@@ -27,7 +27,6 @@ $lastSendEmail = Join-Path $logFolder "lastSendEmail"
 $treshold = 30
 
 $destination = "__TODO__" # UNC path to DFS repository (ie.: \\myDomain\dfs\repository)
-
 
 # skupina ktera ma pravo cist obsah DFS repozitare (i lokalni kopie)
 [string] $readUser = "repo_reader"
@@ -90,7 +89,7 @@ function _updateRepo {
                 If (Test-Path $_) {
                     $true
                 } else {
-                    Throw "Zadejte cestu k lokalni kopii repozitare"
+                    Throw "Enter path to locally cloned repository"
                 }
             })]
         [string] $source
@@ -116,7 +115,7 @@ function _updateRepo {
     $moduleChanged = 0
 
     if (!$inDomain -or !(Test-Path $destination -ErrorAction SilentlyContinue)) {
-        throw "Cesta $destination neni dostupna"
+        throw "Path $destination is not available"
     }
 
     # import promennych
@@ -160,7 +159,7 @@ function _updateRepo {
         $err = $_
         if ($err -match "is not recognized as the name of a cmdlet") {
             Set-Location $location
-            throw "Nepodarilo se vykonat git prikaz. Zrejme GIT neni nainstalovan. Chyba byla:`n$err"
+            throw "git command failed. Is GIT installed? Error was:`n$err"
         } else {
             Set-Location $location
             throw "$err"
@@ -172,14 +171,14 @@ function _updateRepo {
     # kontrola, ze repo obsahuje aktualni data
     # tzn nejsem pozadu za remote repozitarem
     if ($repoStatus -match "Your branch is behind") {
-        throw "Repozitar neobsahuje aktualni data. Stahnete je prikazem 'git pull' (Sync ve VSC editoru) a spustte znovu"
+        throw "Repository doesn't contain actual data. Pull them using command 'git pull' (Sync in VSC editor) and run again"
     }
 
     # ulozim jestli pouzil force prepinac
     $isForced = ($PSBoundParameters.GetEnumerator() | ? { $_.key -eq "force" }).value.isPresent
 
     if (!$unpushedCommit -and $isForced -ne "True") {
-        Write-Warning "`nV repozitari neni zadny nepushnuty commit. Funkce rozkopiruje pouze zmeny z posledniho commitu.`nPokud chcete rozkopirovat vse, pouzijte -force`n`n"
+        Write-Warning "`nIn repository there is none unpushed commit. Function will copy just changes from last commit.`nIf you want to copy all, use -force switch`n`n"
     }
 
     # git prikazy vraci s unix lomitky, zmenim na zpetna
@@ -252,23 +251,23 @@ function _updateRepo {
     # kontrolu delam jen proto, abych neexportoval zbytecne modul, do nejz stejne modifikovane skripty nepridam
     # ! ma smysl kontrolovat pouze pokud commit dosud nebyl pushnut, jinak
     if ($commitedFile) {
-        Write-Verbose "Posledni commit obsahuje tyto soubory:`n$($commitedFile -join ', ')"
+        Write-Verbose "Last commit contains these files:`n$($commitedFile -join ', ')"
         $commitedFile2 = $commitedFile.Clone()
         $commitedFile2 | % {
             $file = $_
             $commitedFileMatch = [regex]::Escape($file) + "$"
             if ($unfinishedFile -match $commitedFileMatch -or $uncommitedDeletedFile -match $commitedFileMatch) {
-                Write-Warning "Soubor $file je v commitu, ale po jeho pridani do staging area doslo k dalsi modifikaci. Nerozkopiruji jej"
+                Write-Warning "File $file is in commit, but is also modified outside staging area. Skipping"
                 $commitedFile.remove($file)
             }
         }
     }
 
     if ($unfinishedFile) {
-        Write-Warning "Preskakuji tyto zmenene, ale necomitnute soubory:`n$($unfinishedFileAbsPath -join "`n")"
+        Write-Warning "Skipping these changed, but uncommited files:`n$($unfinishedFileAbsPath -join "`n")"
     }
     if ($uncommitedDeletedFile) {
-        Write-Verbose "Preskakuji tyto smazane, ale necomitnute soubory:`n$($uncommitedDeletedFile -join "`n")"
+        Write-Verbose "Skipping these deleted, but uncommited files:`n$($uncommitedDeletedFile -join "`n")"
     }
 
 
@@ -308,7 +307,7 @@ function _updateRepo {
 
         if ($commitedFile -match "^modules\\") {
             # doslo ke zmene v nejakem modulu, poznacim, ze se ma rozkopirovat
-            Write-Output "Doslo ke zmene v nejakem modulu, rozkopiruji"
+            Write-Output "Some modules changed, copying"
             ++$moduleChanged
         }
     }
@@ -328,12 +327,12 @@ function _updateRepo {
     if ($moduleChanged -or $configHash.Keys.count) {
         [Void][System.IO.Directory]::CreateDirectory("$destModule")
         if (!(Test-Path $destModule -ErrorAction SilentlyContinue)) {
-            throw "Cesta $destModule neni dostupna"
+            throw "Path $destModule isn't accessible"
         }
 
         ++$somethingChanged
 
-        Write-Output "Kopiruji moduly: $(((Get-ChildItem $modules).name) -join ', ') do $destModule`n"
+        Write-Output "Copy modules: $(((Get-ChildItem $modules).name) -join ', ') to $destModule`n"
 
         # z exclude docasne vyradim soubory z automaticky nagenerovanych modulu (z ps1 v scripts2module)
         # v exclude se mohou objevit proto, ze nebudou uvedeny v .gitignore >> jsou untracked
@@ -341,7 +340,7 @@ function _updateRepo {
             $reg = ""
 
             $configHash.Values | % {
-                Write-Verbose "Obsah $_ nepreskocim, jde o automaticky vyexportovany modul"
+                Write-Verbose "Don't skip content of $_, its automatically generated module"
                 $esc = [regex]::Escape($_)
                 if ($reg) {
                     $reg += "|$esc"
@@ -353,7 +352,7 @@ function _updateRepo {
             $excludeFile2 = $excludeFile | ? { $_ -notmatch $reg }
 
             if ($excludeFile.count -ne $excludeFile2.count) {
-                Write-Warning "Pri kopirovani modulu preskocim pouze: $($excludeFile2 -join ', ')"
+                Write-Warning "When copy modules skip just these: $($excludeFile2 -join ', ')"
             }
         } else {
             $excludeFile2 = $excludeFile
@@ -375,14 +374,14 @@ function _updateRepo {
         # vypisi smazane soubory
         $deleted = $result | ? { $_ -match [regex]::Escape("*EXTRA File") } | % { ($_ -split "\s+")[-1] }
         if ($deleted) {
-            Write-Output "Smazal jsem jiz nepotrebne soubory:`n$($deleted -join "`n")"
+            Write-Output "Deletion of unnecessary files:`n$($deleted -join "`n")"
         }
 
         # result by mel obsahovat pouze chybove vypisy
         # *EXTRA File\Dir jsou vypisy smazanych souboru\adresaru (/MIR)
         $result = $result | ? { $_ -notmatch [regex]::Escape("*EXTRA ") }
         if ($result) {
-            Write-Error "Pri kopirovani modulu $($_.name) se vyskytl nasledujici problem:`n`n$result`n`nPokud slo o chybu, opetovne spustte rozkopirovani prikazem:`n$($MyInvocation.Line) -force"
+            Write-Error "There was an error when copying module $($_.name):`n`n$result`n`nRun again command: $($MyInvocation.Line) -force"
         }
     }
 
@@ -392,10 +391,10 @@ function _updateRepo {
         $item = $_.FullName
         if (!(Get-ChildItem $item -Recurse -File)) {
             try {
-                Write-Verbose "Mazu prazdny adresar $item"
+                Write-Verbose "Deleting empty folder $item"
                 Remove-Item $item -Force -Recurse -Confirm:$false
             } catch {
-                Write-Error "Pri mazani $item doslo k chybe:`n`n$_`n`nOpetovne spustte rozkopirovani prikazem:`n$($MyInvocation.Line) -force"
+                Write-Error "There was an error when deleting $item`:`n`n$_`n`nRun again command: $($MyInvocation.Line) -force"
             }
         }
     }
@@ -408,7 +407,7 @@ function _updateRepo {
 
     if ($commitedFile -match "^scripts2root" -or $force) {
         # doslo ke zmene v adresari scripts2root, vykopiruji do remote repozitare
-        Write-Output "Kopiruji root skripty z $scripts2root do $destination`n"
+        Write-Output "Copying root files from $scripts2root to $destination`n"
 
         # if ($force) {
         # zkopiruji vsechny, ktere nejsou modifikovane
@@ -451,15 +450,15 @@ function _updateRepo {
                             # computer AD ucty maji $ za svym jmenem, pridam
                             [string[]] $readUserP = $computerWithProfile | % { $_ + "$" }
 
-                            "omezuji NTFS prava na $destProfile (pristup pouze pro: $($readUserP -join ', '))"
+                            "limiting NTFS rights on $destProfile (grant access just to: $($readUserP -join ', '))"
                             _setPermissions $destProfile -readUser $readUserP -writeUser $writeUser
                         } else {
-                            "nastavuji vychozi prava na $destProfile"
+                            "resetting NTFS rights on $destProfile"
                             _setPermissions $destProfile -resetACL
                         }
                     }
                 } catch {
-                    Write-Error "Pri kopirovani root skriptu $item doslo k chybe:`n`n$_`n`nOpetovne spustte rozkopirovani prikazem:`n$($MyInvocation.Line)"
+                    Write-Error "There was an error when copying root file $item`:`n`n$_`n`nRun again command: $($MyInvocation.Line) -force"
                 }
             }
         }
@@ -474,10 +473,10 @@ function _updateRepo {
             if ($GITrootFileName -notcontains $_.Name -and $uncommitedDeletedRootFileName -notcontains $_.Name) {
                 # soubor jiz regulerne neni v GIT repo == smazu jej
                 try {
-                    Write-Verbose "Mazu $($_.FullName)"
+                    Write-Verbose "Deleting $($_.FullName)"
                     Remove-Item $_.FullName -Force -Confirm:$false -ErrorAction Stop
                 } catch {
-                    Write-Error "Pri mazani $item doslo k chybe:`n`n$_`n`nOpetovne spustte rozkopirovani prikazem:`n$($MyInvocation.Line) -force"
+                    Write-Error "There was an error when deleting file $item`:`n`n$_`n`nRun again command: $($MyInvocation.Line) -force"
                 }
             }
         }
@@ -496,10 +495,10 @@ function _updateRepo {
         $customDestination = Join-Path $destination "custom"
 
         if (!(Test-Path $customSource -ErrorAction SilentlyContinue)) {
-            throw "Cesta $customSource neni dostupna"
+            throw "Path $customSource isn't accessible"
         }
 
-        Write-Output "Kopiruji Custom data z $customSource do $customDestination`n"
+        Write-Output "Copying Custom data from $customSource to $customDestination`n"
         # pres Invoke-Expression musim delat, aby se spravne aplikoval obsah excludeFile
         # /S tzn nekopiruji prazdne adresare
 
@@ -515,14 +514,14 @@ function _updateRepo {
         # vypisi smazane soubory
         $deleted = $result | ? { $_ -match [regex]::Escape("*EXTRA File") } | % { ($_ -split "\s+")[-1] }
         if ($deleted) {
-            Write-Verbose "Smazal jsem jiz nepotrebne soubory:`n$($deleted -join "`n")"
+            Write-Verbose "Unnecessary files was deleted:`n$($deleted -join "`n")"
         }
 
         # result by mel obsahovat pouze chybove vypisy
         # *EXTRA File\Dir jsou vypisy smazanych souboru\adresaru (/MIR)
         $result = $result | ? { $_ -notmatch [regex]::Escape("*EXTRA ") }
         if ($result) {
-            Write-Error "Pri kopirovani Custom sekce se vyskytl nasledujici problem:`n`n$result`n`nPokud slo o chybu, opetovne spustte rozkopirovani prikazem:`n$($MyInvocation.Line) -force"
+            Write-Error "There was an error when copying Custom section`:`n`n$result`n`nRun again command: $($MyInvocation.Line) -force"
         }
 
 
@@ -551,12 +550,12 @@ function _updateRepo {
                     $readUserC = $readUserC | % { $_ + "$" }
                 }
 
-                "omezuji NTFS prava na $folder (pristup pouze pro: $($readUserC -join ', '))"
+                "limiting NTFS rights on $folder (grant access just to: $($readUserC -join ', '))"
                 _setPermissions $folder -readUser $readUserC -writeUser $writeUser
             } else {
                 # pro danou slozku neni definovano, kam se ma kopirovat
                 # zresetuji prava na vychozi
-                "nastavuji vychozi prava na $folder"
+                "resetting NTFS rights on $folder"
                 _setPermissions $folder -resetACL
             }
         }
@@ -564,6 +563,7 @@ function _updateRepo {
 
         ++$somethingChanged
     } # konec sekce Custom
+
 
 
 
@@ -578,7 +578,7 @@ function _updateRepo {
     }
 
     if (!$somethingChanged) {
-        Write-Error "`nV $source nedoslo k zadne zmene == neni co rozkopirovat!`nPokud chcete vynutit rozkopirovani aktualniho obsahu, pouzijte:`n$($MyInvocation.Line) -force`n"
+        Write-Error "`nIn $source there was no change == there is nothing to copy!`nIf you wish to force copying of current content, use:`n$($MyInvocation.Line) -force`n"
     }
 }
 
@@ -630,7 +630,7 @@ function _exportScriptsToModule {
     )
 
     if (!(Get-Command Invoke-ScriptAnalyzer -ErrorAction SilentlyContinue) -and !$dontCheckSyntax) {
-        Write-Warning "Syntaxe se nezkontroluje, protoze neni dostupna funkce Invoke-ScriptAnalyzer (soucast modulu PSScriptAnalyzer)"
+        Write-Warning "Syntax won't be checked, because function Invoke-ScriptAnalyzer is not available (part of module PSScriptAnalyzer)"
     }
     function _generatePSModule {
         [CmdletBinding()]
@@ -647,7 +647,7 @@ function _exportScriptsToModule {
         )
 
         if (!(Test-Path $scriptFolder)) {
-            throw "Cesta $scriptFolder neexistuje"
+            throw "Path $scriptFolder is not accessible"
         }
 
         $modulePath = Join-Path $moduleFolder ((Split-Path $moduleFolder -Leaf) + ".psm1")
@@ -664,7 +664,7 @@ function _exportScriptsToModule {
             # untracked
             $unfinishedFile += @(git ls-files --others --exclude-standard --full-name)
         } catch {
-            throw "Zrejme neni nainstalovan GIT, nepodarilo se ziskat seznam zmenenych souboru v repozitari $scriptFolder"
+            throw "It seems GIT isn't installed. I was unable to get list of changed files in repository $scriptFolder"
         }
         Set-Location $location
 
@@ -702,11 +702,11 @@ function _exportScriptsToModule {
                 $file = $_
                 $lastCommitContent = _startProcess git "show HEAD:$file"
                 if (!$lastCommitContent -or $lastCommitContent -match "^fatal: ") {
-                    Write-Warning "Preskakuji zmeneny ale necomitnuty/untracked soubor: $file"
+                    Write-Warning "Skipping changed but uncommited/untracked file: $file"
                 } else {
                     $fName = [System.IO.Path]::GetFileNameWithoutExtension($file)
                     # upozornim, ze pouziji verzi z posledniho commitu, protoze aktualni je nejak upravena
-                    Write-Warning "$fName ma necommitnute zmeny. Pro vygenerovani modulu pouziji jeho verzi z posledniho commitu"
+                    Write-Warning "$fName has uncommited changed. For module generation I will user his version from previous commit"
                     # ulozim obsah souboru tak jak vypadal pri poslednim commitu
                     $lastCommitFileContent.$fName = $lastCommitContent
                     # z $unfinishedFile odeberu, protoze obsah souboru pridam, i kdyz z posledniho commitu
@@ -720,7 +720,7 @@ function _exportScriptsToModule {
             $unfinishedFileName = $unfinishedFile | % { [System.IO.Path]::GetFileName($_) }
 
             if ($includeUncommitedUntracked -and $unfinishedFileName) {
-                Write-Warning "Vyexportuji i tyto zmenene, ale necomitnute/untracked funkce: $($unfinishedFileName -join ', ')"
+                Write-Warning "Exporting changed but uncommited/untracked functions: $($unfinishedFileName -join ', ')"
                 $unfinishedFile = @()
             }
         }
@@ -737,7 +737,7 @@ function _exportScriptsToModule {
         }
 
         if (!$script2Export -and $lastCommitFileContent.Keys.Count -eq 0) {
-            Write-Warning "V $scriptFolder neni zadna vyhovujici funkce k exportu do $moduleFolder. Ukoncuji"
+            Write-Warning "In $scriptFolder there is none usable function to export to $moduleFolder. Exiting"
             return
         }
 
@@ -757,7 +757,7 @@ function _exportScriptsToModule {
             $script = $_
             $fName = [System.IO.Path]::GetFileNameWithoutExtension($script)
             if ($fName -match "\s+") {
-                throw "Soubor $script obsahuje v nazvu mezeru coz je nesmysl. Jmeno souboru musi odpovidat funkci v nem ulozene a funkce nemohou v nazvu obsahovat mezery"
+                throw "File $script contains space in name which is nonsense. Name of file has to be same to the name of functions it defines and functions can't contain space in it's names."
             }
             if (!$lastCommitFileContent.containsKey($fName)) {
                 # obsah skriptu (funkci) pridam pouze pokud jiz neni pridan, abych si neprepsal fce vytazene z posledniho commitu
@@ -767,7 +767,7 @@ function _exportScriptsToModule {
                 $ast = [System.Management.Automation.Language.Parser]::ParseFile("$script", [ref] $null, [ref] $null)
                 # mel by existovat pouze end block
                 if ($ast.BeginBlock -or $ast.ProcessBlock) {
-                    throw "Soubor $script neni ve spravnem tvaru. Musi obsahovat pouze definici jedne funkce (pripadne nastaveni aliasu pomoci Set-Alias, komentar ci requires)!"
+                    throw "File $script isn't in correct format. It has to contain just function definition (+ alias definition, comment or requires)!"
                 }
 
                 # ziskam definovane funkce (v rootu skriptu)
@@ -781,7 +781,7 @@ function _exportScriptsToModule {
                     }, $false)
 
                 if ($functionDefinition.count -ne 1) {
-                    throw "Soubor $script bud neobsahuje zadnou funkci ci obsahuje vic nez jednu. To neni povoleno."
+                    throw "File $script doesn't contain any function or contain's more than one."
                 }
 
                 #TODO pouzivat pro jmeno funkce jeji skutecne jmeno misto nazvu souboru?.
@@ -825,12 +825,12 @@ function _exportScriptsToModule {
 
                         # poznacim alias pro pozdejsi export z modulu
                         $alias2Export += $parts[$parPosition + 1]
-                        Write-Verbose "- exportuji alias: $($parts[$parPosition + 1])"
+                        Write-Verbose "- exporting alias: $($parts[$parPosition + 1])"
                     } else {
                         # alias nastaven pozicnim parametrem
                         # poznacim alias pro pozdejsi export z modulu
                         $alias2Export += $parts[1]
-                        Write-Verbose "- exportuji alias: $($parts[1])"
+                        Write-Verbose "- exporting alias: $($parts[1])"
                     }
                 }
 
@@ -844,7 +844,7 @@ function _exportScriptsToModule {
                 if ($innerAliasDefinition) {
                     $innerAliasDefinition | % {
                         $alias2Export += $_
-                        Write-Verbose "- exportuji inner alias: $_"
+                        Write-Verbose "- exporting 'inner' alias: $_"
                     }
                 }
 
@@ -859,7 +859,7 @@ function _exportScriptsToModule {
             $fName = $_.Key
             $content = $_.Value
 
-            Write-Verbose "- exportuji funkci: $fName"
+            Write-Verbose "- exporting function: $fName"
 
             $function2Export += $fName
 
@@ -873,11 +873,11 @@ function _exportScriptsToModule {
         # 300ms vs 15ms :)
 
         if (!$function2Export) {
-            throw "Neexistuji zadne funkce k exportu! Spatne zadana cesta??"
+            throw "There are none functions to export! Wrong path??"
         } else {
             if ($function2Export -match "#") {
                 Remove-Item $modulePath -recurse -force -confirm:$false
-                throw "Exportovane funkce obsahuji v nazvu nepovoleny znak #. Modul jsem smazal."
+                throw "Exported function contains unnaproved character # in it's name. Module was removed."
             }
 
             $function2Export = $function2Export | Select-Object -Unique | Sort-Object
@@ -888,7 +888,7 @@ function _exportScriptsToModule {
         if ($alias2Export) {
             if ($alias2Export -match "#") {
                 Remove-Item $modulePath -recurse -force -confirm:$false
-                throw "Exportovane aliasy obsahuji v nazvu nepovoleny znak #. Modul jsem smazal."
+                throw "Exported alias contains unnaproved character # in it's name. Module was removed."
             }
 
             $alias2Export = $alias2Export | Select-Object -Unique | Sort-Object
@@ -911,14 +911,14 @@ function _exportScriptsToModule {
             $param["includeUncommitedUntracked"] = $true
         }
 
-        Write-Output "Generuji modul $moduleFolder ze skriptu v $scriptFolder"
+        Write-Output "Denerating module $moduleFolder from scripts stored in $scriptFolder"
         _generatePSModule @param
 
         if (!$dontCheckSyntax -and (Get-Command Invoke-ScriptAnalyzer -ErrorAction SilentlyContinue)) {
             # zkontroluji syntax vytvoreneho modulu
             $syntaxError = Invoke-ScriptAnalyzer $moduleFolder -Severity Error
             if ($syntaxError) {
-                Write-Warning "V modulu $moduleFolder byly nalezeny tyto problemy:"
+                Write-Warning "In module $moduleFolder was found these problems:"
                 $syntaxError
             }
         }
@@ -931,10 +931,10 @@ function _emailAndExit {
     $body
 
     if ((Test-Path $lastSendEmail -ea SilentlyContinue) -and (Get-Item $lastSendEmail).LastWriteTime -gt [datetime]::Now.AddMinutes(-$treshold)) {
-        "posledni chybovy email byl poslan min nez pred $treshold minutami...jen ukoncim"
+        "last error email was sent less than $treshold minutes...just end"
         throw 1
     } else {
-        $body = $body + "`n`n`nPripadna dalsi chyba se posle nejdriv za $treshold minut"
+        $body = $body + "`n`n`nNext failure will be emailed at first after $treshold minutes"
         Send-Email -body $body
         New-Item $lastSendEmail -Force
         throw 1
@@ -1113,7 +1113,7 @@ function _setPermissions {
         try {
             $acl.AddAccessRule($ace)
         } catch {
-            Write-Warning "Pravo se nepodarilo nastavit. Existuje zadany ucet?"
+            Write-Warning "Setting of NTFS right wasn't successful. Does given user account exists?"
         }
     }
 
@@ -1122,7 +1122,7 @@ function _setPermissions {
         # Set-Acl nejde pouzit protoze bug https://stackoverflow.com/questions/31611103/setting-permissions-on-a-windows-fileshare
         (Get-Item $path).SetAccessControl($acl)
     } catch {
-        throw "nepodarilo se nastavit opravneni: $_"
+        throw "Setting of NTFS rights wasn't successful: $_"
     }
 }
 
@@ -1134,7 +1134,7 @@ try {
         $rFile = Join-Path $destination Get-Random
         $null = New-Item -Path ($rFile) -ItemType File -Force -Confirm:$false
     } catch {
-        _emailAndExit -body "Ahoj,`nskript nema pravo zapisu do $destination. Tzn zmeny v GIT repo se nemohou zpropagovat.`nJe ucet stroje $env:COMPUTERNAME ve skupine repo_writer?"
+        _emailAndExit -body "Hi,`nscript doesn't have right to write in $destination. Changes in GIT repository can't be propagated.`nIs computer account $env:COMPUTERNAME in group repo_writer?"
     }
     Remove-Item $rFile -Force -Confirm:$false
 
@@ -1143,7 +1143,7 @@ try {
     try {
         git --version
     } catch {
-        _emailAndExit -body "Ahoj,`ngit neni na $env:COMPUTERNAME nainstalovan. Tzn zmeny v GIT repo se nemohou zpropagovat do $destination.`nNainstalujte jej"
+        _emailAndExit -body "Hi,`nGIT isn't installed on $env:COMPUTERNAME. Changes in GIT repository can't be propagated to $destination.`nInstall it."
     }
 
     #
@@ -1173,7 +1173,7 @@ try {
         } catch {
             Set-Location ..
             Remove-Item $PS_repo -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue
-            _emailAndExit -body "Ahoj,`nnepovedlo se stahnout aktualni data z repo. Smazal jsem lokalni kopii a pri pristim behu udelam git clone.`nChyba byla:`n$_."
+            _emailAndExit -body "Hi,`nthere was an error when pulling changes from repository. Script deleted local copy of repository and will try git clone next time.`nError was:`n$_."
         }
     } else {
         # NEexistuje lokalni kopie repo
@@ -1186,7 +1186,7 @@ try {
             _startProcess git -argumentList "clone `"https://$l`:$p@__TODO__`" `"$PS_repo`"" # instead __TODO__ use URL of your company repository (ie somethink like: dev.azure.com/ztrhgf/WUG_show/_git/WUG_show). Finished URL will be look like this: https://altLogin:altPassword@dev.azure.com/ztrhgf/WUG_show/_git/WUG_show)
         } catch {
             Remove-Item $PS_repo -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue
-            _emailAndExit -body "Ahoj,`nnepovedlo se naklonovat git repo. Nezmenilo se heslo u servisniho uctu? Pripadne nagenerujte nove credentials do login.xml."
+            _emailAndExit -body "Hi,`nthere was an error when cloning repository. Wasn't the password of service account changed? Try generate new credentials to login.xml."
         }
     }
 
@@ -1199,7 +1199,7 @@ try {
         $customConfigScript = Join-Path $customSource "customConfig.ps1"
 
         if (!(Test-Path $customConfigScript -ea SilentlyContinue)) {
-            Write-Warning "$customConfigScript neexistuje, to je na 99,99% problem!"
+            Write-Warning "$customConfigScript is missing, it is problem for 99,99%!"
         } else {
             # nactu customConfig.ps1 skript respektive $customConfig promennou v nem definovanou
             . $customConfigScript
@@ -1207,13 +1207,13 @@ try {
 
         _updateRepo -source $PS_repo -destination $destination -force
     } catch {
-        _emailAndExit "Pri rozkopirovani zmen do DFS repo se vyskytla chyba:`n$_"
+        _emailAndExit "There was an error when copying changes to DFS repository:`n$_"
     }
 
     #
     # nakopiruji do sdilenych slozek Custom data, ktera maji definovano customShareDestination
     # pozn.: nejde o synchronizaci DFS repozitare, ale jinde nedavalo smysl
-    "synchronizace Custom dat, jejichz cilem je sdilena slozka"
+    "synchronization of Custom data, which are supposed to be in specified shared folder"
     $folderToUnc = $customConfig | ? { $_.customShareDestination }
 
     foreach ($configData in $folderToUnc) {
@@ -1223,37 +1223,37 @@ try {
         $customShareDestination = $configData.customShareDestination
         $folderSource = Join-Path $destination "Custom\$folderName"
 
-        "Slozka $folderName by se mela nakopirovat do $($configData.customShareDestination)"
+        "Folder $folderName should be copied to $($configData.customShareDestination)"
 
         # kontrola, ze jde o UNC cestu
         if ($customShareDestination -notmatch "^\\\\") {
-            Write-Warning "$customShareDestination neni UNC cesta, preskakuji"
+            Write-Warning "$customShareDestination isn't UNC path, skipping"
             continue
         }
 
         # kontrola, ze existuje zdrojova slozka (to ze je v $customConfig neznamena, ze realne existuje)
         if (!(Test-Path $folderSource -ea SilentlyContinue)) {
-            Write-Warning "$folderSource neexistuje, preskakuji"
+            Write-Warning "$folderSource doen't exist, skipping"
             continue
         }
 
         if ($copyJustContent) {
             $folderDestination = $customShareDestination
 
-            "nakopiruji do $folderDestination (v merge modu)"
+            "copying to $folderDestination (in merge mode)"
 
             $result = _copyFolder -source $folderSource -destination $folderDestination
         } else {
             $folderDestination = Join-Path $customShareDestination $folderName
             $customLogFolder = Join-Path $folderDestination "Log"
 
-            "nakopiruji do $folderDestination (v replace modu)"
+            "copying to $folderDestination (in replace mode)"
 
             $result = _copyFolder -source $folderSource -destination $folderDestination -excludeFolder $customLogFolder -mirror
 
             # vytvoreni zanoreneho Log adresare
             if (!(Test-Path $customLogFolder -ea SilentlyContinue)) {
-                "vytvorim Log adresar $customLogFolder"
+                "creation of Log folder $customLogFolder"
 
                 New-Item $customLogFolder -ItemType Directory -Force -Confirm:$false
             }
@@ -1261,16 +1261,16 @@ try {
 
         if ($result.failures) {
             # neskoncim s chybou, protoze se da cekat, ze pri dalsim pokusu uz to projde (ted muze napr bezet skript z teto slozky atp)
-            Write-Warning "Pri kopirovani $folderName se vyskytl problem`n$($result.errMsg)"
+            Write-Warning "There was an error when copy $folderName`n$($result.errMsg)"
         }
 
         # omezeni NTFS prav
         # pozn. nastavuji pokazde, protoze pokud by v customConfig bylo definovano dynamicky (clenstvim v AD skupine ci OU), tak nemam sanci to poznat
         if ($customNTFS -and !$copyJustContent) {
-            "nastavim READ pristup uctum v customDestinationNTFS na $folderDestination"
+            "set READ access to accounts in customDestinationNTFS to $folderDestination"
             _setPermissions $folderDestination -readUser $customNTFS -writeUser $writeUser
 
-            "nastavim FULLCONTROL pristup uctum v customDestinationNTFS na $customLogFolder"
+            "set FULL CONTROL access to accounts in customDestinationNTFS to $customLogFolder"
             _setPermissions $customLogFolder -readUser $customNTFS -writeUser $writeUser, $customNTFS
         } elseif (!$customNTFS -and !$copyJustContent) {
             # nemaji se nastavit zadna custom prava
@@ -1279,14 +1279,14 @@ try {
             # pozn.: detekuji tedy dle NTFS opravneni (pokud by se nenastavovalo, bude potreba zvolit jinou metodu detekce!)
             $folderhasCustomNTFS = Get-Acl -path $folderDestination | ? { $_.accessToString -like "*$readUser*" }
             if ($folderhasCustomNTFS) {
-                "adresar $folderDestination ma custom NTFS i kdyz je jiz nema mit, zresetuji NTFS prava"
+                "folder $folderDestination has some custom NTFS even it shouldn't have, resetting"
                 _setPermissions -path $folderDestination -resetACL
 
-                "zresetuji i na Log podadresari"
+                "resetting also on Log subfolder"
                 _setPermissions -path $customLogFolder -resetACL
             }
         }
     }
 } catch {
-    _emailAndExit -body "Ahoj,`npri synchronizaci GIT repo >> DFS repo se obevila chyba:`n$_"
+    _emailAndExit -body "Hi,`nthere was an error when synchronizing GIT repository to DFS repository share:`n$_"
 }
