@@ -25,16 +25,17 @@ In case you found any bug or have improvement suggestion, please contact me at z
 - automatic script signing (if enabled)
 - check [examples](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md) for getting better insight
   
-# How works distribution of content
+# How code validation works
+- after you commit your changes, pre-commit git hook initiate checks defined in pre-commit.ps1
+- only if all checks are passed, commit will be created
+
+# How distribution of content works
 - after successful commit, content is automatically:
   - pushed to GIT repository
   - pulled to local server, processed and distributed to DFS share
-  - from DFS share is content downloaded to clients in your Active Directory
+  - from DFS share the content is downloaded to clients in your Active Directory
   
-# How works code validation
-- after you commit your changes, pre-commit git hook initiate checks defined in pre-commit.ps1
-- onfly if all checks are passed, commit will be created and pushed
-
+  
 # Changelog
 
 ## [Unreleased]
