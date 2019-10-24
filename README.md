@@ -44,6 +44,11 @@ In case you found any bug or have improvement suggestion, please contact me at z
 - support for Pester testing
 
 
+## [2.0.7] - 2019-10-24
+### Bug fixes
+- fixed check for modules existence (now check also scripts2module path) in pre-commit
+
+
 ## [2.0.6] - 2019-10-24
 ### Bug fixes
 - fixed not working limiting access to Custom folder stored in DFS share when used variables (from module Variables) 
