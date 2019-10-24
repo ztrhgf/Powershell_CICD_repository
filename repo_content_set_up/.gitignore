@@ -21,14 +21,12 @@
 ehthumbs.db
 Thumbs.db
 
-# Moje #
+# MY #
 ########
-# co se nema ignorovat
+# what to not ignore
 !/custom/**
 !/modules/**
-# co se naopak ma ignorovat
-/modules/HelperFunctions/**
-/modules/Scripts/**
+# what to ignore
 *.csv
 *.log
 .githooks/lastCommit
