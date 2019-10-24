@@ -385,17 +385,28 @@ try {
 
                 $folderNames += $folderName
 
-                # zkontroluji, ze folderName odpovida realne existujicimu adresari v Modules
-                $unixFolderPath = 'modules/{0}' -f ($folderName -replace "\\", "/")
-                $folderAlreadyInRepo = _startProcess git "show `"HEAD:$unixFolderPath`""
-                if ($folderAlreadyInRepo -match "^fatal: ") {
-                    # hledany adresar v GITu neni
-                    $folderAlreadyInRepo = ""
+                # zkontroluji, ze folderName odpovida realne existujicimu adresari v modules ci scripts2module
+                # a to bud v aktualnim commitu nebo v GIT repo
+                $unixFolderPath = ('modules/{0}' -f ($folderName -replace "\\", "/")), ('scripts2module/{0}' -f ($folderName -replace "\\", "/"))
+                $folderAlreadyInRepo = ''
+                $folderInActualCommit = ''
+                $unixFolderPath | % {
+                    if (!$folderAlreadyInRepo) {
+                        $folderAlreadyInRepo = _startProcess git "show `"HEAD:$_`""
+                        if ($folderAlreadyInRepo -match "^fatal: ") {
+                            # hledany adresar v GITu neni
+                            $folderAlreadyInRepo = ''
+                        }
+                    }
+
+                    $windowsFolderPath = $_ -replace "/", "\"
+                    if (!$folderInActualCommit) {
+                        $folderInActualCommit = $filesToCommitNoDEL | Where-Object { $_ -cmatch [regex]::Escape($windowsFolderPath) }
+                    }
                 }
-                $windowsFolderPath = $unixFolderPath -replace "/", "\"
-                $folderInActualCommit = $filesToCommitNoDEL | Where-Object { $_ -cmatch [regex]::Escape($windowsFolderPath) }
+
                 if (!$folderAlreadyInRepo -and !$folderInActualCommit) {
-                    _WarningAndExit "In modulesConfig.ps1 script variable `$modulesConfig contains object that defines '$folderName', but given folder in neither in remote GIT repository\Modules nor in actual commit (name is case sensitive!).`n`nDo you really want to continue in commit?"
+                    _WarningAndExit "In modulesConfig.ps1 script variable `$modulesConfig contains object that defines '$folderName', but given folder is neither in GIT repository\Modules or repository\scripts2module nor in actual commit (name is case sensitive!).`n`nDo you really want to continue in commit?"
                 }
             }
 
