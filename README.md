@@ -44,6 +44,15 @@ In case you found any bug or have improvement suggestion, please contact me at z
 - support for Pester testing
 
 
+## [2.0.6] - 2019-10-24
+### Bug fixes
+- fixed not working limiting access to Custom folder stored in DFS share when used variables (from module Variables) 
+### Added
+- limiting access to modules stored in DFS share to just computers listed in $modulesConfig computerName key. No other machines can access them
+### Changed
+- better log output for repo_sync.ps1 script
+
+
 ## [2.0.5] - 2019-10-16
 ### Changed
 - important comments and error messages changed to english
@@ -84,7 +93,7 @@ In case you found any bug or have improvement suggestion, please contact me at z
 - Repo_sync newly works with most actual data (loads Variables module and customConfig.ps1 right from local cloned repo, prior to loading from DFS share, which could lead to problems in some situations)
 
 ### Added
-- Granting access to global Powershell profile (scripts2root\profile.ps1) stored in DFS to just computers listed in $computerWithProfilefolders. Non other machines can access it.
+- Granting access to global Powershell profile (scripts2root\profile.ps1) stored in DFS to just computers listed in $computerWithProfilefolders. No other machines can access it.
 - Possibility to copy Custom folder to any given local or shared path
 - Possibility to copy just content of Custom folder
 - Validation of $config variable stored in customConfig.ps1
