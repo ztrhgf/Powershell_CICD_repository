@@ -10,7 +10,7 @@
     
     .NOTES
     Author: Ondřej Šebela - ztrhgf@seznam.cz
-#>
+    #>
 
 # for debugging purposes
 Start-Transcript -Path "$env:SystemRoot\temp\repo_sync.log" -Force
@@ -117,18 +117,6 @@ function _updateRepo {
     if (!$inDomain -or !(Test-Path $destination -ErrorAction SilentlyContinue)) {
         throw "Path $destination is not available"
     }
-
-    # import promennych
-    # kvuli omezeni NTFS prav na slozkach v Custom a souboru profile.ps1
-    try {
-        # nejdriv zkusim naimportovat nejaktualnejsi verzi Variables modulu primo z lokalni kopie repozitare
-        Import-Module (Join-Path $modules "Variables") -ErrorAction Stop
-    } catch {
-        # pokud se nepodari, zkusim import ze systemoveho umisteni PS modulu
-        # chyby ignorujeme, protoze na fresh stroji, modul bude az po prvnim spusteni PS_env_set_up potazmo tohoto skriptu, ne driv :)
-        Import-Module Variables -ErrorAction "Continue"
-    }
-
 
 
     #
@@ -332,7 +320,7 @@ function _updateRepo {
 
         ++$somethingChanged
 
-        Write-Output "Copy modules: $(((Get-ChildItem $modules).name) -join ', ') to $destModule`n"
+        Write-Output "### Copying modules to $destModule"
 
         # z exclude docasne vyradim soubory z automaticky nagenerovanych modulu (z ps1 v scripts2module)
         # v exclude se mohou objevit proto, ze nebudou uvedeny v .gitignore >> jsou untracked
@@ -383,6 +371,35 @@ function _updateRepo {
         if ($result) {
             Write-Error "There was an error when copying module $($_.name):`n`n$result`n`nRun again command: $($MyInvocation.Line) -force"
         }
+
+        # omezeni NTFS prav
+        # aby mely pristup pouze stroje, ktere maji dany obsah stahnout dle atributu computerName v $modulesConfig
+        # slozky, ktere nemaji definovan computerName budou mit vychozi NTFS prava
+        # pozn. nastavuji pokazde, protoze pokud by v customConfig byly nejake cilove stroje definovany promennou, nemam sanci zjistit jestli se jeji obsah odminula nezmenil
+        "### Setting NTFS rights on modules"
+        foreach ($folder in (Get-ChildItem $destModule -Directory)) {
+            $folder = $folder.FullName
+            $folderName = Split-Path $folder -Leaf
+
+            # pozn.: $modulesConfig jsem dostal dot sourcingem modulesConfig.ps1 skriptu
+            $configData = $modulesConfig | ? { $_.folderName -eq $folderName }
+            if ($configData -and ($configData.computerName)) {
+                # pro danou slozku je definovano, kam se ma kopirovat
+                # omezim nalezite pristup
+
+                [string[]] $readUserC = $configData.computerName
+                # computer AD ucty maji $ za svym jmenem, pridam
+                $readUserC = $readUserC | % { $_ + "$" }
+
+                " - limiting NTFS rights on $folder (grant access just to: $($readUserC -join ', '))"
+                _setPermissions $folder -readUser $readUserC -writeUser $writeUser
+            } else {
+                # pro danou slozku neni definovano, kam se ma kopirovat
+                # zresetuji prava na vychozi
+                " - resetting NTFS rights on $folder"
+                _setPermissions $folder -resetACL
+            }
+        }
     }
 
     #
@@ -407,7 +424,7 @@ function _updateRepo {
 
     if ($commitedFile -match "^scripts2root" -or $force) {
         # doslo ke zmene v adresari scripts2root, vykopiruji do remote repozitare
-        Write-Output "Copying root files from $scripts2root to $destination`n"
+        Write-Output "### Copying root files from $scripts2root to $destination`n"
 
         # if ($force) {
         # zkopiruji vsechny, ktere nejsou modifikovane
@@ -450,10 +467,10 @@ function _updateRepo {
                             # computer AD ucty maji $ za svym jmenem, pridam
                             [string[]] $readUserP = $computerWithProfile | % { $_ + "$" }
 
-                            "limiting NTFS rights on $destProfile (grant access just to: $($readUserP -join ', '))"
+                            "  - limiting NTFS rights on $destProfile (grant access just to: $($readUserP -join ', '))"
                             _setPermissions $destProfile -readUser $readUserP -writeUser $writeUser
                         } else {
-                            "resetting NTFS rights on $destProfile"
+                            "  - resetting NTFS rights on $destProfile"
                             _setPermissions $destProfile -resetACL
                         }
                     }
@@ -498,7 +515,7 @@ function _updateRepo {
             throw "Path $customSource isn't accessible"
         }
 
-        Write-Output "Copying Custom data from $customSource to $customDestination`n"
+        Write-Output "### Copying Custom data from $customSource to $customDestination`n"
         # pres Invoke-Expression musim delat, aby se spravne aplikoval obsah excludeFile
         # /S tzn nekopiruji prazdne adresare
 
@@ -526,10 +543,10 @@ function _updateRepo {
 
 
         # omezeni NTFS prav
-        # aby mely pristup pouze stroje, ktere maji dany obsah stahnout dle $customConfig atributu computerName
-        # slozky, ktere nemaji definovan computerName budou mit vychozi nastaveni
-        # pozn. nastavuji pokazde, protoze pokud by v customConfig byly nejake cilove stroje definovany clenstvim v AD skupine ci OU, tak nemam sanci to jinak poznat
-
+        # aby mely pristup pouze stroje, ktere maji dany obsah stahnout dle atributu computerName v $customConfig
+        # slozky, ktere nemaji definovan computerName budou mit vychozi NTFS prava
+        # pozn. nastavuji pokazde, protoze pokud by v customConfig byly nejake cilove stroje definovany promennou, nemam sanci zjistit jestli se jeji obsah odminula nezmenil
+        "### Setting NTFS rights on Custom"
         foreach ($folder in (Get-ChildItem $customDestination -Directory)) {
             $folder = $folder.FullName
             $folderName = Split-Path $folder -Leaf
@@ -550,12 +567,12 @@ function _updateRepo {
                     $readUserC = $readUserC | % { $_ + "$" }
                 }
 
-                "limiting NTFS rights on $folder (grant access just to: $($readUserC -join ', '))"
+                " - limiting NTFS rights on $folder (grant access just to: $($readUserC -join ', '))"
                 _setPermissions $folder -readUser $readUserC -writeUser $writeUser
             } else {
                 # pro danou slozku neni definovano, kam se ma kopirovat
                 # zresetuji prava na vychozi
-                "resetting NTFS rights on $folder"
+                " - resetting NTFS rights on $folder"
                 _setPermissions $folder -resetACL
             }
         }
@@ -580,7 +597,7 @@ function _updateRepo {
     if (!$somethingChanged) {
         Write-Error "`nIn $source there was no change == there is nothing to copy!`nIf you wish to force copying of current content, use:`n$($MyInvocation.Line) -force`n"
     }
-}
+} # end of _updateRepo
 
 function _exportScriptsToModule {
     <#
@@ -898,6 +915,7 @@ function _exportScriptsToModule {
     } # konec funkce _generatePSModule
 
     # ze skriptu vygeneruji modul
+    "### Generating modules from corresponding scripts2module folder"
     $configHash.GetEnumerator() | % {
         $scriptFolder = $_.key
         $moduleFolder = $_.value
@@ -911,7 +929,7 @@ function _exportScriptsToModule {
             $param["includeUncommitedUntracked"] = $true
         }
 
-        Write-Output "Denerating module $moduleFolder from scripts stored in $scriptFolder"
+        Write-Output " - $moduleFolder"
         _generatePSModule @param
 
         if (!$dontCheckSyntax -and (Get-Command Invoke-ScriptAnalyzer -ErrorAction SilentlyContinue)) {
@@ -923,7 +941,7 @@ function _exportScriptsToModule {
             }
         }
     }
-}
+} # end of _exportScriptsToModule
 
 function _emailAndExit {
     param ($body)
@@ -939,7 +957,7 @@ function _emailAndExit {
         New-Item $lastSendEmail -Force
         throw 1
     }
-}
+} # end of _emailAndExit
 
 function _startProcess {
     <#
@@ -963,7 +981,7 @@ function _startProcess {
     $p.WaitForExit()
     $p.StandardOutput.ReadToEnd()
     $p.StandardError.ReadToEnd()
-}
+} # end of _startProcess
 
 Function _copyFolder {
     [cmdletbinding()]
@@ -1021,7 +1039,7 @@ Function _copyFolder {
             'ErrMsg'   = $errMsg
         }
     }
-}
+} # end of _copyFolder
 
 function _setPermissions {
     [cmdletbinding()]
@@ -1124,9 +1142,9 @@ function _setPermissions {
     } catch {
         throw "Setting of NTFS rights wasn't successful: $_"
     }
-}
+} # end of _setPermissions
 
-# zabalim vse do try catch, abych v pripade chyby mohl poslat email s upozornenim
+
 try {
     #
     # kontrola, ze mam pravo zapisu do DFS repo
@@ -1147,7 +1165,7 @@ try {
     }
 
     #
-    # stahnu aktualni obsah repo
+    # download current content of cloud GIT repository
     $PS_repo = Join-Path $logFolder PS_repo # do adresare Log ukladam protoze jeho obsah se ignoruje pri synchronizaci skrze PS_env_set_up tzn nezapocita se do velikosti tzn nedojde k replace daty z DFS repo
 
     if (Test-Path $PS_repo -ea SilentlyContinue) {
@@ -1192,6 +1210,22 @@ try {
 
 
     #
+    # importing variables
+    # to be able to limit NTFS rights on folders in Custom, Modules and profile.ps1 etc
+    # need to be done before dot sourcing customConfig.ps1 and modulesConfig.ps1
+    $repoModules = Join-Path $PS_repo "modules"
+    try {
+        # at first try to import Variables module pulled from cloud repo
+        Import-Module (Join-Path $repoModules "Variables") -ErrorAction Stop
+    } catch {
+        # if error, try to import Variables from system location
+        # errors are ignored, because on fresh machine, module will be presented right after first run of PS_env_set_up.ps1 not sooner :)
+        "importing Variables module from $((Join-Path $repoModules "Variables")) was unsuccessful"
+        Import-Module Variables -ErrorAction "Continue"
+    }
+
+
+    #
     # zmeny nakopiruji do DFS repo
     try {
         # nactu $customConfig
@@ -1205,15 +1239,29 @@ try {
             . $customConfigScript
         }
 
+
+        # nactu $modulesConfig
+        $modulesSource = Join-Path $PS_repo "modules"
+        $modulesConfigScript = Join-Path $modulesSource "modulesConfig.ps1"
+
+        if (!(Test-Path $modulesConfigScript -ea SilentlyContinue)) {
+            Write-Warning "$modulesConfigScript is missing"
+        } else {
+            # nactu $modulesConfig.ps1 skript respektive $modulesConfig promennou v nem definovanou
+            . $modulesConfigScript
+        }
+
+
         _updateRepo -source $PS_repo -destination $destination -force
     } catch {
         _emailAndExit "There was an error when copying changes to DFS repository:`n$_"
     }
 
+
     #
     # nakopiruji do sdilenych slozek Custom data, ktera maji definovano customShareDestination
     # pozn.: nejde o synchronizaci DFS repozitare, ale jinde nedavalo smysl
-    "synchronization of Custom data, which are supposed to be in specified shared folder"
+    "### Synchronization of Custom data, which are supposed to be in specified shared folder"
     $folderToUnc = $customConfig | ? { $_.customShareDestination }
 
     foreach ($configData in $folderToUnc) {
@@ -1223,7 +1271,7 @@ try {
         $customShareDestination = $configData.customShareDestination
         $folderSource = Join-Path $destination "Custom\$folderName"
 
-        "Folder $folderName should be copied to $($configData.customShareDestination)"
+        " - folder $folderName should be copied to $($configData.customShareDestination)"
 
         # kontrola, ze jde o UNC cestu
         if ($customShareDestination -notmatch "^\\\\") {
@@ -1240,20 +1288,20 @@ try {
         if ($copyJustContent) {
             $folderDestination = $customShareDestination
 
-            "copying to $folderDestination (in merge mode)"
+            " - copying to $folderDestination (in merge mode)"
 
             $result = _copyFolder -source $folderSource -destination $folderDestination
         } else {
             $folderDestination = Join-Path $customShareDestination $folderName
             $customLogFolder = Join-Path $folderDestination "Log"
 
-            "copying to $folderDestination (in replace mode)"
+            " - copying to $folderDestination (in replace mode)"
 
             $result = _copyFolder -source $folderSource -destination $folderDestination -excludeFolder $customLogFolder -mirror
 
             # vytvoreni zanoreneho Log adresare
             if (!(Test-Path $customLogFolder -ea SilentlyContinue)) {
-                "creation of Log folder $customLogFolder"
+                " - creation of Log folder $customLogFolder"
 
                 New-Item $customLogFolder -ItemType Directory -Force -Confirm:$false
             }
@@ -1265,12 +1313,12 @@ try {
         }
 
         # omezeni NTFS prav
-        # pozn. nastavuji pokazde, protoze pokud by v customConfig bylo definovano dynamicky (clenstvim v AD skupine ci OU), tak nemam sanci to poznat
+        # pozn. nastavuji pokazde, protoze pokud by v customConfig byly nejake cilove stroje definovany promennou, nemam sanci zjistit jestli se jeji obsha odminula nezmenil
         if ($customNTFS -and !$copyJustContent) {
-            "set READ access to accounts in customDestinationNTFS to $folderDestination"
+            " - set READ access to accounts in customDestinationNTFS to $folderDestination"
             _setPermissions $folderDestination -readUser $customNTFS -writeUser $writeUser
 
-            "set FULL CONTROL access to accounts in customDestinationNTFS to $customLogFolder"
+            " - set FULL CONTROL access to accounts in customDestinationNTFS to $customLogFolder"
             _setPermissions $customLogFolder -readUser $customNTFS -writeUser $writeUser, $customNTFS
         } elseif (!$customNTFS -and !$copyJustContent) {
             # nemaji se nastavit zadna custom prava
@@ -1279,10 +1327,10 @@ try {
             # pozn.: detekuji tedy dle NTFS opravneni (pokud by se nenastavovalo, bude potreba zvolit jinou metodu detekce!)
             $folderhasCustomNTFS = Get-Acl -path $folderDestination | ? { $_.accessToString -like "*$readUser*" }
             if ($folderhasCustomNTFS) {
-                "folder $folderDestination has some custom NTFS even it shouldn't have, resetting"
+                " - folder $folderDestination has some custom NTFS even it shouldn't have, resetting"
                 _setPermissions -path $folderDestination -resetACL
 
-                "resetting also on Log subfolder"
+                " - resetting also on Log subfolder"
                 _setPermissions -path $customLogFolder -resetACL
             }
         }
