@@ -39,6 +39,7 @@ In case you found any bug or have improvement suggestion, please contact me at z
 # Changelog
 
 ## [Unreleased]
+- automatic scheduled task creation from xml saved in Custom section
 - support defining multiple object with same folderName key in $customConfig
 - support nesting of folders in Custom folder
 - support for Pester testing
