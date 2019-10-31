@@ -45,6 +45,11 @@ In case you found any bug or have improvement suggestion, please contact me at z
 - support for Pester testing
 
 
+## [2.0.8] - 2019-10-31
+### Bug fixes
+- fixed bug in PS_env_set_up that caused error in synchronization on computers, that should obtain global PS profile
+
+
 ## [2.0.7] - 2019-10-24
 ### Bug fixes
 - fixed check for modules existence (now check also scripts2module path) in pre-commit
