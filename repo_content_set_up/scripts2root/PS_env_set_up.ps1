@@ -358,14 +358,14 @@ if (Test-Path $profileSrc -ea SilentlyContinue) {
             $destinationModified = (Get-Item $profileDst).LastWriteTime
             # doslo ke zmene, nahradim stary za novy
             if ($sourceModified -ne $destinationModified) {
-                "Copying global PS profile to {1}" -f $profileDstFolder
+                "Copying global PS profile to {0}" -f $profileDstFolder
                 Copy-Item $profileSrc $profileDstFolder -Force -Confirm:$false
                 "Setting NTFS rights to $profileDst"
                 Set-Permissions $profileDst -readUser $readUser -writeUser $writeUser
             }
         } else {
             # soubor v cili neexistuje, nakopiruji
-            "Copying global PS profile to {1}" -f $profileDstFolder
+            "Copying global PS profile to {0}" -f $profileDstFolder
             Copy-Item $profileSrc $profileDstFolder -Force -Confirm:$false
             "Setting NTFS rights to $profileDst"
             Set-Permissions $profileDst -readUser $readUser -writeUser $writeUser
