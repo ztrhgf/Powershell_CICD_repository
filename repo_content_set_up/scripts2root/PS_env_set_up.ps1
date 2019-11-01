@@ -601,9 +601,81 @@ if ($thisPCCustom) {
                 Set-Permissions -path $customLogFolder -resetACL
             }
         }
-    }
+
+        #
+        # vytvorim Scheduled tasky z XML definici
+        # pripadne zmodifikuji/smazu existujici
+        # tasky se pojmenuji dle nazvu XML, kvuli vetsi prehlednosti (budou teda vzdy v rootu sched. task manageru)
+        # autora zmenim na nazev tohoto skriptu, kvuli jejich snadne identifikaci
+
+        # seznam sched. tasku, ktere se maji na tomto stroji vytvaret
+        $scheduledTask = $_.scheduledTask
+
+        if ($scheduledTask) {
+            foreach ($taskName in $scheduledTask) {
+                $definitionPath = Join-Path $folderSrcPath "$taskName.xml"
+                # zkontroluji, ze existuje XML s konfiguraci pro dany task
+                if (!(Test-Path $definitionPath -ea SilentlyContinue)) {
+                    Import-Module Scripts -Function Send-Email
+                    Send-Email -subject "Sync of PS scripts: Custom" -body "Hi,`non $env:COMPUTERNAME script $($MyInvocation.ScriptName) detected missing XML definition $definitionPath for scheduled task $taskName."
+                    throw "Scheduled task $taskName is missing its xml definition $definitionPath"
+                }
+
+                [xml]$xmlDefinition = Get-Content $definitionPath
+                $runasAccountSID = $xmlDefinition.task.Principals.Principal.UserId
+                # kontrola, ze runas ucet lze pouzit na tomto stroji
+                try {
+                    $runasAccount = ((New-Object System.Security.Principal.SecurityIdentifier($runasAccountSID)).Translate([System.Security.Principal.NTAccount])).Value
+                } catch {
+                    Import-Module Scripts -Function Send-Email
+                    Send-Email -subject "Sync of PS scripts: Custom" -body "Hi,`non $env:COMPUTERNAME script $($MyInvocation.ScriptName) tried to create scheduled task $taskName, but runas account $runasAccountSID cannot be translated to account here."
+                    throw "Scheduled task $taskName is trying to use non-existent account $runasAccountSID"
+                }
+
+                #TODO?
+                # emailem upozornim, pokud vytvarim novy task:
+                # - ktery ma bezet pod gMSA uctem, ze je potreba povolit pro dany stroj
+                # - a Custom adresar obsahuje xml kredence (pravdepodobne jsou v ramci tasku pouzity), ze je potreba je znovu exportovat
+                # $taskExists = schtasks /tn "$taskName"
+                # if (!$taskExists) { }
+
+                # pred vytvorenim tasku, zmenim jmeno autora na nazev tohoto skriptu
+                $xmlDefinition.task.RegistrationInfo.Author = $MyInvocation.MyCommand.Name
+                $xmlDefinitionCustomized = "$env:TEMP\22630001418512454850000.xml"
+                $xmlDefinition.Save($xmlDefinitionCustomized)
+
+                schtasks /CREATE /XML "$xmlDefinitionCustomized" /TN "$taskName" /F
+
+                if (!$?) {
+                    Remove-Item $xmlDefinitionCustomized -Force -Confirm:$false
+                    throw "Unable to create scheduled task $taskName"
+                } else {
+                    Remove-Item $xmlDefinitionCustomized -Force -Confirm:$false
+                    # Created/modified scheduled task
+                }
+            }
+        } # konec zpracovani sched. tasku
+    } # konec zpracovani Custom objektu pro tento stroj
 } # konec nakopirovani pozadovanych Custom slozek
 
+
+#
+# smazani sched. tasku, ktere jsem v minulosti vytvoril v ramci Custom, ale jiz zde byt nemaji
+# hledam pouze v rootu, protoze je vytvarim pouze v rootu
+$taskInRoot = schtasks /QUERY /FO list | ? { $_ -match "^TaskName:\s+\\[^\\]+$" } | % { $_ -replace "^TaskName:\s+\\" }
+foreach ($taskName in $taskInRoot) {
+    if ($taskName -notin $scheduledTask) {
+        # pred smazanim overim, ze byl vytvoren timto skriptem
+        [xml]$xmlDefinitionExt = schtasks.exe /QUERY /XML /TN "$taskName"
+        if ($xmlDefinitionExt.task.RegistrationInfo.Author -eq $MyInvocation.MyCommand.Name) {
+            schtasks /DELETE /TN "$taskName" /F
+
+            if (!$?) {
+                throw "Unable to delete scheduled task $taskName"
+            }
+        }
+    }
+} # konec mazani nezadoucich sched. tasku
 
 
 #

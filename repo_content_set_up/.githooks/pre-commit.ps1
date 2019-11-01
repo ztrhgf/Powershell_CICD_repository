@@ -243,7 +243,7 @@ try {
                 $value = $_.item2.pipelineelements.extent.text -replace '"' -replace "'"
 
                 # kontrola, ze jsou pouzity pouze validni klice
-                $validKey = "computerName", "folderName", "customDestinationNTFS", "customSourceNTFS", "customLocalDestination", "customShareDestination", "copyJustContent"
+                $validKey = "computerName", "folderName", "customDestinationNTFS", "customSourceNTFS", "customLocalDestination", "customShareDestination", "copyJustContent", "scheduledTask"
                 if ($key -and ($nonvalidKey = Compare-Object $key $validKey | ? { $_.sideIndicator -match "<=" } | Select-Object -ExpandProperty inputObject)) {
                     _ErrorAndExit "In customConfig.ps1 script variable `$customConfig contains unnaproved keys: ($($nonvalidKey -join ', ')). Approved are only: $($validKey -join ', ')"
                 }
@@ -263,6 +263,38 @@ try {
                 if ($key -match "customLocalDestination" -and $value -match "^\\\\") {
                     _ErrorAndExit "In customConfig.ps1 script variable `$customConfig doesn't contain in object that defines '$folderName' in key $key local path. Value of key is '$value'"
                 }
+
+                # kontrola, ze k sched. taskum definovanym v scheduledTask klici existuji odpovidajici XML soubory s nastavenimi tasku (v rootu Custom adresare)
+                if ($key -match "scheduledTask" -and $value) {
+                    ($value -split ",").trim() | % {
+                        $taskName = $_
+
+                        $unixPath = 'custom/{0}/{1}.xml' -f ($folderName -replace "\\", "/"), $taskName
+                        $alreadyInRepo = _startProcess git "show `"HEAD:$unixPath`""
+                        if ($alreadyInRepo -match "^fatal: ") {
+                            # hledany XML v GITu neni
+                            $alreadyInRepo = ""
+                        }
+                        $windowsPath = $unixPath -replace "/", "\"
+                        $inActualCommit = $filesToCommitNoDEL | Where-Object { $_ -cmatch [regex]::Escape($windowsPath) }
+                        if (!$alreadyInRepo -and !$inActualCommit) {
+                            _ErrorAndExit "In customConfig.ps1 object that defines '$folderName' in key $key, defines scheduled task '$taskName', but associated config file $windowsPath is neither in remote GIT repository\Custom\$folderName nor in actual commit. It would cause error on clients."
+                        }
+
+                        # kontrola, ze XML skutecne obsahuje nastaveni scheduled tasku
+                        $XMLPath = Join-Path $rootFolder "Custom\$folderName\$taskName.xml"
+                        [xml]$xmlDefinition = Get-Content $XMLPath
+                        if (!$xmlDefinition.Task.RegistrationInfo.URI) {
+                            _ErrorAndExit "In customConfig.ps1 object that defines '$folderName' in key $key, defines scheduled task '$taskName', but associated config file $windowsPath doesn't contain valid data. It would cause error on clients."
+                        }
+
+                        # upozorneni pokud se jmeno XML lisi od sched. tasku, ktery definuje
+                        $taskNameInXML = $xmlDefinition.task.RegistrationInfo.URI -replace "^\\"
+                        if ($taskName -ne $taskNameInXML) {
+                            _WarningAndExit "In customConfig.ps1 object that defines '$folderName' in key $key, defines scheduled task '$taskName', but associated config file $windowsPath defines task '$taskNameInXML'. Beware, that this task will be created with name '$taskName'.`n`nAre you sure you want to continue in commit?"
+                        }
+                    }
+                }
             }
 
             $keys = $item.child.keyvaluepairs.item1.value
@@ -275,7 +307,7 @@ try {
 
             # upozornim na potencialni problem s nastavenim share prav
             if ($keys -contains "computerName" -and $keys -contains "customSourceNTFS") {
-                _WarningAndExit "In customConfig.ps1 script variable `$customConfig contains in object that defines '$folderName' computerName and also customSourceNTFS. This is safe only in case, when customSourceNTFS contains all computers from computerName (and more).`n`nAre you sure you want to continue in commit?"
+                _WarningAndExit "In customConfig.ps1 script variable `$customConfig contains in object that defines '$folderName' keys: computerName, customSourceNTFS at the same time. This is safe only in case, when customSourceNTFS contains all computers from computerName (and more).`n`nAre you sure you want to continue in commit?"
             }
 
             # kontrola, ze neni pouzita nepodporovana kombinace klicu
@@ -289,7 +321,7 @@ try {
                 _ErrorAndExit "In customConfig.ps1 script variable `$customConfig contains in object that defines '$folderName' customDestinationNTFS, but that's not possible, because copyJustContent is also used and therefore NTFS rights are not configuring."
             }
 
-            # zkontroluji, ze folderName odpovida realne existujicimu adresari v Custom
+            # kontrola, ze folderName odpovida realne existujicimu adresari v Custom
             $unixFolderPath = 'custom/{0}' -f ($folderName -replace "\\", "/") # folderName muze obsahovat i zanoreny adresar tzn modules\pokusny
             $folderAlreadyInRepo = _startProcess git "show `"HEAD:$unixFolderPath`""
             if ($folderAlreadyInRepo -match "^fatal: ") {

@@ -68,6 +68,18 @@ Objekt pak obsahuje nasledujici klice:
             - stare soubory nebudou mazany (nepouzije se robocopy mirror)
             - aplikuje se pouze pri nastaveni customLocalDestination ci customShareDestination
 
+    - scheduledTask
+        (nepovinny) klic
+        slouzi pro zadani nazvu XML souboru (bez koncovky) s definici scheduled tasku, ktery se ma na stroji automaticky vytvorit
+        pozn.:
+            - XML musi byt ulozeno v rootu Custom slozky
+                - XML s definici tasku ziskate klasicky exportem tasku v Task Scheduler konzoli
+            - vytvoreny task se bude jmenovat dle nazvu XML, at uz je v obsahu XML definovano cokoli
+            - task se vzdy vytvori v rootu Task Scheduler konzole
+            - jako autor se nastavi nazev sync skriptu (PS_env_set_up), kvuli dohledatelnosti a nasledne sprave
+            - pri zmene v definici, dojde k modifikaci tasku
+            - tasky, ktere jiz na klientovi byt nemaji budou smazany
+
 PRIKLADY:
 
 $customConfig = @(
@@ -99,6 +111,10 @@ $customConfig = @(
     [PSCustomObject]@{
         folderName   = "slozkaV"
         customSourceNTFS = "domain admins"
+    },
+    [PSCustomObject]@{
+        folderName   = "slozkaX"
+        scheduledTask = "monitorADAdmins"
     }
 )
 
