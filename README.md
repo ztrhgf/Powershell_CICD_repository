@@ -48,6 +48,7 @@ In case you found any bug or have improvement suggestion, please contact me at z
 ### Added
 - automatic scheduled task creation from xml saved in Custom section
   - so now you can automatically distribute as scripts as scheduled task itself (that should run them). No GPO preferences needed
+  - check [examples](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md) for getting better insight
 
 
 ## [2.0.8] - 2019-10-31
