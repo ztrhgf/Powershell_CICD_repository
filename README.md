@@ -23,6 +23,7 @@ In case you found any bug or have improvement suggestion, please contact me at z
   - warn about modification of functions and variables used in other scripts in repository etc
 - **customizable** (everything is written in Powershell)
 - automatic script signing (if enabled)
+- possibility to auto create scheduled task from XML definition
 - check [examples](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md) for getting better insight
   
 # How code validation works
@@ -46,7 +47,7 @@ In case you found any bug or have improvement suggestion, please contact me at z
 
 ## [2.0.9] - 2019-11-01
 ### Added
-- automatic scheduled task creation from xml saved in Custom section
+- automatic scheduled task creation from xml saved in Custom section (modification and deletion if not needed anymore)
   - so now you can automatically distribute as scripts as scheduled task itself (that should run them). No GPO preferences needed
   - check [examples](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md) for getting better insight
 
