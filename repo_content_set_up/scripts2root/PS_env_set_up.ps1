@@ -16,7 +16,7 @@
      - read can just members of group repo_reader + Authenticated Users
 
     In case of per server data (Custom), script furthemore create Log subfolder, which must be used for any additional content which will be created on client itself. To this Log folder can write just accounts defined in customDestinationNTFS key and if not defined members of Authenticated Users.
-
+    
     .NOTES
     Author: Ondřej Šebela - ztrhgf@seznam.cz
 #>
@@ -185,7 +185,7 @@ function Set-Permissions {
     # }
 }
 
-Function Copy-Folder {
+function Copy-Folder {
     [cmdletbinding()]
     Param (
         [string] $source
@@ -241,6 +241,31 @@ Function Copy-Folder {
             'ErrMsg'   = $errMsg
         }
     }
+}
+
+function Send-EmailAndFail {
+    param ([string] $subject, [string] $body, [string] $throw)
+
+    $subject2 = "Sync of PS scripts on $env:COMPUTERNAME: " + $subject
+    $body2 = "Hi,`n" + $body
+
+    Import-Module Scripts -Function Send-Email
+
+    Send-Email -subject $subject2 -body $body2
+
+    if (!$throw) { $throw = $body }
+    throw $throw
+}
+
+function Send-EmailAndContinue {
+    param ([string] $subject, [string] $body)
+
+    $subject = "Sync of PS scripts on $env:COMPUTERNAME: " + $subject
+    $body = "Hi,`n" + $body
+
+    Import-Module Scripts -Function Send-Email
+
+    Send-Email -subject $subject -body $body
 }
 
 
@@ -406,9 +431,7 @@ Log adresar se ignoruje pri porovnavani obsahu remote repo vs lokalni kopie a pr
 $customConfigScript = Join-Path $repoSrc "Custom\customConfig.ps1"
 
 if (!(Test-Path $customConfigScript -ErrorAction SilentlyContinue)) {
-    Import-Module Scripts -Function Send-Email
-    Send-Email -subject "Sync of PS scripts: Custom" -body "Hi,`non $env:COMPUTERNAME script $($MyInvocation.ScriptName) detected missing config file $customConfigScript. Event if you do not want to copy any Custom folders to any server, create empty $customConfigScript."
-    throw "Missing Custom config file"
+    Send-EmailAndFail -subject "Custom" -body "script detected missing config file $customConfigScript. Event if you do not want to copy any Custom folders to any server, create empty $customConfigScript."
 }
 
 # nactu customConfig.ps1 skript respektive $customConfig promennou v nem definovanou
@@ -456,8 +479,7 @@ Get-ChildItem $customDstFolder -Directory -ErrorAction SilentlyContinue | ForEac
             "Deleting unnecessary $($folder.FullName)"
             Remove-Item $folder.FullName -Recurse -Force -Confirm:$false -ErrorAction Stop
             # obsah adresare muze byt zrovna pouzivan == nepovede se jej smazat == email poslu pouze pokud se povedlo
-            Import-Module Scripts -Function Send-Email
-            Send-Email -subject "Sync of PS scripts: Deletion of useless folder" -body "Hi,`non $env:COMPUTERNAME script $($MyInvocation.ScriptName) deleted folder $($folder.FullName), because it is no more required here."
+            Send-EmailAndContinue -subject "Deletion of useless folder" -body "script deleted folder $($folder.FullName), because it is no more required here."
         } catch {
             "There was an error when deleting $($folder.FullName), error was`n$_"
         }
@@ -487,16 +509,12 @@ if ($thisPCCustom) {
 
         # kontrola, ze existuje zdrojovy adresar (to ze je v config neznamena, ze realne existuje)
         if (!(Test-Path $folderSrcPath -ErrorAction SilentlyContinue)) {
-            Import-Module Scripts -Function Send-Email
-            Send-Email -subject "Sync of PS scripts: Missing folder" -body "Hi,`non $env:COMPUTERNAME it is not possible to copy $folderSrcPath, because it does not exist.`nSynchronization will not work until you solve this problem."
-            throw "Non existing source folder $folderSrcPath"
+            Send-EmailAndFail -subject "Missing folder" -body "it is not possible to copy $folderSrcPath, because it does not exist.`nSynchronization will not work until you solve this problem."
         }
 
         # kontrola, ze neexistuje ve zdrojovem adresari Log adresar (ten vytvarime az lokalne na strojich a nepocitam s variantou, ze by se nasynchronizoval z repo)
         if (Test-Path (Join-Path $folderSrcPath "Log") -ErrorAction SilentlyContinue) {
-            Import-Module Scripts -Function Send-Email
-            Send-Email -subject "Sync of PS scripts: Existing Log folder" -body "Hi,`nin $folderSrcPath exist folder 'Log' which is not supported. Delete it.`nSynchronization will not work until you solve this problem."
-            throw "Existing Log folder in $folderSrcPath"
+            Send-EmailAndFail -subject "Sync of PS scripts: Existing Log folder" -body "in $folderSrcPath exist folder 'Log' which is not supported. Delete it.`nSynchronization will not work until you solve this problem."
         }
 
         # kontrola, ze zadany account jde na danem stroji pouzit
@@ -562,9 +580,7 @@ if ($thisPCCustom) {
                 "Setting NTFS right on $folderDstPath"
                 Set-Permissions @permParam
             } catch {
-                Import-Module Scripts -Function Send-Email
-                Send-Email -subject "Sync of PS scripts: Set permission error" -body "Hi,`nthere was failure:`n$_`n`n when set up permission (read: $readUser, write: $writeUser) on folder $folderDstPath"
-                throw "NTFS permission set up failure (read: $readUser, write: $writeUser) on $folderDstPath"
+                Send-EmailAndFail -subject "Set permission error" -body "there was failure:`n$_`n`n when set up permission (read: $readUser, write: $writeUser) on folder $folderDstPath"
             }
 
             # nastavim i na Log podadresari
@@ -582,9 +598,7 @@ if ($thisPCCustom) {
                 "Setting NTFS rights on $customLogFolder"
                 Set-Permissions @permParam
             } catch {
-                Import-Module Scripts -Function Send-Email
-                Send-Email -subject "Sync of PS scripts: Set permission error" -body "Hi,`nthere was failure:`n$_`n`n when set up permission (read: $readUser, write: $writeUser) on folder $customLogFolder"
-                throw "NTFS permission set up failure (read: $readUser, write: $writeUser) on $customLogFolder"
+                Send-EmailAndFail -subject "Set permission error" -body "there was failure:`n$_`n`n when set up permission (read: $readUser, write: $writeUser) on folder $customLogFolder"
             }
 
         } elseif ($_.customLocalDestination -and !$_.customDestinationNTFS -and !$_.copyJustContent) {
@@ -616,9 +630,7 @@ if ($thisPCCustom) {
                 $definitionPath = Join-Path $folderSrcPath "$taskName.xml"
                 # zkontroluji, ze existuje XML s konfiguraci pro dany task
                 if (!(Test-Path $definitionPath -ea SilentlyContinue)) {
-                    Import-Module Scripts -Function Send-Email
-                    Send-Email -subject "Sync of PS scripts: Custom" -body "Hi,`non $env:COMPUTERNAME script $($MyInvocation.ScriptName) detected missing XML definition $definitionPath for scheduled task $taskName."
-                    throw "Scheduled task $taskName is missing its xml definition $definitionPath"
+                    Send-EmailAndFail -subject "Custom" -body "script detected missing XML definition $definitionPath for scheduled task $taskName."
                 }
 
                 [xml]$xmlDefinition = Get-Content $definitionPath
@@ -627,9 +639,7 @@ if ($thisPCCustom) {
                 try {
                     $runasAccount = ((New-Object System.Security.Principal.SecurityIdentifier($runasAccountSID)).Translate([System.Security.Principal.NTAccount])).Value
                 } catch {
-                    Import-Module Scripts -Function Send-Email
-                    Send-Email -subject "Sync of PS scripts: Custom" -body "Hi,`non $env:COMPUTERNAME script $($MyInvocation.ScriptName) tried to create scheduled task $taskName, but runas account $runasAccountSID cannot be translated to account here."
-                    throw "Scheduled task $taskName is trying to use non-existent account $runasAccountSID"
+                    Send-EmailAndFail -subject "Custom" -body "script tried to create scheduled task $taskName, but runas account $runasAccountSID cannot be translated to account here."
                 }
 
                 #TODO?
