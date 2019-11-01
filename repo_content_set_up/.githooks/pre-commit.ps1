@@ -34,7 +34,10 @@ function _WarningAndExit {
         Add-Type -AssemblyName System.Windows.Forms
     }
 
+    $message = $message + "`n`nAre you sure you want to continue in commit?"
+
     Write-Host $message
+
     $msgBoxInput = [System.Windows.Forms.MessageBox]::Show($this, $message, 'Continue?', 'YesNo', 'Warning')
     switch ($msgBoxInput) {
         'No' {
@@ -438,7 +441,7 @@ try {
                 }
 
                 if (!$folderAlreadyInRepo -and !$folderInActualCommit) {
-                    _WarningAndExit "In modulesConfig.ps1 script variable `$modulesConfig contains object that defines '$folderName', but given folder is neither in GIT repository\Modules or repository\scripts2module nor in actual commit (name is case sensitive!).`n`nDo you really want to continue in commit?"
+                    _WarningAndExit "In modulesConfig.ps1 script variable `$modulesConfig contains object that defines '$folderName', but given folder is neither in GIT repository\Modules or repository\scripts2module nor in actual commit (name is case sensitive!)."
                 }
             }
 
@@ -466,7 +469,7 @@ try {
         $textFilesToCommit | ForEach-Object {
             $fileEnc = (_GetFileEncoding $_).bodyName
             if ($fileEnc -notin "US-ASCII", "ASCII", "UTF-8" ) {
-                _WarningAndExit "File $_ is encoded in '$fileEnc', so git diff wont work.`nIdeal is to save it using UTF-8 with BOM, or UTF-8.`n`nDo you really want to continue in commit?"
+                _WarningAndExit "File $_ is encoded in '$fileEnc', so git diff wont work.`nIdeal is to save it using UTF-8 with BOM, or UTF-8."
             }
         }
     }
@@ -506,15 +509,19 @@ try {
             # - syntaxe a dodrzovani best practices
             # - kompatibility s Powershell 3.0
             #   - viz https://devblogs.microsoft.com/powershell/using-psscriptanalyzer-to-check-powershell-version-compatibility/
-            $scriptAnalyzerResult = Invoke-ScriptAnalyzer $script -Settings .\PSScriptAnalyzerSettings.psd1
-            $ps1CompatWarning += $scriptAnalyzerResult | ? { $_.RuleName -in "PSUseCompatibleCommands", "PSUseCompatibleSyntax" -and $_.Severity -in "Warning", "Error", "ParseError" }
-            $ps1Error += $scriptAnalyzerResult | ? { $_.Severity -in "Error", "ParseError" }
+            Invoke-ScriptAnalyzer $script -Settings .\PSScriptAnalyzerSettings.psd1 | % {
+                if ($_.RuleName -in "PSUseCompatibleCommands", "PSUseCompatibleSyntax", "PSAvoidUsingComputerNameHardcoded" -and $_.Severity -in "Warning", "Error", "ParseError") {
+                    $ps1CompatWarning += $_
+                } elseif ($_.Severity -in "Error", "ParseError") {
+                    $ps1Error += $_
+                }
+            }
 
 
             #
             # upozorneni pokud skript obsahuje FIXME komentar (krizek udelan pres [char] aby nehlasilo samo sebe)
             if ($fixme = Get-Content $script | ? { $_ -match ("\s*" + [char]0x023 + "\s*" + "FIXME\b") }) {
-                _WarningAndExit "File $script contains FIXME:`n$($fixme.trim() -join "`n").`n`nDo you really want to continue in commit?"
+                _WarningAndExit "File $script contains FIXME:`n$($fixme.trim() -join "`n")."
             }
 
             #
@@ -588,7 +595,7 @@ try {
                         # git vraci s unix lomitky, zmenim na zpetna
                         $fileUsed = $fileUsed -replace "/", "\"
 
-                        _WarningAndExit "Function $functionName which has changed parameters is used in following scripts:`n$($fileUsed -join "`n")`n`nDo you really want to continue in commit?"
+                        _WarningAndExit "Function $functionName which has changed parameters is used in following scripts:`n$($fileUsed -join "`n")"
                     }
                 }
             }
@@ -599,7 +606,7 @@ try {
             if (!($ps1Error | Where-Object { $_.ruleName -ne "PSAvoidUsingConvertToSecureStringWithPlainText" })) {
                 # ps1 v commitu obsahuji pouze chyby ohledne pouziti plaintext hesla
                 $ps1Error = $ps1Error | Select-Object -ExpandProperty ScriptName -Unique
-                _WarningAndExit "Following scripts are using ConvertTo-SecureString, which is unsafe:`n$($ps1Error -join "`n")`n`nDo you really want to continue in commit?"
+                _WarningAndExit "Following scripts are using ConvertTo-SecureString, which is unsafe:`n$($ps1Error -join "`n")"
             } else {
                 # ps1 v commitu obsahuji zavazne poruseni pravidel psani PS skriptu
                 $ps1Error = $ps1Error | Select-Object Scriptname, Line, Column, Message | Format-List | Out-String -Width 1200
@@ -610,7 +617,7 @@ try {
         if ($ps1CompatWarning) {
             # ps1 v commitu obsahuji nekompatibilni prikazy se zadanou verzi PS (dle nastaveni v .vscode\PSScriptAnalyzerSettings.psd1)
             $ps1CompatWarning = $ps1CompatWarning | Select-Object Scriptname, Line, Column, Message | Format-List | Out-String -Width 1200
-            _WarningAndExit "Compatibility issues with PS 3.0 were found:`n$ps1CompatWarning`n`nDo you really want to continue in commit?"
+            _WarningAndExit "Compatibility issues with PS 3.0 were found:`n$ps1CompatWarning"
         }
     } # konec kontrol ps1 a psm1 souboru
 
@@ -632,7 +639,7 @@ try {
                 # git vraci s unix lomitky, zmenim na zpetna
                 $fileFuncUsed = $fileFuncUsed -replace "/", "\"
 
-                _WarningAndExit "Deleted function $funcName is used in following scripts:`n$($fileFuncUsed -join "`n")`n`nDo you really want to continue in commit?"
+                _WarningAndExit "Deleted function $funcName is used in following scripts:`n$($fileFuncUsed -join "`n")"
             }
         }
         #TODO kontrola funkci v profile.ps1? viz AST sekce https://devblogs.microsoft.com/scripting/learn-how-it-pros-can-use-the-powershell-ast/
@@ -715,7 +722,7 @@ try {
                     # git vraci s unix lomitky, zmenim na zpetna
                     $fileUsed = $fileUsed -replace "/", "\"
 
-                    _WarningAndExit "Deleted variable $varName is used in following scripts:`n$($fileUsed -join "`n")`n`nDo you really want to continue in commit?"
+                    _WarningAndExit "Deleted variable $varName is used in following scripts:`n$($fileUsed -join "`n")"
                 }
             }
         }
@@ -737,7 +744,7 @@ try {
                     # git vraci s unix lomitky, zmenim na zpetna
                     $fileUsed = $fileUsed -replace "/", "\"
 
-                    _WarningAndExit "Modified variable $varName is used in following scripts:`n$($fileUsed -join "`n")`n`nDo you really want to continue in commit?"
+                    _WarningAndExit "Modified variable $varName is used in following scripts:`n$($fileUsed -join "`n")"
                 }
             }
         }
