@@ -617,7 +617,7 @@ try {
         if ($ps1CompatWarning) {
             # ps1 v commitu obsahuji nekompatibilni prikazy se zadanou verzi PS (dle nastaveni v .vscode\PSScriptAnalyzerSettings.psd1)
             $ps1CompatWarning = $ps1CompatWarning | Select-Object Scriptname, Line, Column, Message | Format-List | Out-String -Width 1200
-            _WarningAndExit "Compatibility issues with PS 3.0 were found:`n$ps1CompatWarning"
+            _WarningAndExit "Compatibility issues were found:`n$ps1CompatWarning"
         }
     } # konec kontrol ps1 a psm1 souboru
 
