@@ -129,7 +129,7 @@ try {
         # ziskam pridane|modifikovane|prejmenovane soubory z commitu (ale ne smazane)
         $filesToCommitNoDEL = $filesToCommit | ForEach-Object {
             $item = $_
-            if ($filesToCommitStatus -match ("(A|M|R)\s+" + [Regex]::Escape($item))) {
+            if ($filesToCommitStatus -match ("(A|M|R)\s+[`"]?" + [Regex]::Escape($item))) {
                 # z relativni cesty udelam absolutni a unix lomitka zaroven nahradim za windowsi
                 Join-Path (Get-Location) $item
             }
