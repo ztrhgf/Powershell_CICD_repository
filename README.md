@@ -45,6 +45,12 @@ In case you found any bug or have improvement suggestion, please contact me at z
 - support for Pester testing
 
 
+## [2.0.10] - 2019-11-12
+### Bug fixes
+- fixed bug in pre-commit which lead to ignore files with spaces in variable $filesToCommitNoDEL
+  - such files start with " in git.exe status --porcelain output
+
+
 ## [2.0.9] - 2019-11-01
 ### Added
 - automatic scheduled task creation from xml saved in Custom section (modification and deletion if not needed anymore)
