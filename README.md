@@ -45,6 +45,12 @@ In case you found any bug or have improvement suggestion, please contact me at z
 - support for Pester testing
 
 
+
+## [2.0.11] - 2019-11-20
+### Changed
+- profile.ps1 cleanup
+- move functions from profile.ps1 to separate adminFunctions module
+
 ## [2.0.10] - 2019-11-12
 ### Bug fixes
 - fixed bug in pre-commit which lead to ignore files with spaces in variable $filesToCommitNoDEL
