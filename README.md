@@ -10,7 +10,7 @@ In case you found any bug or have improvement suggestion, please contact me at z
 # Main features:
 - **unified Powershell environment across whole Active Directory**
   - same modules, functions and variables everywhere
-  - one global Powershell profile to unify user experience
+  - one global Powershell profile to unify administrators experience
 - **fully automated code validation, formatting and content distribution**
   - using GIT hooks, Powershell scripts, GPO and VSC editor
   - automation is not applicable to code writing and making commits :)
