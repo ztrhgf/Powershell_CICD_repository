@@ -4,7 +4,7 @@
 
 # name of MGM server (used to pull and process GIT repository content and fill DFS with result)
 $repoSyncServer = "__TODO__"
-# name of computers, which should contain global Powershell profile (ie. scripts2root\profile.ps1)
+# name of computers, which should contain global Powershell profile (ie. scripts2root\profile.ps1) and admin functions (ie. scripts2module\adminFunctions)
 $computerWithProfile = "__TODO__"
 
 # some examples of global variables...

@@ -35,4 +35,8 @@ $modulesConfig = @(
 
 #FIXME doresit, ze oddelovaci carka nesmi byt na novem radku jinak nefunguje AST kontrola
 $modulesConfig = @(
+    [PSCustomObject]@{
+        folderName   = "adminFunctions"
+        computerName = $computerWithProfile
+    }
 )
