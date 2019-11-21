@@ -507,8 +507,7 @@ try {
             #
             # kontrola
             # - syntaxe a dodrzovani best practices
-            # - kompatibility s Powershell 3.0
-            #   - viz https://devblogs.microsoft.com/powershell/using-psscriptanalyzer-to-check-powershell-version-compatibility/
+            # - a pripadna dalsi nastaveni viz PSScriptAnalyzerSettings
             Invoke-ScriptAnalyzer $script -Settings .\PSScriptAnalyzerSettings.psd1 | % {
                 if ($_.RuleName -in "PSUseCompatibleCommands", "PSUseCompatibleSyntax", "PSAvoidUsingComputerNameHardcoded" -and $_.Severity -in "Warning", "Error", "ParseError") {
                     $ps1CompatWarning += $_
