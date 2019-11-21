@@ -30,6 +30,23 @@ In case you found any bug or have improvement suggestion, please contact me at z
 - after you commit your changes, pre-commit git hook initiate checks defined in pre-commit.ps1
 - only if all checks are passed, commit will be created
 
+## What is validated before commit is created
+- that you are trying to delete important repository files
+- that Powershell files 
+  - are encoded as UTF-8 or UTF-8 with BOM
+  - have correct syntax
+  - doesn't contain EN DASH, EM DASH instead of dash (it would lead to strange errors)
+  - doesn't contain #FIXME comment, otherwise warn about it
+  - from which modules are generated are in correct form
+- warn about changed function parameters (in case, the functions is used elsewhere)
+- warn about deleted function (in case, the function is used elsewhere)
+- warn about changed variable value from module Variables (in case, the variable is used elsewhere)
+- warn about deleted variable from module Variables (in case, the variable is used elsewhere)
+- that format of $customConfig is right
+- that format of $modulesConfig is right
+- ...
+
+
 # How distribution of content works
 - after successful commit, content is automatically:
   - pushed to GIT repository
