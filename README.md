@@ -46,6 +46,11 @@ In case you found any bug or have improvement suggestion, please contact me at z
 
 
 
+## [2.0.12] - 2019-11-21
+### Changed
+- compatibility check is now voluntary because of it's impact on pre-commit checks performance
+  - to enable check, just uncomment rules section in PSScriptAnalyzerSettings.psd1
+
 ## [2.0.11] - 2019-11-20
 ### Changed
 - profile.ps1 cleanup
