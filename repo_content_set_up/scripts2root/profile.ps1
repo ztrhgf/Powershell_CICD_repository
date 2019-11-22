@@ -1,13 +1,17 @@
 <#
 
-slouzi k nastaveni PS konzole.
-tzn importu pouzivanych skriptu, modulu, promennych, definovani per user funkci, ...
+GLOBALNI POWERSHELL PROFILE
 
-kopiruje se pouze na stroje uvedene v $computerWithProfile
+- slouzi k nastaveni PS konzole
+    tzn importu pouzivanych skriptu, modulu, promennych, definovani per user funkci, ...
+
+- kopiruje se na klientech do %WINDIR%\System32\WindowsPowershell\v1.0 tzn jde o globalni PS profil
+- kopiruje se pouze na klienty uvedene v promenne $computerWithProfile definovane v modulu Variables
+    a to pomoci GPO "PS_env_set_up"
 
 ! tento profil ovlivnuje pouze lokalni session, ne remote !
 
-!!! piste jej tak, aby definoval promenne a funkce, ale neprovadel zadne nechtene zmeny v systemu !!!
+!!! piste jej tak, aby nic nespoustel ci needitoval !!!
 
 #>
 
