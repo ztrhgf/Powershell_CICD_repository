@@ -90,12 +90,12 @@ $customConfig = @(
     }
     ,[PSCustomObject]@{
         folderName   = "slozkaY"
-        computerName = "APP-2"
+        computerName = (New-Object System.DirectoryServices.DirectorySearcher((New-Object System.DirectoryServices.DirectoryEntry("LDAP://OU=Notebooks,OU=Computer_Accounts,DC=contoso,DC=com")) , "objectCategory=computer")).FindAll() | ForEach-Object { $_.Properties.name }
     }
     ,[PSCustomObject]@{
-        folderName   = "slozkaU"
+        folderName   = "slozkaSweb.configSouborem"
         computerName = $webServer
-        customLocalDestination = "C:\WWWroot\"
+        customLocalDestination = "C:\inetpub\wwwroot\"
         copyJustContent   = 1
     },
     [PSCustomObject]@{
