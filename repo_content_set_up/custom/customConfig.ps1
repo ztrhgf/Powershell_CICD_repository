@@ -4,7 +4,9 @@ Tzn na jake stroje, do jakeho umisteni a s jakymi pravy (vse definovano v $custo
 Standardne se obsah kopiruje do C:\Windows\Scripts a dochazi automaticky k mazani toho, co tam jiz byt nema.
 Tento skript se dot sourcuje v PS_env_set_up.ps1 a nesmi proto obsahovat nic krome promenne customConfig!
 
-Jak ma vypadat $customConfig a co muze obsahovat: 
+Pozn.: DFS oznacuje sdilenou slozku, kde hostujete vas repozitar (z ktere klienti stahuji obsah k sobe na lokal)
+
+Jak ma vypadat $customConfig a co muze obsahovat:
 $customConfig je pole objektu, kde kazdy objekt reprezentuje jednu slozku v Custom adresari.
 Objekt pak obsahuje nasledujici klice:
 
@@ -64,13 +66,13 @@ Objekt pak obsahuje nasledujici klice:
         typicky pro kopirovani configu, ini atp, takze do cile chci co nejmene zasahovat
         pozn.:
             - nedojde k nastaveni NTFS prav (ani customDestinationNTFS)!
-            - nevytvori se Log adresar
-            - stare soubory nebudou mazany (nepouzije se robocopy mirror)
+            - nevytvori se Log podadresar
+            - jiz nepotrebne soubory nebudou smazany (nepouzije se robocopy mirror)
             - aplikuje se pouze pri nastaveni customLocalDestination ci customShareDestination
 
     - scheduledTask
         (nepovinny) klic
-        slouzi pro zadani nazvu XML souboru (bez koncovky) s definici scheduled tasku, ktery se ma na stroji automaticky vytvorit
+        slouzi pro zadani nazvu XML souboru (bez koncovky) s definici scheduled tasku, ktery se ma na stroji vytvorit
         pozn.:
             - XML musi byt ulozeno v rootu Custom slozky
                 - XML s definici tasku ziskate klasicky exportem tasku v Task Scheduler konzoli
@@ -78,43 +80,46 @@ Objekt pak obsahuje nasledujici klice:
             - task se vzdy vytvori v rootu Task Scheduler konzole
             - jako autor se nastavi nazev sync skriptu (PS_env_set_up), kvuli dohledatelnosti a nasledne sprave
             - pri zmene v definici, dojde k modifikaci tasku
-            - tasky, ktere jiz na klientovi byt nemaji budou smazany
+            - tasky, ktere jiz na klientovi byt nemaji, budou smazany
 
 PRIKLADY:
 
 $customConfig = @(
+    # vykopirovani "SomeTools" na APP-1 a stroje v $servers_app do C:\Windows\Scripts\SomeTools s tim, ze pouze o365sync$ ucet bude mit READ prava
     [PSCustomObject]@{
-        folderName   = "slozkaX"
+        folderName   = "SomeTools"
         computerName = "APP-1", $servers_app
         customDestinationNTFS   = "contoso\o365sync$"
-    }
-    ,[PSCustomObject]@{
+    },
+    # nakopirovani slozky "Monitoring_Scripts" s monitorovacimi skripty na server $monitoringServer do C:\Windows\Scripts\Monitoring_Scripts
+    # a vytvoreni scheduled tasku z XML definice ulozene v monitor_AD_Admins.xml, monitor_backup.xml (ktere budou tyto skripty volat)
+    [PSCustomObject]@{
+        folderName   = "Monitoring_Scripts" # obsahuje skripty + xml definice scheduled tasku
+        scheduledTask = "monitor_AD_Admins", "monitor_backup"
+        computerName = $monitoringServer
+    },
+    # ukazka, ze computerName se muze dynamicky plnit dle obsahu OU Notebooks
+    [PSCustomObject]@{
         folderName   = "slozkaY"
         computerName = (New-Object System.DirectoryServices.DirectorySearcher((New-Object System.DirectoryServices.DirectoryEntry("LDAP://OU=Notebooks,OU=Computer_Accounts,DC=contoso,DC=com")) , "objectCategory=computer")).FindAll() | ForEach-Object { $_.Properties.name }
-    }
-    ,[PSCustomObject]@{
-        folderName   = "slozkaSweb.configSouborem"
+    },
+    # nakopirovani web.config z IISConfig do "C:\inetpub\wwwroot\" na webovem serveru
+    [PSCustomObject]@{
+        folderName   = "IISConfig" # obsahuje web.config
         computerName = $webServer
         customLocalDestination = "C:\inetpub\wwwroot\"
         copyJustContent   = 1
     },
+    # nakopirovani slozky "Secrets" do sdilene slozky "\\DFS\root\skripty", pricemz pouze "APP-1$", "APP-2$", "domain admins" budou mit moznost cist jeji obsah
     [PSCustomObject]@{
-        folderName   = "slozkaZ"
+        folderName   = "Secrets"
         customShareDestination = "\\DFS\root\skripty"
         customDestinationNTFS   = "APP-1$", "APP-2$", "domain admins"
     },
+    # nakopirovani "Admin_Secrets" do DFS repozitare\Custom (ale na klienty uz ne) pricemz pouze "Domain Admins" budou mit READ prava na teto slozce
     [PSCustomObject]@{
-        folderName   = "slozkaW"
-        customShareDestination = "\\DFS\root\moduly"
-        copyJustContent   = 1
-    },
-    [PSCustomObject]@{
-        folderName   = "slozkaV"
-        customSourceNTFS = "domain admins"
-    },
-    [PSCustomObject]@{
-        folderName   = "slozkaX"
-        scheduledTask = "monitorADAdmins"
+        folderName   = "Admin_Secrets"
+        customSourceNTFS = "Domain Admins"
     }
 )
 
