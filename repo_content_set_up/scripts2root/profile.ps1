@@ -79,7 +79,7 @@ $computerSB = {
     param ($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
 
     $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"LDAP://DC=kontoso,DC=com"), '(objectCategory=computer)', ('name', 'description'))
-    ($searcher.findall() | ? { $_.properties.name -match $wordToComplete -or $_.properties.description -match $wordToComplete }).properties.name
+    ($searcher.findall() | ? { $_.properties.name -match $wordToComplete -or $_.properties.description -match $wordToComplete }).properties.name  | Sort-Object | % { "'$_'" }
     $searcher.Dispose()
 }
 # TAB doplneni jmena domenoveho stroje do computerName parametru v jakemkoli prikazu z modulu Scripts
@@ -92,7 +92,7 @@ $serverSB = {
     param ($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
 
     $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"LDAP://OU=Servers,DC=kontoso,DC=com"), '(objectCategory=computer)', ('name', 'description'))
-    ($searcher.findall() | ? { $_.properties.name -match $wordToComplete -or $_.properties.description -match $wordToComplete }).properties.name
+    ($searcher.findall() | ? { $_.properties.name -match $wordToComplete -or $_.properties.description -match $wordToComplete }).properties.name  | Sort-Object | % { "'$_'" }
     $searcher.Dispose()
 }
 # ukazka omezeni TAB doplneni computerName parametru na jmena serveru (ve vybranych funkcich)
@@ -103,7 +103,7 @@ $clientSB = {
     param ($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
 
     $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"LDAP://OU=Clients,DC=kontoso,DC=com"), '(objectCategory=computer)', ('name'))
-    ($searcher.findall()).properties.name | ? { $_ -match $wordToComplete }
+    ($searcher.findall()).properties.name | ? { $_ -match $wordToComplete } | Sort-Object | % { "'$_'" }
     $searcher.Dispose()
 }
 # ukazka omezeni automatickeho doplneni computerName parametru na jmena klientskych stroju (ve vybranych funkcich)
@@ -113,7 +113,7 @@ $userSB = {
     param ($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
 
     $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"LDAP://OU=User,DC=kontoso,DC=com"), '(objectCategory=user)', ('name', 'samaccountname'))
-    ($searcher.findall() | ? { $_.properties.name -match $wordToComplete }).properties.samaccountname
+    ($searcher.findall() | ? { $_.properties.name -match $wordToComplete }).properties.samaccountname | Sort-Object | % { "'$_'" }
     $searcher.Dispose()
 }
 # TAB doplneni userName parametru na user login v jakemkoli prikazu z modulu Scripts
@@ -125,7 +125,7 @@ $groupSB = {
     param ($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
 
     $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"LDAP://OU=Groups,DC=kontoso,DC=com"), '(objectCategory=group)', ('name', 'description'))
-    ($searcher.findall() | ? { $_.properties.name -match $wordToComplete -or $_.properties.description -match $wordToComplete }).properties.name
+    ($searcher.findall() | ? { $_.properties.name -match $wordToComplete -or $_.properties.description -match $wordToComplete }).properties.name | Sort-Object | % { "'$_'" }
     $searcher.Dispose()
 }
 # TAB doplneni identity parametru na group name v prikazech z modulu ActiveDirectory, ktere pracuji s group objekty
