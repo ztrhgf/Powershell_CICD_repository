@@ -294,7 +294,7 @@ try {
                         # upozorneni pokud se jmeno XML lisi od sched. tasku, ktery definuje
                         $taskNameInXML = $xmlDefinition.task.RegistrationInfo.URI -replace "^\\"
                         if ($taskName -ne $taskNameInXML) {
-                            _WarningAndExit "In customConfig.ps1 object that defines '$folderName' in key $key, defines scheduled task '$taskName', but associated config file $windowsPath defines task '$taskNameInXML'. Beware, that this task will be created with name '$taskName'."
+                            _WarningAndExit "In customConfig.ps1 object that defines '$folderName' in key $key, defines scheduled task '$taskName', but associated config file $windowsPath defines task '$taskNameInXML'.`nBeware, that this task will be created with name '$taskName'."
                         }
                     }
                 }
