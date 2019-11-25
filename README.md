@@ -69,6 +69,7 @@ In case you found any bug or have improvement suggestion, please contact me at z
 - double question "Are you sure you want to continue in commit?" in pre-commit
 ### Changed
 - better examples in customConfig
+- quote output of TAB completition in PS profile
 
 ## [2.0.12] - 2019-11-21
 ### Changed
