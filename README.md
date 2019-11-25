@@ -63,6 +63,12 @@ In case you found any bug or have improvement suggestion, please contact me at z
 
 
 
+## [2.0.13] - 2019-11-25
+### Bug fixes
+- missing computerName in sent emails (from PS_env_set_up)
+### Changed
+- better examples in customConfig
+
 ## [2.0.12] - 2019-11-21
 ### Changed
 - compatibility check is now voluntary because of it's impact on pre-commit checks performance
