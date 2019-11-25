@@ -246,7 +246,7 @@ function Copy-Folder {
 function Send-EmailAndFail {
     param ([string] $subject, [string] $body, [string] $throw)
 
-    $subject2 = "Sync of PS scripts on $env:COMPUTERNAME: " + $subject
+    $subject2 = "Sync of PS scripts on $env:COMPUTERNAME`: " + $subject
     $body2 = "Hi,`n" + $body
 
     Import-Module Scripts -Function Send-Email
@@ -260,7 +260,7 @@ function Send-EmailAndFail {
 function Send-EmailAndContinue {
     param ([string] $subject, [string] $body)
 
-    $subject = "Sync of PS scripts on $env:COMPUTERNAME: " + $subject
+    $subject = "Sync of PS scripts on $env:COMPUTERNAME`: " + $subject
     $body = "Hi,`n" + $body
 
     Import-Module Scripts -Function Send-Email
