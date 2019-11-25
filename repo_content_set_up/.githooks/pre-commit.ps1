@@ -294,7 +294,7 @@ try {
                         # upozorneni pokud se jmeno XML lisi od sched. tasku, ktery definuje
                         $taskNameInXML = $xmlDefinition.task.RegistrationInfo.URI -replace "^\\"
                         if ($taskName -ne $taskNameInXML) {
-                            _WarningAndExit "In customConfig.ps1 object that defines '$folderName' in key $key, defines scheduled task '$taskName', but associated config file $windowsPath defines task '$taskNameInXML'. Beware, that this task will be created with name '$taskName'.`n`nAre you sure you want to continue in commit?"
+                            _WarningAndExit "In customConfig.ps1 object that defines '$folderName' in key $key, defines scheduled task '$taskName', but associated config file $windowsPath defines task '$taskNameInXML'. Beware, that this task will be created with name '$taskName'."
                         }
                     }
                 }
@@ -310,7 +310,7 @@ try {
 
             # upozornim na potencialni problem s nastavenim share prav
             if ($keys -contains "computerName" -and $keys -contains "customSourceNTFS") {
-                _WarningAndExit "In customConfig.ps1 script variable `$customConfig contains in object that defines '$folderName' keys: computerName, customSourceNTFS at the same time. This is safe only in case, when customSourceNTFS contains all computers from computerName (and more).`n`nAre you sure you want to continue in commit?"
+                _WarningAndExit "In customConfig.ps1 script variable `$customConfig contains in object that defines '$folderName' keys: computerName, customSourceNTFS at the same time. This is safe only in case, when customSourceNTFS contains all computers from computerName (and more)."
             }
 
             # kontrola, ze neni pouzita nepodporovana kombinace klicu
