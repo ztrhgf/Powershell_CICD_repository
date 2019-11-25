@@ -281,7 +281,7 @@ try {
                         $windowsPath = $unixPath -replace "/", "\"
                         $inActualCommit = $filesToCommitNoDEL | Where-Object { $_ -cmatch [regex]::Escape($windowsPath) }
                         if (!$alreadyInRepo -and !$inActualCommit) {
-                            _ErrorAndExit "In customConfig.ps1 object that defines '$folderName' in key $key, defines scheduled task '$taskName', but associated config file $windowsPath is neither in remote GIT repository\Custom\$folderName nor in actual commit. It would cause error on clients."
+                            _ErrorAndExit "In customConfig.ps1 object that defines '$folderName' in key $key, defines scheduled task '$taskName', but associated config file $windowsPath is neither in remote GIT repository\Custom\$folderName nor in actual commit (name is case sensitive!). It would cause error on clients."
                         }
 
                         # kontrola, ze XML skutecne obsahuje nastaveni scheduled tasku
