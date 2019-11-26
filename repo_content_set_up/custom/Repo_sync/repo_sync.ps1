@@ -39,7 +39,6 @@ $destination = "__TODO__" # UNC path to DFS repository (ie.: \\myDomain\dfs\repo
 # USE ONLY IF YOU KNOW, WHAT ARE YOU DOING
 # tutorial how to create self signed certificate http://woshub.com/how-to-sign-powershell-script-with-a-code-signing-certificate/
 # set correct path to signing certificate and uncomment to start signing
-# $signingCert = Get-PfxCertificate -FilePath C:\Test\Mysign.pfx # something like this, if you want to use locally stored pfx certificate
 # $signingCert = (Get-ChildItem cert:\LocalMachine\my –CodeSigningCert)[0] # something like this, if certificate is in store
 if ($signingCert -and $signingCert.EnhancedKeyUsageList.friendlyName -ne "Code Signing") {
     throw "Certificate $($signingCert.DnsNameList) is not valid Code Signing certificate"
