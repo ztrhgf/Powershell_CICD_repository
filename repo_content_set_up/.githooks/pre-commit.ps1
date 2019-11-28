@@ -529,17 +529,19 @@ try {
                 # prevedu na AST objekt pro snadnou analyzu obsahu
                 $ast = [System.Management.Automation.Language.Parser]::ParseFile("$script", [ref] $null, [ref] $null)
 
+                $wrgMessage = "File $script is not in correct format. It has to contain just definition of one function (with the same name). Beside that, script can also contains: Set-Alias, comments or requires statement!"
+
                 #
                 # kontrola, ze existuje pouze end block
                 if ($ast.BeginBlock -or $ast.ProcessBlock) {
-                    _ErrorAndExit "File $script is not in correct format. It has to contain just definition of one function with the same name (plus Set-Alias, comments or requires)!"
+                    _ErrorAndExit $wrgMessage
                 }
 
                 #
                 # kontrola, ze neobsahuje kus kodu, ktery by se stejne pri generovani modulu zahodil (protoze tam nema co delat)
                 $ast.EndBlock.Statements | ForEach-Object {
                     if ($_.gettype().name -ne "FunctionDefinitionAst" -and !($_ -match "^\s*Set-Alias .+")) {
-                        _ErrorAndExit "File $script is not in correct format. It has to contain just definition of one function with the same name (plus Set-Alias, comments or requires)!"
+                        _ErrorAndExit $wrgMessage
                     }
                 }
 
