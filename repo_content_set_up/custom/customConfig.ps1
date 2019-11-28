@@ -128,6 +128,7 @@ Log adresar se ignoruje pri porovnavani obsahu remote repo vs lokalni kopie a pr
 !!! pokud spoustene skripty generuji nejake soubory, at je ukladaji do tohoto Log adresare, jinak dojde pri kazde synchronizaci s remote repo k jejich smazani (protoze robocopy mirror).
 #>
 
+#FIXME oddelovaci carka mezi objekty musi byt na stejnem radku jako uzaviraci slozena zavorka objektu, jinak nefunguje AST kontrola
 $customConfig = @(
     [PSCustomObject]@{
         folderName   = "Repo_sync"

@@ -33,7 +33,7 @@ $modulesConfig = @(
 
 #>
 
-#FIXME doresit, ze oddelovaci carka nesmi byt na novem radku jinak nefunguje AST kontrola
+#FIXME oddelovaci carka mezi objekty musi byt na stejnem radku jako uzaviraci slozena zavorka objektu, jinak nefunguje AST kontrola
 $modulesConfig = @(
     [PSCustomObject]@{
         folderName   = "adminFunctions"
