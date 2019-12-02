@@ -49,9 +49,11 @@ In case you found any bug or have improvement suggestion, please contact me at z
 
 # How distribution of content works
 - after successful commit, content is automatically:
-  - pushed to GIT repository
-  - pulled to local server, processed and distributed to DFS share
-  - from DFS share the content is downloaded to clients in your Active Directory
+  - pushed to GIT repository (post-commit GIT hook)
+  - pulled to local server, processed and distributed to DFS share (repo_sync.ps1)
+    - being regularly run every X minutes by manually created scheduled task
+  - from DFS share the content is downloaded to clients in your Active Directory (PS_env_set_up.ps1)
+    - being regularly run on client every X minutes by automatically created scheduled task (created via GPO PS_env_set_up)
   
   
 # Changelog
