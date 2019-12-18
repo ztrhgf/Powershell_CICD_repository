@@ -156,7 +156,7 @@ $commitHistoryPath = "$env:SystemRoot\Scripts\commitHistory"
 $keyName = "consoleCommit_$PID"
 $keyPath = "HKCU:\Software"
 if ($consoleCommit = Get-Content $commitHistoryPath -First 1 -ErrorAction SilentlyContinue) {
-    New-ItemProperty $keyPath -Name $keyName -PropertyType string -Value $consoleCommit -Force
+    $null = New-ItemProperty $keyPath -Name $keyName -PropertyType string -Value $consoleCommit -Force
 }
 # promazu reg. zaznamy k jiz neexistujicim konzolim (poznam dle PIDu)
 $pssId = Get-Process powershell | select -exp id
