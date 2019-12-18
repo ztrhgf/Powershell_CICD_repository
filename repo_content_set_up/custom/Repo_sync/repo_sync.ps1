@@ -261,6 +261,17 @@ function _updateRepo {
 
 
 
+    
+    #
+    # poznacim historii commitu do souboru, abych v PS konzoli mohl ukazat o kolik commitu je pozadu
+    #
+    if ($commitHistory) {
+        $commitHistory | Out-File (Join-Path $destination commitHistory) -Force
+    }
+
+
+
+
     #
     # ze skriptu ve slozkach ulozenych v scripts2module vygeneruji psm moduly
     # a az ten nakopiruji do remote repozitare + ostatni zmenene moduly
@@ -1186,7 +1197,9 @@ try {
 
             _startProcess git -argumentList "reset --hard origin/master" # resets the master branch to what you just fetched. The --hard option changes all the files in your working tree to match the files in origin/master
             _startProcess git -argumentList "clean -fd" # odstraneni untracked souboru a adresaru (vygenerovane moduly z scripts2module atp)
-
+            
+            $commitHistory = _startProcess git -argumentList "log --pretty=format:%h -20" # poslednich 20 commitu, od nejnovejsiho
+            $commitHistory = $commitHistory -split "`n" | ? { $_ }
         } catch {
             Set-Location ..
             Remove-Item $PS_repo -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue

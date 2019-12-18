@@ -151,20 +151,59 @@ if (!$local_user) {
 # customizace vzhledu konzole
 #
 
+# poznacim commit, ktery byl aktualni pri spusteni konzole
+$commitHistoryPath = "$env:SystemRoot\Scripts\commitHistory"
+$keyName = "consoleCommit_$PID"
+$keyPath = "HKCU:\Software"
+if ($consoleCommit = Get-Content $commitHistoryPath -First 1 -ErrorAction SilentlyContinue) {
+    New-ItemProperty $keyPath -Name $keyName -PropertyType string -Value $consoleCommit -Force
+}
+# promazu reg. zaznamy k jiz neexistujicim konzolim (poznam dle PIDu)
+$pssId = Get-Process powershell | select -exp id
+Get-Item $keyPath | select -exp property | % {
+    $id = ($_ -split "_")[-1]
+    if ($id -notin $pssId) {
+        Remove-ItemProperty $keyPath $_
+    }
+}
+
+# zobrazeni o kolik commitu pozadu je tato konzole
+function _commitDelay {
+    $space = "   "
+    $consoleCommit = Get-ItemPropertyValue $keyPath -Name $keyName -ea SilentlyContinue
+    if (!$consoleCommit -or !(Test-Path $commitHistoryPath -ea SilentlyContinue)) {
+        return "$space(*unknown*)"
+    }
+
+    $i = 0
+    $commitHistory = @(Get-Content $commitHistoryPath)
+    foreach ($commit in $commitHistory) {
+        if ($commit -eq $consoleCommit) {
+            return "$space($i)"
+        }
+
+        ++$i
+    }
+
+    # commit jsem nenasel
+    return ($space + "(>" + $commitHistory.count + ")")
+}
+
 # uprava Title konzole
 $title = ''
+$space = "      "
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent() ; $principal = [Security.Principal.WindowsPrincipal] $identity
 if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) { $title = "[ELEVATED] " }
 $title += ($env:USERNAME).toupper()
-$title += "            " + (Get-Location).path
+$title += $space + (_commitDelay) + $space + (Get-Location).path
 $Host.UI.RawUI.Windowtitle = $title
-# uprava promptu, barevne odliseni podle toho jak privilegovany ucet konzoli spustil
+# uprava promptu
 function prompt {
-    # aktualizace cesty v title
+    # aktualizace cesty a poctu commitu o ktere je konzole pozadu v title
     $titleItems = $Host.UI.RawUI.Windowtitle -split "\s+"
-    $Host.UI.RawUI.Windowtitle = (($titleItems | Select-Object -First ($titleItems.count - 1)) -join " ") + "            " + (Get-Location).path
+    $Host.UI.RawUI.Windowtitle = (($titleItems | Select-Object -First ($titleItems.count - 2)) -join " ") + $space + (_commitDelay) + $space + (Get-Location).path
 
-    # uprava promptu
+    # barevne odliseni podle toho jak privilegovany ucet konzoli spustil
     $color = "white"
     if ($env:USERNAME -match "^adm_") {
         $color = "red"

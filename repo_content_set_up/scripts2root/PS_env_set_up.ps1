@@ -39,6 +39,11 @@ $repoSrc = "\\__TODO__"
 # skupina ktera ma pravo editovat obsah DFS repozitare (i lokalni kopie)
 [string] $writeUser = "repo_writer"
 
+# zdrojova slozka custom dat
+$customSrcFolder = Join-Path $repoSrc "Custom"
+# cilova slozka custom dat
+$customDstFolder = Join-Path $env:systemroot "Scripts"
+
 "start synchronizing data from $repoSrc"
 
 $hostname = $env:COMPUTERNAME
@@ -363,6 +368,21 @@ foreach ($module in (Get-ChildItem $moduleSrcFolder -Directory)) {
 
 
 #
+# SYNCHRONIZACE HISTORIE COMMITU
+#
+
+$commitHistorySrc = Join-Path $repoSrc "commitHistory"
+# nakopiruji lokalne, aby nasledne cteni obsahu bylo co nejrychlejsi a nevadilo napr. pomale pripojeni pres VPN
+if ((Test-Path $commitHistorySrc -ea SilentlyContinue) -and ($env:COMPUTERNAME -in $computerWithProfile)) {
+    [Void][System.IO.Directory]::CreateDirectory($customDstFolder)
+    Copy-Item $commitHistorySrc $customDstFolder -Force -Confirm:$false
+}
+
+
+
+
+
+#
 # SYNCHRONIZACE PS PROFILU
 #
 
@@ -438,11 +458,6 @@ if (!(Test-Path $customConfigScript -ErrorAction SilentlyContinue)) {
 # nastaveni Custom sekce schvalne definuji v samostatnem souboru kvuli lepsi prehlednosti a editovatelnosti
 "Dot sourcing customConfig.ps1 (to import variable `$customConfig)"
 . $customConfigScript
-
-# zdrojova slozka custom dat
-$customSrcFolder = Join-Path $repoSrc "Custom"
-# cilova slozka custom dat
-$customDstFolder = Join-Path $env:systemroot "Scripts"
 
 # objekty reprezentujici Custom slozky, ktere se maji kopirovat na tento stroj
 $thisPCCustom = @()

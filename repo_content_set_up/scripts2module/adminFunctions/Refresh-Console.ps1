@@ -130,6 +130,13 @@ function Refresh-Console {
         Write-Warning "Pro opetovne nacteni PS profilu je potreba spustit novou konzoli"
 
         #
+        # poznacim aktualni commit, kvuli zobrazeni o kolik commitu je konzole pozadu v jejim Title (viz profile.ps1 Prompt)
+        $commitHistoryPath = "$env:SystemRoot\Scripts\commitHistory"
+        if ($consoleCommit = Get-Content $commitHistoryPath -First 1 -ErrorAction SilentlyContinue) {
+            $null = New-ItemProperty HKCU:\Software -Name "consoleCommit_$PID" -PropertyType string -Value $consoleCommit -Force
+        }
+
+        #
         # nastaveni aktualnich sys. promennych vcetne PATH
         # vykradeno z https://github.com/chocolatey/choco/blob/stable/src/chocolatey.resources/helpers/functions/Update-SessionEnvironment.ps1
 
