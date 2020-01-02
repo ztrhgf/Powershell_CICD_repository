@@ -65,6 +65,9 @@ In case you found any bug or have improvement suggestion, please contact me at z
 
 
 
+## [2.0.15] - 2020-01-02
+### Bug fixes
+- output git errors in repo_sync.ps1 as error objects, so try{} catch{} block works as exptected
 
 ## [2.0.14] - 2019-12-18
 ### Added
