@@ -720,7 +720,9 @@ function _exportScriptsToModule {
                 [void]$p.Start()
                 # $p.WaitForExit() # s timto pokud git show HEAD:$file neco vratilo, se proces nikdy neukoncil..
                 $p.StandardOutput.ReadToEnd()
-                $p.StandardError.ReadToEnd()
+                if ($err = $p.StandardError.ReadToEnd()) {
+                    Write-Error $err
+                }
             }
 
             Set-Location $scriptFolder
