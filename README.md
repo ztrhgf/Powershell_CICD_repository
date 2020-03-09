@@ -65,6 +65,12 @@ In case you found any bug or have improvement suggestion, please contact me at z
 
 
 
+## [2.0.17] - 2020-03-09
+### Changed
+- translation of profile.ps1
+### Bug fixes
+- another fix for showing "how many commits behind" number in ISE title
+
 ## [2.0.16] - 2020-03-09
 ### Bug fixes
 - fixed showing "how many commits behind" number in ISE title
