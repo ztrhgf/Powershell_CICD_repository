@@ -1,43 +1,38 @@
 <#
 
-GLOBALNI POWERSHELL PROFILE
+GLOBAL POWERSHELL PROFILE
 
-- slouzi k nastaveni PS konzole
-    tzn importu pouzivanych skriptu, modulu, promennych, definovani per user funkci, ...
-
-- kopiruje se na klientech do %WINDIR%\System32\WindowsPowershell\v1.0 tzn jde o globalni PS profil
-- kopiruje se pouze na klienty uvedene v promenne $computerWithProfile definovane v modulu Variables
-    a to pomoci GPO "PS_env_set_up"
-
-! tento profil ovlivnuje pouze lokalni session, ne remote !
-
-!!! piste jej tak, aby nic nespoustel ci needitoval !!!
+- intended for unifying company admins Powershell experience
+    - setting console GUI, importing Variables module, defining per-user functions etc
+- is automatically copied to computers listed in $computerWithProfile variable (defined in Variables module)
+    - to %WINDIR%\System32\WindowsPowershell\v1.0 ie its gloval powershell profile
+- is applied only in local session, no remote
+- when editing, BE VERY CAREFUL, because it is basically script, that will be run on every console start!
 
 #>
 
-
-# nema smysl spoustet pro startup skripty, sched. task skripty atd, ktere bezi pod systemovymi ucty
-$whoami = whoami.exe
+# don't apply to system accounts
+$whoami = whoami
 if ($whoami -in "NT AUTHORITY\SYSTEM", "NT AUTHORITY\NETWORK SERVICE", "NT AUTHORITY\LOCAL SERVICE") { return }
+
 $local_user = $env:USERDOMAIN -eq $env:COMPUTERNAME
 
-#
-# aby jako pracovni adresar byla cesta do profilu uzivatele, pod kterym konzole bezi
+# set working directory to user profile
 Set-Location $env:USERPROFILE
 
 
 
 #
-# customizace chovani psreadline rozsireni
+# customization of PSReadline
 #
 
 try {
-    # aby TAB doplnoval i jmena souboru v adresari
+    # enable TAB completion of files in actual working directory
     Set-PSReadLineKeyHandler -Key Tab -Function MenuComplete -ErrorAction Stop # nebo Complete
-    # identicke prikazy spustene vickrat po sobe se budou zobrazovat v historii pouze jednou
+    # no duplicity in command history
     Set-PSReadLineOption -HistoryNoDuplicates:$True -ErrorAction Stop
-    # co se smi ulozit do historie prikazu
-    # obecne ignoruji veci kolem hesel
+    # limit what can be saved in command history
+    # becauase of security prohibit command with parameters, that can contain plaintext passwords
     Set-PSReadLineOption -AddToHistoryHandler {
         Param([string]$line)
         if ($line -notmatch "runas|admpwd|-pswd ") {
@@ -47,33 +42,27 @@ try {
         }
     } -ErrorAction Stop
 } catch {
-    "nepodarilo se nastavit PSReadline"
+    "unable to configure PSReadline"
 }
 
 
 
 
 #
-# customizace vychozich parametru fci
+# customization of default function parameters
 #
 
 $PSDefaultParameterValues = @{
-    # ulozeni vystupu posledniho prikazu do $__
+    # save output of last command to variable $__
     'Out-Default:OutVariable' = '__'
 }
-# $PSDefaultParameterValues.Clear() # komplet zruseni
-# $PSDefaultParameterValues.Add('Disabled', $true) # docasne zakazani obsahu $PSDefaultParameterValues
-# $PSDefaultParameterValues.Remove('Disabled') # opetovne povoleni obsahu $PSDefaultParameterValues
-
 
 
 
 #
-# TAB completition
+# dynamic TAB completion of parameter values
 #
-
-# doplneni dynamicky ziskane hodnoty ve vybranych parametrech vybranych funkci stiskem TAB
-#__TODO__ replace used LDAP:// paths according to your organization, otherwise TAB completition wont work
+#__TODO__ replace used LDAP:// paths according to your organization or you can delete this section completely :)
 
 $computerSB = {
     param ($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
@@ -82,84 +71,37 @@ $computerSB = {
     ($searcher.findall() | ? { $_.properties.name -match $wordToComplete -or $_.properties.description -match $wordToComplete }).properties.name  | Sort-Object | % { "'$_'" }
     $searcher.Dispose()
 }
-# TAB doplneni jmena domenoveho stroje do computerName parametru v jakemkoli prikazu z modulu Scripts
-# zadany string hleda jak v name, tak description
+# TAB completion of AD computer names in computerName parameter of any command from module Scripts, ..
+# given string (on which TAB was used) is searched in name and description of AD computer accounts
 Register-ArgumentCompleter -CommandName ((Get-Command -Module Scripts).name) -ParameterName computerName -ScriptBlock $computerSB
-# TAB doplneni jmena domenoveho stroje do identity parametru v prikazech z modulu ActiveDirectory, ktere pracuji s computer objekty
+# TAB completion of AD computer names in identity parameter of commands with "computer" in their name from module ActiveDirectory
 Register-ArgumentCompleter -CommandName ((Get-Command -Module ActiveDirectory -Noun *computer*).name) -ParameterName identity -ScriptBlock $computerSB
 
-$serverSB = {
-    param ($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
-
-    $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"LDAP://OU=Servers,DC=kontoso,DC=com"), '(objectCategory=computer)', ('name', 'description'))
-    ($searcher.findall() | ? { $_.properties.name -match $wordToComplete -or $_.properties.description -match $wordToComplete }).properties.name  | Sort-Object | % { "'$_'" }
-    $searcher.Dispose()
-}
-# ukazka omezeni TAB doplneni computerName parametru na jmena serveru (ve vybranych funkcich)
-# zadany string hleda jak v name, tak description
-Register-ArgumentCompleter -CommandName Invoke-MSTSC -ParameterName computerName -ScriptBlock $serverSB
-
-$clientSB = {
-    param ($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
-
-    $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"LDAP://OU=Clients,DC=kontoso,DC=com"), '(objectCategory=computer)', ('name'))
-    ($searcher.findall()).properties.name | ? { $_ -match $wordToComplete } | Sort-Object | % { "'$_'" }
-    $searcher.Dispose()
-}
-# ukazka omezeni automatickeho doplneni computerName parametru na jmena klientskych stroju (ve vybranych funkcich)
-Register-ArgumentCompleter -CommandName Assign-Computer -ParameterName computerName -ScriptBlock $clientSB
-
-$userSB = {
-    param ($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
-
-    $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"LDAP://OU=User,DC=kontoso,DC=com"), '(objectCategory=user)', ('name', 'samaccountname'))
-    ($searcher.findall() | ? { $_.properties.name -match $wordToComplete }).properties.samaccountname | Sort-Object | % { "'$_'" }
-    $searcher.Dispose()
-}
-# TAB doplneni userName parametru na user login v jakemkoli prikazu z modulu Scripts
-Register-ArgumentCompleter -CommandName ((Get-Command -Module Scripts).name) -ParameterName userName -ScriptBlock $userSB
-# TAB doplneni identity parametru na user login v prikazech z modulu ActiveDirectory, ktere pracuji s user objekty
-Register-ArgumentCompleter -CommandName ((Get-Command -Module ActiveDirectory -Noun *user*).name) -ParameterName identity -ScriptBlock $userSB
-
-$groupSB = {
-    param ($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
-
-    $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"LDAP://OU=Groups,DC=kontoso,DC=com"), '(objectCategory=group)', ('name', 'description'))
-    ($searcher.findall() | ? { $_.properties.name -match $wordToComplete -or $_.properties.description -match $wordToComplete }).properties.name | Sort-Object | % { "'$_'" }
-    $searcher.Dispose()
-}
-# TAB doplneni identity parametru na group name v prikazech z modulu ActiveDirectory, ktere pracuji s group objekty
-Register-ArgumentCompleter -CommandName ((Get-Command -Module ActiveDirectory -Noun *group*).name) -ParameterName identity -ScriptBlock $groupSB
-
 
 
 
 #
-# import modulu
+# import Variables module
 #
-
 if (!$local_user) {
-    #
-    # nactu promenne z Variables modulu
     Import-Module Variables
 }
 
 
-
-
 #
-# customizace vzhledu konzole
+# customization console Title and prompt
 #
 
-# poznacim commit, ktery byl aktualni pri spusteni konzole
+# save commit identifier which was actual when this console start to user registry
+# to be able later compare it with actual system commit
 $commitHistoryPath = "$env:SystemRoot\Scripts\commitHistory"
 $keyName = "consoleCommit_$PID"
 $keyPath = "HKCU:\Software"
 if ($consoleCommit = Get-Content $commitHistoryPath -First 1 -ErrorAction SilentlyContinue) {
     $null = New-ItemProperty $keyPath -Name $keyName -PropertyType string -Value $consoleCommit -Force
 }
-# promazu reg. zaznamy k jiz neexistujicim konzolim (poznam dle PIDu)
-$pssId = Get-Process powershell | select -exp id
+# cleanup of registry records, for not existing console processes (identified by PID)
+$pssId = Get-Process powershell, powershell_ise | select -exp id
 Get-Item $keyPath | select -exp property | % {
     $id = ($_ -split "_")[-1]
     if ($id -notin $pssId) {
@@ -167,7 +109,7 @@ Get-Item $keyPath | select -exp property | % {
     }
 }
 
-# zobrazeni o kolik commitu pozadu je tato konzole
+# function for showing, how many commits is this console behind the system state
 function _commitDelay {
     $space = "   "
     try {
@@ -191,7 +133,7 @@ function _commitDelay {
     return ($space + "(>" + $commitHistory.count + ")")
 }
 
-# uprava Title konzole
+# Title customization
 $title = ''
 $space = "      "
 $identity = [Security.Principal.WindowsIdentity]::GetCurrent() ; $principal = [Security.Principal.WindowsPrincipal] $identity
@@ -199,13 +141,11 @@ if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")
 $title += ($env:USERNAME).toupper()
 $title += $space + (_commitDelay) + $space + (Get-Location).path
 $Host.UI.RawUI.Windowtitle = $title
-# uprava promptu
+# Prompt customization
 function prompt {
-    # aktualizace cesty a poctu commitu o ktere je konzole pozadu v title
     $titleItems = $Host.UI.RawUI.Windowtitle -split "\s+"
     $Host.UI.RawUI.Windowtitle = (($titleItems | Select-Object -First ($titleItems.count - 2)) -join " ") + $space + (_commitDelay) + $space + (Get-Location).path
 
-    # barevne odliseni podle toho jak privilegovany ucet konzoli spustil
     $color = "white"
     if ($env:USERNAME -match "^adm_") {
         $color = "red"
@@ -219,16 +159,14 @@ function prompt {
 
 
 #
-# aliasy
+# aliases
 #
 
 Set-Alias es Enter-PSSession
 
 
-
-
 #
-# per user nastaveni
+# per user settings
 #
 
 # just examples, how you can make per user changes
