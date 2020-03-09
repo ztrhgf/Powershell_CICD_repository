@@ -170,7 +170,9 @@ Get-Item $keyPath | select -exp property | % {
 # zobrazeni o kolik commitu pozadu je tato konzole
 function _commitDelay {
     $space = "   "
-    $consoleCommit = Get-ItemPropertyValue $keyPath -Name $keyName -ea SilentlyContinue
+    try {
+        $consoleCommit = Get-ItemPropertyValue $keyPath -Name $keyName -ea Stop
+    } catch { }
     if (!$consoleCommit -or !(Test-Path $commitHistoryPath -ea SilentlyContinue)) {
         return "$space(*unknown*)"
     }
