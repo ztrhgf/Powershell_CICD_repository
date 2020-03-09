@@ -101,7 +101,7 @@ if ($consoleCommit = Get-Content $commitHistoryPath -First 1 -ErrorAction Silent
     $null = New-ItemProperty $keyPath -Name $keyName -PropertyType string -Value $consoleCommit -Force
 }
 # cleanup of registry records, for not existing console processes (identified by PID)
-$pssId = Get-Process powershell, powershell_ise | select -exp id
+$pssId = Get-Process powershell, powershell_ise -ErrorAction SilentlyContinue | select -exp id
 Get-Item $keyPath | select -exp property | % {
     $id = ($_ -split "_")[-1]
     if ($id -notin $pssId) {
