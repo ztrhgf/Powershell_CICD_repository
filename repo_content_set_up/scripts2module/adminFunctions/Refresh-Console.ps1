@@ -1,37 +1,40 @@
 function Refresh-Console {
     <#
     .SYNOPSIS
-    Funkce slouzi k aktualizace Powershell prostredi.
+    Use this function for forcing update of central repository data on MGM server, DFS repository share and on given computer ie downloading new repository data (modules, functions and variables) and importing them to this console.
 
     .DESCRIPTION
-    Funkce slouzi k aktualizace Powershell prostredi.
-    Ve vychozim nastaveni provede:
-    - update DFS repo (Cloud repo >> DFS)
-    - update lokalniho prostredi (DFS >> klient)
-    - refresh PS konzole, ze ktere doslo ke spusteni funkce, tzn nacte nove verze modulu a sys. promennych (pokud nespoustite vuci remote stroji)
+    Use this function for forcing update of central repository data on MGM server, DFS repository share and on given computer ie downloading new repository data (modules, functions and variables) and importing them to this console.
+
+    Default behaviour:
+    - pull new data to MGM server repository from cloud repository, than
+    - update data in DFS repository share, than
+    - download actual data from DFS repository to this client, than
+    - import actual data to this running Powershell console
+        - update of $env:PATH included
 
     .PARAMETER justLocalRefresh
-    Pro vynechani aktualizace DFS repo.
-    Tzn dojde pouze ke stazeni zmen DFS >> klient, ale ne Cloud repo >> DFS.
+    Skip update of MGM and DFS repository ie just download actual content from DFS repository.
 
     .PARAMETER computerName
-    Remote stroj, na kterem se ma provest update PS prostredi.
-    PS konzole na danem stroji se neupdatuji!
+    Remote computer where you want to sync new data.
+    Powershell consoles won't be updated, so users will have to close and reopen them!
 
     .EXAMPLE
-    ref -verbose
+    Refresh-Console -verbose
 
-    Provede update DFS repo, nasledne lokalnich PS dat a nakonec provede refresh konzole a vypise, co vse se znovu naimportovalo.
+    Start update of MGM server repository, than DFS repository and in the end download data from DFS to this client and import them to this console.
+    Output verbose information to console.
 
     .EXAMPLE
     ref -computerName APP-15
 
-    Provede update DFS repo (z Cloud repo) a nasledne lokalnich PS dat na APP-15 (z DFS).
+    Start update of MGM server repository, than DFS repository and in the end download data from DFS to APP-15 client.
 
     .EXAMPLE
-    ref -computerName APP-15 -justLocalRefresh
+    Refresh-Console -computerName APP-15 -justLocalRefresh
 
-    Provede stazeni dat z DFS repo na APP-15. Bez provedeni updatu samotneho DFS z Cloud Repo.
+    Skip update of MGM server repository and DFS repository and just download data from DFS to APP-15 client.
     #>
 
     [cmdletbinding()]
@@ -59,15 +62,15 @@ function Refresh-Console {
         [Environment]::GetEnvironmentVariable($Name, $Scope)
     }
 
-
     #
-    # vynuceni stazeni nejaktualnejsich dat z GIT repo do DFS repo
+    # update of MGM and DFS repository
     if (!$justLocalRefresh) {
+        # user want most actual data
         try {
             Invoke-Command -ComputerName $RepoSyncServer {
                 $taskName = "Repo_sync"
                 Start-ScheduledTask $taskName
-                Write-Host "Cekam na dokonceni aktualizace DFS repo, max vsak 60 sekund"
+                Write-Host "Waiting for end of DFS repository data sync, maximum wait time is 60 seconds"
                 $count = 0
                 while (((Get-ScheduledTask $taskName -errorAction silentlyContinue).state -ne "Ready") -and $count -le 600) {
                     Start-Sleep -Milliseconds 100
@@ -75,22 +78,20 @@ function Refresh-Console {
                 }
             } -ErrorAction stop
         } catch {
-            Write-Warning "Nepodarilo se provest aktualizaci DFS repozitare"
+            Write-Warning "Unable to finish update of DFS repository data"
         }
     } else {
-        Write-Warning "Preskocili jste stazeni aktualnich dat do DFS repozitare"
+        Write-Warning "You skipped update of DFS repository data"
     }
 
 
     #
-    # aktualizace PS prostredi == spusteni sched tasku kvuli stazeni aktualniho obsahu z remote repozitare
+    # update of client data ie starting sched. task PS_env_set_up which will download actual data from DFS repository
     if (!$computerName) {
-        # delam lokalne
-        # stahnu aktualni data z DFS a provedu refresh konzole
         $command = @'
     $taskName = "PS_env_set_up"
     Start-ScheduledTask $taskName
-    echo "Cekam na dokonceni aktualizace PS prostredi, max vsak 30 sekund"
+    echo "Waiting for end of local data update, maximum wait time is 30 seconds"
     $count = 0
     while (((Get-ScheduledTask $taskName -errorAction silentlyContinue).state -ne "Ready") -and $count -le 300) {
         Start-Sleep -Milliseconds 100
@@ -107,11 +108,11 @@ function Refresh-Console {
         }
 
         if (-not (([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))) {
-            # ne-admin konzole
+            # non-admin console ie I need to invoke new admin console to have enough permission to start PS_env_set_up sched. task
             $pParams.Verb = "runas"
             $pParams.Wait = $true
         } else {
-            # admin konzole
+            # admin console ie I have enough permission to start PS_env_set_up sched. task here
             $pParams.NoNewWindow = $true
         }
 
@@ -119,68 +120,67 @@ function Refresh-Console {
             Start-Process @pParams
         } catch {
             if ($_ -match "The operation was canceled by the user") {
-                Write-Warning "Preskocili jste stazeni aktualnich dat z remote repozitare"
+                Write-Warning "You have skipped update of local client data"
             } else {
                 Write-Error $_
             }
         }
 
-        #
-        # znovu nacteni ps profilu
-        Write-Warning "Pro opetovne nacteni PS profilu je potreba spustit novou konzoli"
+        Write-Warning "To apply changes made in Powershell Profile you will have to open new PS console"
 
         #
-        # poznacim aktualni commit, kvuli zobrazeni o kolik commitu je konzole pozadu v jejim Title (viz profile.ps1 Prompt)
+        # update registry entry, that store commit identifier which was actual when this console started/was updated
+        # to be able later compare it with actual system commit state and show number of commits behind in console Title (more about this in profile.ps1)
         $commitHistoryPath = "$env:SystemRoot\Scripts\commitHistory"
         if ($consoleCommit = Get-Content $commitHistoryPath -First 1 -ErrorAction SilentlyContinue) {
             $null = New-ItemProperty HKCU:\Software -Name "consoleCommit_$PID" -PropertyType string -Value $consoleCommit -Force
         }
 
         #
-        # nastaveni aktualnich sys. promennych vcetne PATH
-        # vykradeno z https://github.com/chocolatey/choco/blob/stable/src/chocolatey.resources/helpers/functions/Update-SessionEnvironment.ps1
+        # update of system environment variables (PATH included)
+        # inspired by https://github.com/chocolatey/choco/blob/stable/src/chocolatey.resources/helpers/functions/Update-SessionEnvironment.ps1
 
-        # User je schvalne posledni, aby v pripade konfliktu vyhrala jeho nastaveni nad systemovymi
-        'Process', 'Machine', 'User' | ForEach-Object {
+        # User scope is last on purpose, to overwrite other scopes in case of conflict
+        'Process', 'Machine', 'User' | % {
             $scope = $_
-            Get-EnvironmentVariableNames -Scope $scope | ForEach-Object {
-                Write-Verbose "Nastavuji promennou $_"
+            Get-EnvironmentVariableNames -Scope $scope | % {
+                Write-Verbose "Setting variable $_"
                 Set-Item "Env:$($_)" -Value (Get-EnvironmentVariable -Scope $scope -Name $_)
             }
         }
 
-        # do PATH v konzoli ulozim jak obsah systemove, tak uzivatelske
-        Write-Verbose "`nNastavuji promennou PATH"
-        $paths = 'Machine', 'User' | ForEach-Object {
+        # save content of system and user PATH into console variable Env:PATH
+        Write-Verbose "`nSetting variable PATH"
+        $paths = 'Machine', 'User' | % {
             (Get-EnvironmentVariable -Name 'PATH' -Scope $_) -split ';'
         } | Select-Object -Unique
         $Env:PATH = $paths -join ';' -replace ";;", ";"
 
 
-        # kdyby nahodou v prubehu doslo k uprave techto promennych (jakoze se to deje)
-        # tak vratim hodnoty pred provedenim ref
+        #
+        # because some variables values are replaced by incorrect values by this update process, replace them by correct one
         if ($userName) { $env:USERNAME = $userName }
         if ($architecture) { $env:PROCESSOR_ARCHITECTURE = $architecture }
         $env:PSModulePath = $psModulePath
 
 
         #
-        # znovunacteni aktualne nactenych modulu
-        $importedModule = (Get-Module).name | Where-Object { $_ -notmatch "^tmp_" }
+        # reimport of currently loaded PS modules
+        # just modules that can be updated by this CI/CD solution, so just System modules
+        $importedModule = Get-Module | where { $_.name -notmatch "^tmp_" -and $_.path -like "$env:SystemRoot\System32\WindowsPowerShell\v1.0\Modules\*" } | select -exp name
         if ($importedModule) {
-            Write-Verbose "`nOdstranuji nactene moduly"
+            Write-Verbose "`nRemove loaded modules"
             $importedModule | Remove-Module -Force -Confirm:$false -WarningAction SilentlyContinue
-            Write-Verbose "`nZnovu importuji moduly: $($importedModule.name -join ', ')"
+            Write-Verbose "`nReimport modules again: $($importedModule.name -join ', ')"
             $importedModule | Import-Module -force -Global -WarningAction SilentlyContinue
         }
     } else {
-        # zadal computerName, spustim sched. task pro stazeni aktualnich dat z DFS na danem stroji
-        # PS konzole neaktualizuji
+        # update should be started on remote computer
         try {
             Invoke-Command -ComputerName $computerName {
                 $taskName = "PS_env_set_up"
                 Start-ScheduledTask $taskName -ErrorAction Stop
-                Write-Host "Cekam na dokonceni aktualizace PS prostredi na $env:COMPUTERNAME, max vsak 30 sekund"
+                Write-Host "Waiting for end of local data update on $env:COMPUTERNAME, maximum wait time is 30 seconds"
                 $count = 0
                 while (((Get-ScheduledTask $taskName -errorAction silentlyContinue).state -ne "Ready") -and $count -le 300) {
                     Start-Sleep -Milliseconds 100
@@ -189,9 +189,9 @@ function Refresh-Console {
             } -ErrorAction stop
         } catch {
             if ($_ -match "The system cannot find the file specified") {
-                Write-Warning "Nepodarilo se provest aktualizaci PS prostredi, protoze synchronizacni sched. task nebyl nalezen.`nMa stroj $computerName pravo na sebe aplikovat GPO PS_env_set_up?"
+                Write-Warning "Unable to finish the update on $env:COMPUTERNAME, because sched. task $taskName wasn't found.`nIs GPO PS_env_set_up linked to this computer?"
             } else {
-                Write-Warning "Nepodarilo se provest aktualizaci PS prostredi.`nChyba byla:`n$_"
+                Write-Warning "Unable to finish the update on $env:COMPUTERNAME.`nError was:`n$_"
             }
         }
     }
