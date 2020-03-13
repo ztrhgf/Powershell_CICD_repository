@@ -69,6 +69,7 @@ In case you found any bug or have improvement suggestion, please contact me at z
 - translation of customConfig.ps1
 - translation of modulesConfig.ps1
 - translation of repo_sync.ps1
+- translation of PS_env_st_up.ps1
 
 ## [2.0.17] - 2020-03-09
 ### Changed
