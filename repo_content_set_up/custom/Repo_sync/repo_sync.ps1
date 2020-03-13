@@ -1,16 +1,15 @@
 <#
-    .SYNOPSIS
-    script is inteded for processing of cloud repository content and distribution that content to DFS repository
+    script is processing GIT cloud repository content and distribute clients part to DFS share (read only share from which clients will download content to themselves)
     how it works:
-    - pull/clone cloud repository locally
+    - pull/clone GIT cloud repository locally
     - process cloned content (generate PSM modules from scripts2module, copy Custom content to shares,..)
     - copy processed content which is intended for clients to shared folder (DFS)
 
-    BEWARE, repo_puller account has to have alternate credentials created in cloud GIT repository and these credentials has to be exported to login.xml (under account which is used to run this script)
-    
+    BEWARE, repo_puller account used to pull data from GIT repository has to have 'alternate credentials' created and these credentials has to be exported to login.xml (under account which is used to run this script ie SYSTEM)
+        
     .NOTES
     Author: Ondřej Šebela - ztrhgf@seznam.cz
-    #>
+#>
 
 # for debugging purposes
 Start-Transcript -Path "$env:SystemRoot\temp\repo_sync.log" -Force
@@ -19,18 +18,19 @@ $ErrorActionPreference = "stop"
 
 $logFolder = Join-Path $PSScriptRoot "Log"
 
-# nekdy se stavalo, ze pod SYSTEM uctem nefungoval autoload funkci z modulu
+# explicit import because sometimes it happened, that function autoload won't work
 Import-Module Scripts -Function Send-Email -ErrorAction SilentlyContinue
 
-# aby nespamovalo v pripade chyby, umoznuji poslat max 1 mail za 30 minut
+# to avoid spamming, just one email per 30 minutes can be send
 $lastSendEmail = Join-Path $logFolder "lastSendEmail"
 $treshold = 30
 
+# path to DFS share, where processed content will be copied
 $destination = "__TODO__" # UNC path to DFS repository (ie.: \\myDomain\dfs\repository)
 
-# skupina ktera ma pravo cist obsah DFS repozitare (i lokalni kopie)
+# AD group that has READ right on DFS share
 [string] $readUser = "repo_reader"
-# skupina ktera ma pravo editovat obsah DFS repozitare (i lokalni kopie)
+# AD group that has MODIFY right on DFS share
 [string] $writeUser = "repo_writer"
 
 #__TODO__ configure and uncomment one of the rows that initialize variable $signingCert, if you want automatic code signing to happen (using specified certificate)
@@ -39,42 +39,40 @@ $destination = "__TODO__" # UNC path to DFS repository (ie.: \\myDomain\dfs\repo
 # USE ONLY IF YOU KNOW, WHAT ARE YOU DOING
 # tutorial how to create self signed certificate http://woshub.com/how-to-sign-powershell-script-with-a-code-signing-certificate/
 # set correct path to signing certificate and uncomment to start signing
+# $signingCert = Get-PfxCertificate -FilePath C:\Test\Mysign.pfx # something like this, if you want to use locally stored pfx certificate
 # $signingCert = (Get-ChildItem cert:\LocalMachine\my –CodeSigningCert)[0] # something like this, if certificate is in store
 if ($signingCert -and $signingCert.EnhancedKeyUsageList.friendlyName -ne "Code Signing") {
     throw "Certificate $($signingCert.DnsNameList) is not valid Code Signing certificate"
 }
 
 #
-# pomocne funkce
+#region helper function
 function _updateRepo {
     <#
     .SYNOPSIS
-        Funkce pro nakopirovani lokalnich !commitnutych! zmen z GIT repozitare do naseho remote DFS repozitare.
-        Standardne resi vykopirovani pouze zmen z posledniho commitu. Pokud chcete full synchronizaci, pouzijte -Force.
-        Preskoci soubory, ktere jsou rozpracovane (modifikovane, ale necomitnute ci untracked).
+        Function used to process and copy local commited changes from local GIT repository to DFS share.
+        Automatically skip modified but not commited or untracked files.
 
     .DESCRIPTION
-        Funkce pro nakopirovani lokalnich !commitnutych! zmen z GIT repozitare do naseho remote DFS repozitare.
-        Standardne resi vykopirovani pouze zmen z posledniho commitu. Pokud chcete full synchronizaci, pouzijte -Force.
-        Preskoci soubory, ktere jsou rozpracovane (modifikovane, ale necomitnute ci untracked).
+        Function used to process and copy local commited changes from local GIT repository to DFS share.
+        Automatically skip modified but not commited or untracked files.
 
-        - Ze skriptu ve slozkach ulozenych v scripts2module se generuji PS moduly do \Modules\.
-            Tzn samotne skripty z scripts2module se do DFS repo nekopiruji
-        - Obsah Modules se kopiruje do Modules v DFS repozitari.
-        - Obsah scripts2root se kopiruje do rootu DFS repozitare.
-        - Obsah Custom se kopiruje do Custom v DFS repo (a odtud potom na zadane servery dle zadani v customConfig.ps1)
+        - from ps1 scripts in folders that are in scripts2module generates Powershell modules to \Modules\.
+        - content of Modules folder is copied to Modules in DFS share
+        - content of scripts2roor is copied to root of DFS share
+        - content of Custom folder is copied to Custom in DFS share
 
-        Vychozi chovani je takove, ze se kopiruji i nezmenene veci (abych prepsal pripadne zmeny, ktere nekdo provedl primo v DFS)
+        Function copies all files, not just changed one to replace possible modifications, that someone could have made in DFS share.
 
     .PARAMETER source
-        Cesta k lokalne ulozenemu GIT repozitari.
+        Path to locally cloned GGIT repository.
 
     .PARAMETER destination
-        Cesta do centralniho (DFS) repozitare.
+        Path to DFS share which should contain clients repository data.
 
     .PARAMETER force
-        Vykopiruje vsechny soubory, at uz doslo k jejich modifikaci ci nikoli.
-        Stale se vsak preskoci soubory, ktere jsou rozpracovane (modifikovane, ale necomitnute ci untracked)!
+        Force copy of all repository sections, not just changed one.
+        Not commited and untracked files are still skipped.
 
     .EXAMPLE
         _updateRepo -source C:\DATA\repo\Powershell\ -destination \\somedomain\repository
@@ -99,15 +97,15 @@ function _updateRepo {
         [switch] $force
     )
 
-    # Test-Path hrozne dlouho timeoutuje, pro zrychleni kontroluji jestli je toto pc vubec v domene (takovy nazev se da cekat bude obsahovat tecku)
+    # quick check, that this PC is in domain
     $inDomain = (Get-WmiObject Win32_ComputerSystem).Domain -match "\."
-    # cesta, kam se lokalne generuji psm moduly (odtud se pote kopiruji do centralniho repozitare)
+    # local destination to which function should generate Powershell modules
     $modules = Join-Path $source "modules"
-    # kam se maji moduly v ramci centralniho repozitare nakopirovat
+    # DFS share destination to which function should copy all Powershell modules
     $destModule = Join-Path $destination "modules"
-    # cesta obsahuje slozky se skripty, ze kterych se generuji moduly
+    # local path to folder from which Powershell modules should be generated
     $scripts2module = Join-Path $source "scripts2module"
-    # cesta ke slozce jejiz obsah se kopiruje do korene DFS repozitare
+    # local path to folder shich content should be copied to root of DFS share
     $scripts2root = Join-Path $source "scripts2root"
 
     $somethingChanged = 0
@@ -119,28 +117,27 @@ function _updateRepo {
 
 
     #
-    # zjistim rozdelane a smazane soubory
+    # get modified and deleted files
     #
 
-    # bude obsahovat soubory, ktere nelze kvuli jejich stavu rozkopirovat
+    # variable will contain files, that cannot be copied to DFS share
     $unfinishedFile = @()
-    # ziskam potrebna data prikazem git
     $location = Get-Location
     Set-Location $source
     try {
-        # stav lokalniho repozitare vuci remote repozitari
+        # locally cloned GIT repository state
         $repoStatus = git status -uno
-        # seznam nepushnutych commitu
+        # unpushed commits
         $unpushedCommit = git log origin/master..HEAD
-        # soubory v poslednim commitu
+        # files in last commit
         $commitedFile = @(git show HEAD --pretty="" --name-only)
-        # deleted soubory v poslednim commitu
+        # deleted files in last commit
         $commitedDeletedFile = @(git show HEAD --pretty="" --name-status | ? { $_ -match "^D\s+" } | % { $_ -replace "^D\s+" })
-        # deleted, ale ne v staging area soubory
+        # deleted files not in staging area
         $uncommitedDeletedFile = @(git ls-files -d)
-        # modifikovane, ale ne v staging area soubory (vypisuje i smazane)
+        # modified and deleted files not in staging area
         $unfinishedFile += @(git ls-files -m)
-        # untracked soubory (dosud nikdy commitnute)
+        # untracked files
         $unfinishedFile += @(git ls-files --others --exclude-standard)
     } catch {
         $err = $_
@@ -155,40 +152,38 @@ function _updateRepo {
     Set-Location $location
 
     #
-    # kontrola, ze repo obsahuje aktualni data
-    # tzn nejsem pozadu za remote repozitarem
+    # check that local repository contains most recent data
     if ($repoStatus -match "Your branch is behind") {
         throw "Repository doesn't contain actual data. Pull them using command 'git pull' (Sync in VSC editor) and run again"
     }
 
-    # ulozim jestli pouzil force prepinac
     $isForced = ($PSBoundParameters.GetEnumerator() | ? { $_.key -eq "force" }).value.isPresent
 
     if (!$unpushedCommit -and $isForced -ne "True") {
         Write-Warning "`nIn repository there is none unpushed commit. Function will copy just changes from last commit.`nIf you want to copy all, use -force switch`n`n"
     }
 
-    # git prikazy vraci s unix lomitky, zmenim na zpetna
+    # git command return path with /, replace to \
     $unfinishedFile = $unfinishedFile -replace "/", "\"
     $commitedFile = $commitedFile -replace "/", "\"
     $commitedDeletedFile = $commitedDeletedFile -replace "/", "\"
     $uncommitedDeletedFile = $uncommitedDeletedFile -replace "/", "\"
 
-    # ulozim s absolutnimi cestami
+    # full path instead of relative
     $unfinishedFileAbsPath = $unfinishedFile | % { Join-Path $source $_ }
 
     #
-    # vytvorim si string ve tvaru, ktery vyzaduje /XF parametr robocopy
-    # pujde o seznam souboru, ktere chci ignorovat pri kopirovani skrze robocopy (necomitnute zmenene a untracked soubory)
-    # cesty musi byt absolutni a odkazovat na soubory v source adresari
+    # preparation of string in format, that robocopy parameter /XF needs
+    # it will contain file absolute paths, that robocopy will ignore
+    # it has to be source path
     $excludeFile = ""
     if ($unfinishedFileAbsPath) {
         $unfinishedFileAbsPath | % {
             $excludeFile += " " + "`"$_`""
         }
     }
-    # ignorovat musim take smazane, ale necomitnute soubory
-    # ty naopak musi mit cestu odpovidajici cilovemu (destination) souboru, aby nedoslo k jeho smazani
+    # add deleted and uncommited files
+    # it has to be destination path, so robocopy won't delete it
     $folderWithUncommitedDeletedFile = @()
 
     if ($uncommitedDeletedFile) {
@@ -196,13 +191,13 @@ function _updateRepo {
             $file = $_
             $destAbsPath = ""
             if ($file -match "scripts2root\\") {
-                # obsah scripts2root jde primo do rootu DFS
+                # file goes to root
                 $file = Split-Path $file -Leaf
                 $destAbsPath = Join-Path $destination $file
             } elseif ($file -match "scripts2module\\") {
-                # skripty ze kterych se generuji moduly, se do DFS nekopiruji, tzn ignoruji
+                # files from scripts2module are not being copied to DFS share, ignoring
             } else {
-                # cesta v GIT repo odpovida ceste v DFS
+                # path in GIT repository is same as in DFS share
                 $destAbsPath = Join-Path $destination $_
             }
 
@@ -213,8 +208,9 @@ function _updateRepo {
         }
     }
 
-    # a ignorovat musim i adresare, v nichz se neco smazalo (pokud se totiz smaznul komplet cely adresar, tak nestaci mit exclude na jednotlive smazane soubory, protoze by se i tak smazal v cili!)
-    # $excludeFolder teda pouziju u /XD parametru robocopy
+    # also folders, where some files were deleted needs to be ignored
+    # in case whole folder was deleted in source it's not enough to exclude all deleted files from it, robocopy would still delete it
+    # so $excludeFolder will be used as value for /XD robocopy parameter
     $folderWithUncommitedDeletedFile = $folderWithUncommitedDeletedFile | Select-Object -Unique
     $excludeFolder = ""
     if ($folderWithUncommitedDeletedFile) {
@@ -223,7 +219,7 @@ function _updateRepo {
         }
     }
 
-    # prevedu na arraylist, abych mohl snadno pridavat/odebirat prvky
+    # convert to arraylist to be able effectively add/remove items
     [System.Collections.ArrayList] $commitedFile = @($commitedFile)
     [System.Collections.ArrayList] $unfinishedFile = @($unfinishedFile)
 
@@ -231,12 +227,9 @@ function _updateRepo {
 
 
     #
-    # ze seznamu commitnutych souboru odeberu ty, ktere po pridani do staging area uzivatel opet upravil
+    # remove from commited files list files that was modified after addind to staging area
     #
 
-    # uzivatel totiz mohl pridat soubor do staging area, pak soubor zmodifikovat a pak commitnout obsah staging area
-    # kontrolu delam jen proto, abych neexportoval zbytecne modul, do nejz stejne modifikovane skripty nepridam
-    # ! ma smysl kontrolovat pouze pokud commit dosud nebyl pushnut, jinak
     if ($commitedFile) {
         Write-Verbose "Last commit contains these files:`n$($commitedFile -join ', ')"
         $commitedFile2 = $commitedFile.Clone()
@@ -261,9 +254,9 @@ function _updateRepo {
 
 
 
-    
     #
-    # poznacim historii commitu do souboru, abych v PS konzoli mohl ukazat o kolik commitu je pozadu
+    # SAVE COMMITS HISTORY TO FILE IN DFS SHARE ROOT
+    # for clients to be able to determine how many commits behind is their running Powershell console behind client itself
     #
     if ($commitHistory) {
         $commitHistory | Out-File (Join-Path $destination commitHistory) -Force
@@ -273,19 +266,17 @@ function _updateRepo {
 
 
     #
-    # ze skriptu ve slozkach ulozenych v scripts2module vygeneruji psm moduly
-    # a az ten nakopiruji do remote repozitare + ostatni zmenene moduly
+    # GENERATE POWERSHELL MODULES FROM SCRIPTS2MODULE SUBFOLDERS CONTENT
     #
 
-    # do $configHash si znacim, jake moduly se maji (a z ceho generovat) kvuli zavolani funkce _exportScriptsToModule
+    # create special hashtable for function _exportScriptsToModule to know what modules it should generate
     $configHash = @{ }
 
     if ($force) {
-        # pregeneruji vsechny moduly at uz v nich doslo ke zmene ci nikoli
+        # generate all modules no matter they was changed
         Get-ChildItem $scripts2module -Directory | Select-Object -ExpandProperty FullName | % {
             $moduleName = Split-Path $_ -Leaf
             $absPath = $_
-            # prvni pismeno nazvu modulu udelam upper case
             $TextInfo = (Get-Culture).TextInfo
             $moduleName = $TextInfo.ToTitleCase($moduleName)
             $configHash[$absPath] = Join-Path $modules $moduleName
@@ -293,25 +284,24 @@ function _updateRepo {
 
         ++$moduleChanged
     } else {
-        # modul vygeneruji pouze pokud commit obsahuje nejaky ze souboru, ze kterych jej generuji == je potreba update modulu
+        # generate just modules where some change in source script data was made
         $commitedFile | ? { $_ -match "^scripts2module\\" } | % { ($_ -split "\\")[-2] } | Select-Object -Unique | % {
             $moduleName = $_
             $absPath = Join-Path $scripts2module $moduleName
-            # prvni pismeno nazvu modulu udelam upper case
             $TextInfo = (Get-Culture).TextInfo
             $moduleName = $TextInfo.ToTitleCase($moduleName)
             $configHash[$absPath] = Join-Path $modules $moduleName
         }
 
         if ($commitedFile -match "^modules\\") {
-            # doslo ke zmene v nejakem modulu, poznacim, ze se ma rozkopirovat
+            # take a note, that some module was changed
             Write-Output "Some modules changed, copying"
             ++$moduleChanged
         }
     }
 
     #
-    # ze skriptu vygeneruji odpovidajici moduly
+    # generate Powershell modules
     if ($configHash.Keys.count) {
         ++$somethingChanged
 
@@ -320,8 +310,10 @@ function _updateRepo {
 
 
     #
-    # ZESYNCHRONIZUJI OBSAH Modules GIT >> DFS
+    # SYNCHRONIZE CONTENT OF LOCAL MODULES FOLDER TO DFS SHARE
     #
+
+    #region
     if ($moduleChanged -or $configHash.Keys.count) {
         [Void][System.IO.Directory]::CreateDirectory("$destModule")
         if (!(Test-Path $destModule -ErrorAction SilentlyContinue)) {
@@ -332,13 +324,13 @@ function _updateRepo {
 
         Write-Output "### Copying modules to $destModule"
 
-        # z exclude docasne vyradim soubory z automaticky nagenerovanych modulu (z ps1 v scripts2module)
-        # v exclude se mohou objevit proto, ze nebudou uvedeny v .gitignore >> jsou untracked
+        # exclude automatically generated modules from excluded files
+        # they could get into list because of not being listed in .gitignore, therefore are considered as untracked
         if ($configHash.Keys.count) {
             $reg = ""
 
             $configHash.Values | % {
-                Write-Verbose "Don't skip content of $_, its automatically generated module"
+                Write-Verbose "Won't skip content of $_, it's automatically generated module"
                 $esc = [regex]::Escape($_)
                 if ($reg) {
                     $reg += "|$esc"
@@ -356,56 +348,53 @@ function _updateRepo {
             $excludeFile2 = $excludeFile
         }
 
-        # podepsani skriptu
+        # sign Powershell scripts if requested
         if ($signingCert) {
             Get-ChildItem $modules -Recurse -Include *.ps1, *.psm1, *.psd1, *.ps1xml -File | % {
                 Set-AuthenticodeSignature -Certificate $signingCert -FilePath $_.FullName
             }
         }
 
-        # zamerne kopiruji i nezmenene moduly, kdyby nekdo udelal zmenu primo v remote repo, abych ji prepsal
-        # result bude obsahovat smazane soubory a pripadne chyby
-        # pres Invoke-Expression musim delat, aby se spravne aplikoval obsah excludeFile
-        # /S tzn nekopiruji prazdne adresare
+        # copy modules to DFS share
+        # result variable will contain list of deleted files and/or errors
         $result = Invoke-Expression "Robocopy.exe `"$modules`" `"$destModule`" /MIR /S /NFL /NDL /NJH /NJS /R:4 /W:5 /XF $excludeFile2 /XD $excludeFolder"
 
-        # vypisi smazane soubory
+        # output deleted files
         $deleted = $result | ? { $_ -match [regex]::Escape("*EXTRA File") } | % { ($_ -split "\s+")[-1] }
         if ($deleted) {
             Write-Output "Deletion of unnecessary files:`n$($deleted -join "`n")"
         }
 
-        # result by mel obsahovat pouze chybove vypisy
-        # *EXTRA File\Dir jsou vypisy smazanych souboru\adresaru (/MIR)
+        # filter from result all except errors
+        # lines with *EXTRA File\Dir contains deleted files
         $result = $result | ? { $_ -notmatch [regex]::Escape("*EXTRA ") }
         if ($result) {
             Write-Error "There was an error when copying module $($_.name):`n`n$result`n`nRun again command: $($MyInvocation.Line) -force"
         }
 
-        # omezeni NTFS prav
-        # aby mely pristup pouze stroje, ktere maji dany obsah stahnout dle atributu computerName v $modulesConfig
-        # slozky, ktere nemaji definovan computerName budou mit vychozi NTFS prava
-        # pozn. nastavuji pokazde, protoze pokud by v customConfig byly nejake cilove stroje definovany promennou, nemam sanci zjistit jestli se jeji obsah odminula nezmenil
+        # limit NTFS rights on Modules in DFS share
+        # so just computers listed in computerName key in modulesConfig variable can access it
+        # in case computerName is not set NTFS permissions will be reset
+        # do it on every synch cycle because of possibility, that computerName is defined by variable which value could have changed
         "### Setting NTFS rights on modules"
         foreach ($folder in (Get-ChildItem $destModule -Directory)) {
             $folder = $folder.FullName
             $folderName = Split-Path $folder -Leaf
 
-            # pozn.: $modulesConfig jsem dostal dot sourcingem modulesConfig.ps1 skriptu
+            # $modulesConfig was loaded by dot sourcing modulesConfig.ps1 script file
             $configData = $modulesConfig | ? { $_.folderName -eq $folderName }
             if ($configData -and ($configData.computerName)) {
-                # pro danou slozku je definovano, kam se ma kopirovat
-                # omezim nalezite pristup
-
+                # it is defined, where this module should be copied
+                # limit NTFS rights accordingly
                 [string[]] $readUserC = $configData.computerName
-                # computer AD ucty maji $ za svym jmenem, pridam
+                # computer AD accounts end with $
                 $readUserC = $readUserC | % { $_ + "$" }
 
                 " - limiting NTFS rights on $folder (grant access just to: $($readUserC -join ', '))"
                 _setPermissions $folder -readUser $readUserC -writeUser $writeUser
             } else {
-                # pro danou slozku neni definovano, kam se ma kopirovat
-                # zresetuji prava na vychozi
+                # it is not defined, where this module should be copied
+                # reset NTFS rights to default
                 " - resetting NTFS rights on $folder"
                 _setPermissions $folder -resetACL
             }
@@ -413,7 +402,7 @@ function _updateRepo {
     }
 
     #
-    # smazu z remote repo modules prazdne adresare (neobsahuji soubory)
+    # remove empty module folders from DFS share
     Get-ChildItem $destModule -Directory | % {
         $item = $_.FullName
         if (!(Get-ChildItem $item -Recurse -File)) {
@@ -425,20 +414,19 @@ function _updateRepo {
             }
         }
     }
+    #endregion
 
 
 
     #
-    # NAKOPIRUJI OBSAH scripts2root DO KORENE DFS REPO
+    # SYNCHRONIZE CONTENT OF LOCAL SCRIPTS2ROOT FOLDER TO DFS SHARE
     #
 
+    #region
     if ($commitedFile -match "^scripts2root" -or $force) {
-        # doslo ke zmene v adresari scripts2root, vykopiruji do remote repozitare
         Write-Output "### Copying root files from $scripts2root to $destination`n"
 
-        # if ($force) {
-        # zkopiruji vsechny, ktere nejsou modifikovane
-        # zamerne kopiruji i nezmenene, kdyby nekdo udelal zmenu primo v remote repo, abych ji prepsal
+        # copy all files that can be copied
         $script2Copy = (Get-ChildItem $scripts2root -File).FullName | ? {
             if ($unfinishedFileAbsPath -match [regex]::Escape($_)) {
                 return $false
@@ -446,15 +434,6 @@ function _updateRepo {
                 return $true
             }
         }
-        # } else {
-        #     # z $commitedFile uz jsou odfiltrovane modifikovane soubory, netreba dal kontrolovat
-        #     $script2Copy = $commitedFile -match "scripts2root"
-        #     # git vraci relativni cestu, udelam absolutni
-        #     $script2Copy = $script2Copy | % {
-        #         Join-Path $source $_
-        #     }
-        # }
-
         if ($script2Copy) {
             ++$somethingChanged
 
@@ -463,18 +442,18 @@ function _updateRepo {
                 Write-Output (" - " + ([System.IO.Path]::GetFileName("$item")))
 
                 try {
-                    # podepsani skriptu
+                    # signing the script if requested
                     if ($signingCert -and $item -match "ps1$|psd1$|psm1$|ps1xml$") {
                         Set-AuthenticodeSignature -Certificate $signingCert -FilePath $item
                     }
 
                     Copy-Item $item $destination -Force -ErrorAction Stop
 
-                    # u profile.ps1 omezim pristup (skrze NTFS prava) pouze na stroje, na nez se ma kopirovat
+                    # in case of profile.ps1 limit NTFS rights just to computers which can download it
                     if ($item -match "\\profile\.ps1$") {
                         $destProfile = (Join-Path $destination "profile.ps1")
                         if ($computerWithProfile) {
-                            # computer AD ucty maji $ za svym jmenem, pridam
+                            # computer AD accounts end with $
                             [string[]] $readUserP = $computerWithProfile | % { $_ + "$" }
 
                             "  - limiting NTFS rights on $destProfile (grant access just to: $($readUserP -join ', '))"
@@ -490,15 +469,16 @@ function _updateRepo {
             }
         }
 
+
+
         #
-        # SMAZU Z KORENE DFS REPO SOUBORY, KTERE TAM JIZ NEMAJI BYT
-        # vytahnu soubory s koncovkou (v rootu mam i soubor bez koncovky s upozornenim at se delaji zmeny v GIT a ne v DFS, ktery by ale v samotnem GIT repo mohl mast)
+        # DELETE UNNEEDED FILES FROM DFS SHARE ROOT
+        #
         $DFSrootFile = Get-ChildItem $destination -File | ? { $_.extension }
         $GITrootFileName = Get-ChildItem $scripts2root -File | Select-Object -ExpandProperty Name
         $uncommitedDeletedRootFileName = $uncommitedDeletedFile | ? { $_ -match "scripts2root\\" } | % { ([System.IO.Path]::GetFileName($_)) }
         $DFSrootFile | % {
             if ($GITrootFileName -notcontains $_.Name -and $uncommitedDeletedRootFileName -notcontains $_.Name) {
-                # soubor jiz regulerne neni v GIT repo == smazu jej
                 try {
                     Write-Verbose "Deleting $($_.FullName)"
                     Remove-Item $_.FullName -Force -Confirm:$false -ErrorAction Stop
@@ -507,17 +487,18 @@ function _updateRepo {
                 }
             }
         }
-    } # konec sekce scripts2root
+    }
+    #endregion
 
 
 
 
     #
-    # ZESYNCHRONIZUJI OBSAH Custom GIT >> DFS
+    # SYNCHRONIZE CONTENT OF CUSTOM FOLDER TO DFS SHARE
     #
 
+    #region
     if ($commitedFile -match "^custom\\.+" -or $force) {
-        # doslo ke zmene v adresari custom\
         $customSource = Join-Path $source "custom"
         $customDestination = Join-Path $destination "custom"
 
@@ -526,10 +507,8 @@ function _updateRepo {
         }
 
         Write-Output "### Copying Custom data from $customSource to $customDestination`n"
-        # pres Invoke-Expression musim delat, aby se spravne aplikoval obsah excludeFile
-        # /S tzn nekopiruji prazdne adresare
 
-        # podepsani skriptu
+        # signing of scripts if requested
         if ($signingCert) {
             Get-ChildItem $customSource -Recurse -Include *.ps1, *.psm1, *.psd1, *.ps1xml -File | % {
                 Set-AuthenticodeSignature -Certificate $signingCert -FilePath $_.FullName
@@ -538,37 +517,36 @@ function _updateRepo {
 
         $result = Invoke-Expression "Robocopy.exe $customSource $customDestination /S /MIR /NFL /NDL /NJH /NJS /R:4 /W:5 /XF $excludeFile /XD $excludeFolder"
 
-        # vypisi smazane soubory
+        # output deleted files
         $deleted = $result | ? { $_ -match [regex]::Escape("*EXTRA File") } | % { ($_ -split "\s+")[-1] }
         if ($deleted) {
             Write-Verbose "Unnecessary files was deleted:`n$($deleted -join "`n")"
         }
 
-        # result by mel obsahovat pouze chybove vypisy
-        # *EXTRA File\Dir jsou vypisy smazanych souboru\adresaru (/MIR)
+        # filter from result all except errors
+        # lines with *EXTRA File\Dir contains deleted files
         $result = $result | ? { $_ -notmatch [regex]::Escape("*EXTRA ") }
         if ($result) {
             Write-Error "There was an error when copying Custom section`:`n`n$result`n`nRun again command: $($MyInvocation.Line) -force"
         }
 
 
-        # omezeni NTFS prav
-        # aby mely pristup pouze stroje, ktere maji dany obsah stahnout dle atributu computerName v $customConfig
-        # slozky, ktere nemaji definovan computerName budou mit vychozi NTFS prava
-        # pozn. nastavuji pokazde, protoze pokud by v customConfig byly nejake cilove stroje definovany promennou, nemam sanci zjistit jestli se jeji obsah odminula nezmenil
+        # limit NTFS rights on Custom folders in DFS share
+        # so just computers listed in computerName or customSourceNTFS key in customConfig variable can access it
+        # in case neither of this keys are set, NTFS permissions will be reset
+        # do it on every synch cycle because of possibility, that computerName/customSourceNTFS is defined by variable which value could have changed
         "### Setting NTFS rights on Custom"
         foreach ($folder in (Get-ChildItem $customDestination -Directory)) {
             $folder = $folder.FullName
             $folderName = Split-Path $folder -Leaf
 
-            # pozn.: $customConfig jsem dostal dot sourcingem customConfig.ps1 skriptu
+            # $customConfig was loaded by dot sourcing customConfig.ps1 script file
             $configData = $customConfig | ? { $_.folderName -eq $folderName }
             if ($configData -and ($configData.computerName -or $configData.customSourceNTFS)) {
-                # pro danou slozku je definovano, kam se ma kopirovat
-                # omezim nalezite pristup
+                # it is defined, where this folder should be copied
+                # limit NTFS rights accordingly
 
-                # custom share NTFS prava maji prednost pred omezenim prav na stroje, kam se ma kopirovat
-                # tzn pokud je definovano oboje, nastavim co je v customSourceNTFS atributu
+                # custom share NTFS rights defined in customSourceNTFS has precedence by design
                 if ($configData.customSourceNTFS) {
                     [string[]] $readUserC = $configData.customSourceNTFS
                 } else {
@@ -580,8 +558,8 @@ function _updateRepo {
                 " - limiting NTFS rights on $folder (grant access just to: $($readUserC -join ', '))"
                 _setPermissions $folder -readUser $readUserC -writeUser $writeUser
             } else {
-                # pro danou slozku neni definovano, kam se ma kopirovat
-                # zresetuji prava na vychozi
+                # it is not defined, where this folder should be copied
+                # reset NTFS rights to default
                 " - resetting NTFS rights on $folder"
                 _setPermissions $folder -resetACL
             }
@@ -589,17 +567,17 @@ function _updateRepo {
 
 
         ++$somethingChanged
-    } # konec sekce Custom
-
+    }
+    #endregion
 
 
 
 
     #
-    # upozorneni pokud se nedetekovala zadna zmena (nemelo by nastat)
+    # WARN IF NO CHANGE WAS DETECTED
     #
 
-    # tyto zmeny se do DFS nerozkopirovavaji, tak aby se nevypisovala chyba, ze nedoslo ke zmene, pokud clovek nic jineho neupravuje v commitu
+    # these files are not copied to DFS share but could be changed, take a note if this is the case to now show warning unnecessarily
     if ($commitedFile -match "\.githooks\\|\.vscode\\|\.gitignore|!!!README!!!|powershell\.json") {
         ++$somethingChanged
     }
@@ -612,31 +590,30 @@ function _updateRepo {
 function _exportScriptsToModule {
     <#
     .SYNOPSIS
-        Funkce pro vytvoreni PS modulu z PS funkci ulozenych v ps1 souborech v zadanem adresari.
-        Krome funkci exportuje take jejich aliasy at uz zadane skrze Set-Alias ci [Alias("Some-Alias")]
-        !!! Aby se v generovanych modulech korektne exportovaly funkce je potreba,
-        mit funkce ulozene v ps1 souboru se shodnym nazvem (Invoke-Command2 funkci v Invoke-Command2.ps1 souboru)
-
-        !!! POZOR v PS konzoli musi byt vybran font, ktery nekazi UTF8 znaky, jinak zpusobuje problemy!!!
+        Function for generating Powershell module from ps1 scripts (that contains definition of functions) that are stored in given folder.
+        Generated module will also contain function aliases (no matter if they are defined using Set-Alias or [Alias("Some-Alias")].
+        Every script file has to have exactly same name as function that is defined inside it (ie Get-LoggedUsers.ps1 contains just function Get-LoggedUsers).
+        In console where you call this function, font that can show UTF8 chars has to be set.
 
     .PARAMETER configHash
-        Hash obsahujici dvojice, kde klicem je cesta k adresari se skripty a hodnotou cesta k adresari, do ktereho se vygeneruje modul.
-        napr.: @{"C:\temp\scripts" = "C:\temp\Modules\Scripts"}
+        Hash in specific format, where key is path to folder with scripts and value is path to which module should be generated.
+
+        eg.: @{"C:\temp\scripts" = "C:\temp\Modules\Scripts"}
 
     .PARAMETER enc
-        Jake kodovani se ma pouzit pro vytvareni modulu a cteni skriptu
+        Which encoding should be used.
 
-        Vychozi je UTF8.
+        Default is UTF8.
 
     .PARAMETER includeUncommitedUntracked
-        Vyexportuje i necomitnute a untracked funkce z repozitare
+        Export also uncommited and untracked files.
 
     .PARAMETER dontCheckSyntax
-        Prepinac rikajici, ze se u vytvoreneho modulu nema kontrolovat syntax.
-        Kontrola muze byt velmi pomala, pripadne mohla byt uz provedena v ramci kontroly samotnych skriptu
+        Switch that will disable syntax checking of created module.
 
     .PARAMETER dontIncludeRequires
-        Prepinac rikajici, ze se do modulu nepridaji pripadne #requires modulu skriptu.
+        Switch that will lead to ignoring all #requires in scripts, so generated module won't contain them.
+        Otherwise just module #requires will be added.
 
     .EXAMPLE
         _exportScriptsToModule @{"C:\DATA\POWERSHELL\repo\scripts" = "c:\DATA\POWERSHELL\repo\modules\Scripts"}
@@ -681,14 +658,13 @@ function _exportScriptsToModule {
         $function2Export = @()
         $alias2Export = @()
         $lastCommitFileContent = @{ }
-        # necomitnute zmenene skripty a untracked do modulu nepridam, protoze nejsou hotove
         $location = Get-Location
         Set-Location $scriptFolder
         $unfinishedFile = @()
         try {
-            # necomitnute zmenene soubory
+            # uncommited changed files
             $unfinishedFile += @(git ls-files -m --full-name)
-            # untracked
+            # untracked files
             $unfinishedFile += @(git ls-files --others --exclude-standard --full-name)
         } catch {
             throw "It seems GIT isn't installed. I was unable to get list of changed files in repository $scriptFolder"
@@ -696,12 +672,13 @@ function _exportScriptsToModule {
         Set-Location $location
 
         #
-        # existuji modifikovane necomitnute/untracked soubory
-        # abych je jen tak nepreskocil pri generovani modulu, zkusim dohledat verzi z posledniho commitu a tu pouzit
+        # there are untracked and/or uncommited files
+        # instead just ignoring them try to get and use previous version from GIT
         if ($unfinishedFile) {
             [System.Collections.ArrayList] $unfinishedFile = @($unfinishedFile)
 
-            # _startProcess umi vypsat vystup (vcetne chyb) primo do konzole, takze se da pres Select-String poznat, jestli byla chyba
+            # helper function to be able to catch errors and all outputs
+            # dont wait for exit
             function _startProcess {
                 [CmdletBinding()]
                 param (
@@ -718,7 +695,7 @@ function _exportScriptsToModule {
                 $p.StartInfo.FileName = $filePath
                 $p.StartInfo.Arguments = $argumentList
                 [void]$p.Start()
-                # $p.WaitForExit() # s timto pokud git show HEAD:$file neco vratilo, se proces nikdy neukoncil..
+                # $p.WaitForExit() # cannot be used otherwise if git show HEAD:$file returned something, process stuck
                 $p.StandardOutput.ReadToEnd()
                 if ($err = $p.StandardError.ReadToEnd()) {
                     Write-Error $err
@@ -734,17 +711,14 @@ function _exportScriptsToModule {
                     Write-Warning "Skipping changed but uncommited/untracked file: $file"
                 } else {
                     $fName = [System.IO.Path]::GetFileNameWithoutExtension($file)
-                    # upozornim, ze pouziji verzi z posledniho commitu, protoze aktualni je nejak upravena
-                    Write-Warning "$fName has uncommited changed. For module generation I will user his version from previous commit"
-                    # ulozim obsah souboru tak jak vypadal pri poslednim commitu
+                    Write-Warning "$fName has uncommited changed. For module generating I will use its version from previous commit"
                     $lastCommitFileContent.$fName = $lastCommitContent
-                    # z $unfinishedFile odeberu, protoze obsah souboru pridam, i kdyz z posledniho commitu
                     $unfinishedFile.Remove($file)
                 }
             }
             Set-Location $location
 
-            # unix / nahradim za \
+            # unix / replace by \
             $unfinishedFile = $unfinishedFile -replace "/", "\"
             $unfinishedFileName = $unfinishedFile | % { [System.IO.Path]::GetFileName($_) }
 
@@ -755,7 +729,7 @@ function _exportScriptsToModule {
         }
 
         #
-        # v seznamu ps1 k exportu do modulu ponecham pouze ty, ktere jsou v konzistentnim stavu
+        # in ps1 files to export leave just these in consistent state
         $script2Export = (Get-ChildItem (Join-Path $scriptFolder "*.ps1") -File).FullName | where {
             $partName = ($_ -split "\\")[-2..-1] -join "\"
             if ($unfinishedFile -and $unfinishedFile -match [regex]::Escape($partName)) {
@@ -770,36 +744,34 @@ function _exportScriptsToModule {
             return
         }
 
-        # smazu existujici modul
         if (Test-Path $modulePath -ErrorAction SilentlyContinue) {
             Remove-Item $moduleFolder -Recurse -Confirm:$false -ErrorAction SilentlyContinue
             Start-Sleep 1
         }
 
-        # vytvorim slozku modulu
         [Void][System.IO.Directory]::CreateDirectory($moduleFolder)
 
-        Write-Verbose "Do $modulePath`n"
+        Write-Verbose "To $modulePath`n"
 
-        # do hashe $lastCommitFileContent pridam dvojice, kde klic je jmeno funkce a hodnotou jeji textova definice
+        # to hash $lastCommitFileContent add  pair, where key is name of function and value is its text definition
         $script2Export | % {
             $script = $_
             $fName = [System.IO.Path]::GetFileNameWithoutExtension($script)
             if ($fName -match "\s+") {
                 throw "File $script contains space in name which is nonsense. Name of file has to be same to the name of functions it defines and functions can't contain space in it's names."
             }
-            if (!$lastCommitFileContent.containsKey($fName)) {
-                # obsah skriptu (funkci) pridam pouze pokud jiz neni pridan, abych si neprepsal fce vytazene z posledniho commitu
 
-                #
-                # provedu nejdriv kontrolu, ze je ve skriptu definovana pouze jedna funkce a nic jineho
+            # add function content only in case it isn't added already (to avoid overwrites)
+            if (!$lastCommitFileContent.containsKey($fName)) {
+
+                # check, that file contain just one function definition and nothing else
                 $ast = [System.Management.Automation.Language.Parser]::ParseFile("$script", [ref] $null, [ref] $null)
-                # mel by existovat pouze end block
+                # just END block should exist
                 if ($ast.BeginBlock -or $ast.ProcessBlock) {
                     throw "File $script isn't in correct format. It has to contain just function definition (+ alias definition, comment or requires)!"
                 }
 
-                # ziskam definovane funkce (v rootu skriptu)
+                # get funtion definition
                 $functionDefinition = $ast.FindAll( {
                         param([System.Management.Automation.Language.Ast] $ast)
 
@@ -816,33 +788,31 @@ function _exportScriptsToModule {
                 #TODO pouzivat pro jmeno funkce jeji skutecne jmeno misto nazvu souboru?.
                 # $fName = $functionDefinition.name
 
-                #
-                # nadefinuji znovu obsah funkce z AST a ten teprve dam do modulu (takto mam jistotu, ze tam nebude zadny bordel navic)
+                # use function definition obtained by AST to generating module
+                # this way no possible dangerous content will be added
                 $content = ""
                 if (!$dontIncludeRequires) {
-                    # pridam puvodne definovane requires, ale pouze pro moduly
+                    # adding module requires
                     $requiredModules = $ast.scriptRequirements.requiredModules.name
                     if ($requiredModules) {
                         $content += "#Requires -Modules $($requiredModules -join ',')`n`n"
                     }
                 }
-                # nahradim zavadne znaky za legitimni
+                # replace invalid chars for valid (en dash etc)
                 $functionText = $functionDefinition.extent.text -replace [char]0x2013, "-" -replace [char]0x2014, "-"
 
-                # pridam i text funkce :)
+                # add function text definition
                 $content += $functionText
 
-                # pridam aliasy definovane skrze Set-Alias
-                # $ast.EndBlock.Statements obsahuje bloky kodu
-                # zajimaji mne pouze ty, ktere definuji alias
+                # add aliases defined by Set-Alias
                 $ast.EndBlock.Statements | ? { $_ -match "^\s*Set-Alias .+" } | % { $_.extent.text } | % {
                     $parts = $_ -split "\s+"
-                    # pridam text aliasu
+
                     $content += "`n$_"
 
                     if ($_ -match "-na") {
-                        # alias nastaven jmennym parametrem
-                        # ziskam hodnotu parametru
+                        # alias set by named parameter
+                        # get parameter value
                         $i = 0
                         $parPosition
                         $parts | % {
@@ -852,23 +822,23 @@ function _exportScriptsToModule {
                             ++$i
                         }
 
-                        # poznacim alias pro pozdejsi export z modulu
+                        # save alias for later export
                         $alias2Export += $parts[$parPosition + 1]
                         Write-Verbose "- exporting alias: $($parts[$parPosition + 1])"
                     } else {
-                        # alias nastaven pozicnim parametrem
-                        # poznacim alias pro pozdejsi export z modulu
+                        # alias set by positional parameter
+                        # save alias for later export
                         $alias2Export += $parts[1]
                         Write-Verbose "- exporting alias: $($parts[1])"
                     }
                 }
 
-                # pridam aliasy definovane skrze [Alias("Some-Alias")]
+                # add aliases defined by [Alias("Some-Alias")]
                 $innerAliasDefinition = $ast.FindAll( {
                         param([System.Management.Automation.Language.Ast] $ast)
 
                         $ast -is [System.Management.Automation.Language.AttributeAst]
-                    }, $true) | ? { $_.parent.extent.text -match '^param' } | Select-Object -ExpandProperty PositionalArguments | Select-Object -ExpandProperty Value -ErrorAction SilentlyContinue # odfitrluji aliasy definovane pro parametry funkce
+                    }, $true) | ? { $_.parent.extent.text -match '^param' } | Select-Object -ExpandProperty PositionalArguments | Select-Object -ExpandProperty Value -ErrorAction SilentlyContinue # filter out aliases for function parameters
 
                 if ($innerAliasDefinition) {
                     $innerAliasDefinition | % {
@@ -882,8 +852,8 @@ function _exportScriptsToModule {
         }
 
         #
-        # z hodnot v hashi (jmeno funkce a jeji textovy obsah) vygeneruji psm modul
-        # poznacim jmeno funkce a pripadne aliasy pro Export-ModuleMember
+        # save all functions content to module file
+        # store name of every funtion for later use in Export-ModuleMember
         $lastCommitFileContent.GetEnumerator() | % {
             $fName = $_.Key
             $content = $_.Value
@@ -892,15 +862,13 @@ function _exportScriptsToModule {
 
             $function2Export += $fName
 
-
             $content | Out-File $modulePath -Append $enc
             "" | Out-File $modulePath -Append $enc
         }
 
-        # nastavim, co se ma z modulu exportovat
-        # rychlejsi (pri naslednem importu modulu) je, pokud se exportuji jen explicitne vyjmenovane funkce/aliasy nez pouziti *
-        # 300ms vs 15ms :)
-
+        #
+        # set what functions and aliases should be exported from module
+        # explicit export is much faster than use *
         if (!$function2Export) {
             throw "There are none functions to export! Wrong path??"
         } else {
@@ -924,9 +892,8 @@ function _exportScriptsToModule {
 
             "Export-ModuleMember -alias $($alias2Export -join ', ')" | Out-File $modulePath -Append $enc
         }
-    } # konec funkce _generatePSModule
+    } # end of _generatePSModule
 
-    # ze skriptu vygeneruji modul
     "### Generating modules from corresponding scripts2module folder"
     $configHash.GetEnumerator() | % {
         $scriptFolder = $_.key
@@ -945,7 +912,7 @@ function _exportScriptsToModule {
         _generatePSModule @param
 
         if (!$dontCheckSyntax -and (Get-Command Invoke-ScriptAnalyzer -ErrorAction SilentlyContinue)) {
-            # zkontroluji syntax vytvoreneho modulu
+            # check generated module syntax
             $syntaxError = Invoke-ScriptAnalyzer $moduleFolder -Severity Error
             if ($syntaxError) {
                 Write-Warning "In module $moduleFolder was found these problems:"
@@ -971,10 +938,8 @@ function _emailAndExit {
     }
 } # end of _emailAndExit
 
+# helper function to be able to catch errors and all outputs
 function _startProcess {
-    <#
-        oproti Start-Process vypisuje vystup (vcetne chyb) primo do konzole
-    #>
     [CmdletBinding()]
     param (
         [string] $filePath = '',
@@ -1070,7 +1035,7 @@ function _setPermissions {
         throw "zadana cesta neexistuje"
     }
 
-    # osetrim pripad, kdy zadana kombinace stringu a pole
+    # flattens input in case, that string and arrays are entered at the same time
     function Flatten-Array {
         param (
             [array] $inputArray
@@ -1094,16 +1059,15 @@ function _setPermissions {
     $permissions = @()
 
     if (Test-Path $path -PathType Container) {
-        # je to adresar
+        # it is folder
 
-        # vytvorim prazdne ACL
         $acl = New-Object System.Security.AccessControl.DirectorySecurity
 
         if ($resetACL) {
-            # reset ACL, tzn zruseni explicitnich ACL a povoleni dedeni
+            # reset ACL, ie remove explicit ACL and enable inheritance
             $acl.SetAccessRuleProtection($false, $false)
         } else {
-            # zakazani dedeni a odebrani zdedenych prav
+            # disable inheritance and remove inherited ACL
             $acl.SetAccessRuleProtection($true, $false)
 
             $readUser | % {
@@ -1115,16 +1079,15 @@ function _setPermissions {
             }
         }
     } else {
-        # je to soubor
+        # it is file
 
-        # vytvorim prazdne ACL
         $acl = New-Object System.Security.AccessControl.FileSecurity
 
         if ($resetACL) {
-            # reset ACL, tzn zruseni explicitnich ACL a povoleni dedeni
+            # reset ACL, ie remove explicit ACL and enable inheritance
             $acl.SetAccessRuleProtection($false, $false)
         } else {
-            # zakazani dedeni a odebrani zdedenych prav
+            # disable inheritance and remove inherited ACL
             $acl.SetAccessRuleProtection($true, $false)
 
             $readUser | % {
@@ -1137,7 +1100,6 @@ function _setPermissions {
         }
     }
 
-    # naplneni noveho ACL
     $permissions | % {
         $ace = New-Object System.Security.AccessControl.FileSystemAccessRule $_
         try {
@@ -1147,19 +1109,18 @@ function _setPermissions {
         }
     }
 
-    # nastaveni ACL
     try {
-        # Set-Acl nejde pouzit protoze bug https://stackoverflow.com/questions/31611103/setting-permissions-on-a-windows-fileshare
+        # Set-Acl cannot be used because of bug https://stackoverflow.com/questions/31611103/setting-permissions-on-a-windows-fileshare
         (Get-Item $path).SetAccessControl($acl)
     } catch {
         throw "Setting of NTFS rights wasn't successful: $_"
     }
 } # end of _setPermissions
-
+#endregion
 
 try {
     #
-    # kontrola, ze mam pravo zapisu do DFS repo
+    # check that script has write permission to DFS share
     try {
         $rFile = Join-Path $destination Get-Random
         $null = New-Item -Path ($rFile) -ItemType File -Force -Confirm:$false
@@ -1169,25 +1130,29 @@ try {
     Remove-Item $rFile -Force -Confirm:$false
 
     #
-    # kontrola ze je nainstalovan GIT
+    # check that GIT is installed
     try {
         git --version
     } catch {
         _emailAndExit -body "Hi,`nGIT isn't installed on $env:COMPUTERNAME. Changes in GIT repository can't be propagated to $destination.`nInstall it."
     }
 
+
+
     #
-    # download current content of cloud GIT repository
-    $PS_repo = Join-Path $logFolder PS_repo # do adresare Log ukladam protoze jeho obsah se ignoruje pri synchronizaci skrze PS_env_set_up tzn nezapocita se do velikosti tzn nedojde k replace daty z DFS repo
+    # GET CURRENT CONTENT OF CLOUD GIT REPOSITORY LOCALLY
+    #
+
+    #region
+    $PS_repo = Join-Path $logFolder PS_repo
 
     if (Test-Path $PS_repo -ea SilentlyContinue) {
-        # existuje lokalni kopie repo
-        # provedu stazeni novych dat (a replace starych)
+        # there is local copy of GIT repository
+        # fetch recent data and replace old ones
         Set-Location $PS_repo
         try {
-            # nemohu pouzit klasicky git pull, protoze chci prepsat pripadne lokalni zmeny bez reseni nejakych konfliktu atd
-            # abych zachytil pripadne chyby pouzivam _startProcess
-            _startProcess git -argumentList "fetch --all" # downloads the latest from remote without trying to merge or rebase anything.
+            # download the latest data from GIT repository without trying to merge or rebase anything
+            _startProcess git -argumentList "fetch --all"
 
             # # ukoncim pokud nedoslo k zadne zmene
             # # ! pripadne manualni upravy v DFS repo se tim padem prepisi az po zmene v cloud repo, ne driv !
@@ -1197,10 +1162,13 @@ try {
             #     exit
             # }
 
-            _startProcess git -argumentList "reset --hard origin/master" # resets the master branch to what you just fetched. The --hard option changes all the files in your working tree to match the files in origin/master
-            _startProcess git -argumentList "clean -fd" # odstraneni untracked souboru a adresaru (vygenerovane moduly z scripts2module atp)
-            
-            $commitHistory = _startProcess git -argumentList "log --pretty=format:%h -20" # poslednich 20 commitu, od nejnovejsiho
+            # resets the master branch to what you just fetched. The --hard option changes all the files in your working tree to match the files in origin/master
+            _startProcess git -argumentList "reset --hard origin/master"
+            # delete untracked files and folders (generated modules etc)
+            _startProcess git -argumentList "clean -fd"
+
+            # save last 20 commits
+            $commitHistory = _startProcess git -argumentList "log --pretty=format:%h -20"
             $commitHistory = $commitHistory -split "`n" | ? { $_ }
         } catch {
             Set-Location ..
@@ -1208,8 +1176,10 @@ try {
             _emailAndExit -body "Hi,`nthere was an error when pulling changes from repository. Script deleted local copy of repository and will try git clone next time.`nError was:`n$_."
         }
     } else {
-        # NEexistuje lokalni kopie repo
-        # provedu git clone
+        # there isn't local copy of GIT repository
+        # git clone it
+        # login.xml should contain repo_puller credentials
+        # !credentials are valid for one year, so need to be renewed regularly!
         #__TODO__ to login.xml export GIT credentials (alternate credentials), or access token of repo_puller account (read only account which is used to clone your repository) (details here https://docs.microsoft.com/cs-cz/azure/devops/repos/git/auth-overview?view=azure-devops) how to export credentials here https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20-%20INITIAL%20CONFIGURATION.md
         $acc = Import-Clixml "$PSScriptRoot\login.xml"
         $l = $acc.UserName
@@ -1221,6 +1191,7 @@ try {
             _emailAndExit -body "Hi,`nthere was an error when cloning repository. Wasn't the password of service account changed? Try generate new credentials to login.xml."
         }
     }
+    #endregion
 
 
     #
@@ -1229,7 +1200,7 @@ try {
     # need to be done before dot sourcing customConfig.ps1 and modulesConfig.ps1
     $repoModules = Join-Path $PS_repo "modules"
     try {
-        # at first try to import Variables module pulled from cloud repo
+        # at first try to import Variables module pulled from cloud repo (so the newest version)
         Import-Module (Join-Path $repoModules "Variables") -ErrorAction Stop
     } catch {
         # if error, try to import Variables from system location
@@ -1239,42 +1210,49 @@ try {
     }
 
 
+
     #
-    # zmeny nakopiruji do DFS repo
+    # SYNCHRONIZE DATA TO DFS SHARE
+    #
+
+    #region sync data to dfs share
     try {
-        # nactu $customConfig
+        # import $customConfig
         $customSource = Join-Path $PS_repo "custom"
         $customConfigScript = Join-Path $customSource "customConfig.ps1"
 
         if (!(Test-Path $customConfigScript -ea SilentlyContinue)) {
             Write-Warning "$customConfigScript is missing, it is problem for 99,99%!"
         } else {
-            # nactu customConfig.ps1 skript respektive $customConfig promennou v nem definovanou
             . $customConfigScript
         }
 
 
-        # nactu $modulesConfig
+        # import $modulesConfig
         $modulesSource = Join-Path $PS_repo "modules"
         $modulesConfigScript = Join-Path $modulesSource "modulesConfig.ps1"
 
         if (!(Test-Path $modulesConfigScript -ea SilentlyContinue)) {
             Write-Warning "$modulesConfigScript is missing"
         } else {
-            # nactu $modulesConfig.ps1 skript respektive $modulesConfig promennou v nem definovanou
             . $modulesConfigScript
         }
 
-
+        # synchronize data to DFS share
         _updateRepo -source $PS_repo -destination $destination -force
     } catch {
         _emailAndExit "There was an error when copying changes to DFS repository:`n$_"
     }
+    #endregion
+
 
 
     #
-    # nakopiruji do sdilenych slozek Custom data, ktera maji definovano customShareDestination
-    # pozn.: nejde o synchronizaci DFS repozitare, ale jinde nedavalo smysl
+    # COPY FOLDERS FROM CUSTOM DIRECTORY THAT HAVE DEFINED CUSTOMSHAREDESTINATION KEY
+    # this isn't related to repository synchronization but I don't know here else to put it
+    #
+
+    #region copy Custom folders to UNC
     "### Synchronization of Custom data, which are supposed to be in specified shared folder"
     $folderToUnc = $customConfig | ? { $_.customShareDestination }
 
@@ -1287,13 +1265,13 @@ try {
 
         " - folder $folderName should be copied to $($configData.customShareDestination)"
 
-        # kontrola, ze jde o UNC cestu
+        # check that $customShareDestination is UNC path
         if ($customShareDestination -notmatch "^\\\\") {
             Write-Warning "$customShareDestination isn't UNC path, skipping"
             continue
         }
 
-        # kontrola, ze existuje zdrojova slozka (to ze je v $customConfig neznamena, ze realne existuje)
+        # check that source folder exists
         if (!(Test-Path $folderSource -ea SilentlyContinue)) {
             Write-Warning "$folderSource doen't exist, skipping"
             continue
@@ -1313,7 +1291,7 @@ try {
 
             $result = _copyFolder -source $folderSource -destination $folderDestination -excludeFolder $customLogFolder -mirror
 
-            # vytvoreni zanoreneho Log adresare
+            # create Log subfolder
             if (!(Test-Path $customLogFolder -ea SilentlyContinue)) {
                 " - creation of Log folder $customLogFolder"
 
@@ -1322,12 +1300,12 @@ try {
         }
 
         if ($result.failures) {
-            # neskoncim s chybou, protoze se da cekat, ze pri dalsim pokusu uz to projde (ted muze napr bezet skript z teto slozky atp)
-            Write-Warning "There was an error when copy $folderName`n$($result.errMsg)"
+            # just warn about error, it is likely, that it will end succesfully next time (shared folder could be locked now etc)
+            Write-Warning "There was an error when copying $folderName`n$($result.errMsg)"
         }
 
-        # omezeni NTFS prav
-        # pozn. nastavuji pokazde, protoze pokud by v customConfig byly nejake cilove stroje definovany promennou, nemam sanci zjistit jestli se jeji obsha odminula nezmenil
+        # limit access by NTFS rights
+        # do it on every synch cycle because of possibility, that customDestinationNTFS is defined by variable which value could have changed
         if ($customNTFS -and !$copyJustContent) {
             " - set READ access to accounts in customDestinationNTFS to $folderDestination"
             _setPermissions $folderDestination -readUser $customNTFS -writeUser $writeUser
@@ -1335,10 +1313,8 @@ try {
             " - set FULL CONTROL access to accounts in customDestinationNTFS to $customLogFolder"
             _setPermissions $customLogFolder -readUser $customNTFS -writeUser $writeUser, $customNTFS
         } elseif (!$customNTFS -and !$copyJustContent) {
-            # nemaji se nastavit zadna custom prava
-            # pro jistotu udelam reset NTFS prav (mohl jsem je jiz v minulosti nastavit)
-            # ale pouze pokud na danem adresari najdu read_user ACL == nastavil jsem v minulosti custom prava
-            # pozn.: detekuji tedy dle NTFS opravneni (pokud by se nenastavovalo, bude potreba zvolit jinou metodu detekce!)
+            # no custom NTFS are set
+            # just in case they were set previously reset them, but only in case ACL contains $readUser account ie this script have to set them in past
             $folderhasCustomNTFS = Get-Acl -path $folderDestination | ? { $_.accessToString -like "*$readUser*" }
             if ($folderhasCustomNTFS) {
                 " - folder $folderDestination has some custom NTFS even it shouldn't have, resetting"
@@ -1349,6 +1325,7 @@ try {
             }
         }
     }
+    #endregion
 } catch {
     _emailAndExit -body "Hi,`nthere was an error when synchronizing GIT repository to DFS repository share:`n$_"
 }
