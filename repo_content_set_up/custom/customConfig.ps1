@@ -1,134 +1,170 @@
 <#
-Zde se definuje, co se ma dit s obsahem slozky Custom.
-Tzn na jake stroje, do jakeho umisteni a s jakymi pravy (vse definovano v $customConfig viz nize) se ma obsah kopirovat.
-Standardne se obsah kopiruje do C:\Windows\Scripts a dochazi automaticky k mazani toho, co tam jiz byt nema.
-Tento skript se dot sourcuje v PS_env_set_up.ps1 a nesmi proto obsahovat nic krome promenne customConfig!
+Purpose of this file is to define, what should happen with folders in Custom directory.
+So to what computers or shares, to what location and with what permissions should they be copied.
 
-Pozn.: DFS oznacuje sdilenou slozku, kde hostujete vas repozitar (z ktere klienti stahuji obsah k sobe na lokal)
+- everything is defined in CustomConfig variable (details below)
+- synchronization of Custom directory is invoked from clients themself
+    - through PS_env_set_up scheduled task (ie ps1 script) under SYSTEM account
+    - by dot sourcing this file and behave accordingly to content of CustomConfig variable
+        - so IT SHOULD'N CONTAIN ANYTHING ELSE BESIDES variable CustomCOnfig
+- folder are copied using robocopy in mirror mode
+    - modified data are therefore automatically replaced
+    - no more needed files are automatically deleted
+    - so save any scripts output to 'Log' subfolder which is automatically created in root of each copied folder from Custom directory (otherwise it will be automatically deleted by robocopy mirror)
+- folders that are not mentioned here in customConfig variable are just copied to DFS share and nothing else
 
-Jak ma vypadat $customConfig a co muze obsahovat:
-$customConfig je pole objektu, kde kazdy objekt reprezentuje jednu slozku v Custom adresari.
-Objekt pak obsahuje nasledujici klice:
 
+## WHAT CUSTOMTONFIG VARIABLE IS AND WHAT IT SHOULD CONTAINS:
+- customConfig is defined as array of objects, where every object represents one folder in root of Custom directory
+- object keys define, what should be done with this folder
+
+
+## POSSIBLE OBJECT KEYS:
     - folderName
-        (povinny) klic
-        jmeno slozky (ktera se nachazi v Custom adresari)
-        pozn.:
-            - pokud dojde ke smazani slozky, smazte i odpovidajici objekt v Custom jinak sync skript bude koncit chybou!
+        (mandatory) [string] key
+        - name of folder in Custom directory, that this object represents
+            - don't forget to delete this object from CustomConfig in case, corresponding folder is also deleted, otherwise sync script PS_env_set_up will end with error!
+
+        eg.: folderName = "MonitoringScripts"
 
     - computerName
-        (nepovinny) klic
-        na jake servery se ma slozka synchronizovat (je mozne pouzit i promennou (napr. z Variables modulu) obsahujici seznam stroju)
-        !pouze tyto stroje budou mit read pristup k teto slozce v DFS, zadne jine!
+        (optional) [string[]] key
+        - name of servers to which should be this folder copied
+            - default destination location is C:\Windows\Scripts
+        - variable (from module Variables) can be used also
+        - moreover, for security reasons just these computers will have access to this folder in DFS share
+            - access is limited by customizing NTFS rights
+
+        eg.: computerName = "PC1", "PC2", "SERVER-01", $SQLServers (the last one is variable from Variables module)
 
     - customDestinationNTFS
-        (nepovinny) klic
-        slouzi pro omezeni prav na kopii dane slozky na cilovem stroji / kopii v cilove sitove slozce (customShareDestination)
-        pouze zadany ucet bude mit READ na zadane slozce (jinak clenove Authenticated Users).
-            POZOR, pri kopirovani do lokalni slozky, bude mit pravo READ take SYSTEM a clenove skupin repo_reader, repo_writer, Administrators!
-            POZOR, clenove skupiny repo_writer maji vzdy full control
-        pouze tomuto uctu se zaroven na (automaticky vytvarenem) Log pod adresari nastavi MODIFY prava (jinak opet clenum Authenticated Users)
-        pr.: kontoso\o365sync$ (gMSA ucet) ci Local Service ci System atp
+        (optional) [string[]] key
+        - used to limit NTFS access rights on copied folder
+        - just given accounts/groups will have READ access instead of all 'Authenticated Users'
+            BEWARE that
+                - in case, that folder is copied to local destination on some server, SYSTEM and members of groups repo_reader, repo_writer, Administrators will have also READ access (this is by design)
+                - members of group repo_writer have always FULL CONTROL access (this is by design)
+        - just given account/group will have MODIFY access on (automatically created) Log subfolder (otherwise 'Authenticated Users')
+
+        eg.: customDestinationNTFS = "SYSTEM", "Local Service", "contoso\JohnD", "contoso\o365sync$" (the last one is gMSA domain account)
 
     - customSourceNTFS
-        (nepovinny) klic
-        slouzi pro omezeni prav na dane slozce v DFS share repozitari
-        pouze zadane ucty budou mit pristup k teto slozce v DFS zadne jine
-        !prebiji pravo, ktere by se jinak nastavilo pro stroje viz computerName!
-        pozn.:
-            - u strojovych uctu je potreba zadat s dolarem na konci (APP-15$)
+        (optional) [string[]] key
+        - used to limit NTFS rights to this folder right in DFS share
+        - just given accounts/groups will have READ access instead of 'Domain computers'
+        - BEWARE, that in case this key and computerName key are both set, this setting will replace NTFS settings that would otherwise be set for computers listed in computerName key
+
+        eg.: customSourceNTFS = "APP-15$", "SQL-01$", "contoso\sqlAdmins"
 
     - customLocalDestination
-        (nepovinny) klic
-        slouzi pro zmenu cilove slozky, do ktere se ma adresar z DFS zkopirovat (misto %WINDIR%\Scripts)
-        musi jit o lokalni cestu (napr.: C:\Skripty)
-        pozn.:
-            - pouzije se v ramci PS_env_set_up.ps1 skriptu
-            - aby fungovalo, musi mit do dane cesty ucet SYSTEM pravo full control!
-            - pri kopirovani se pouzije robocopy mirror, tzn jakekoli soubory, ktere nejsou ve zdrojove slozce v DFS, budou z cilove slozky odstraneny!
-            - po zmene cesty nedojde k odstraneni jiz nakopirovanych dat
-            - nedojde k nastaveni NTFS prav, pokud neni definovano customDestinationNTFS (mohlo by byt kontraproduktivni), to same plati pro zanoreny Log adresar
+        (optional) [string] key
+        - used to change destination path, where should be this folder copied
+        - default path is %WINDIR%\Scripts (so for example folder MonitoringScripts will be copied to C:\Windows\Scripts\MonitoringScripts)
+        - it has to be local path and SYSTEM account needs to have Full Control permissions
+        - BEWARE, if you define this key
+            - copied folder won't be deleted in case value of this key changes
+            - NTFS permissions won't be set unless you explicitly define key customDestinationNTFS (to minimize risk for break something), same goes for Log subfolder
+
+        eg.: customLocalDestination = "C:\Program Files\PowerShell\7-preview\Modules"
 
     - customShareDestination
-        (nepovinny) klic
-        slouzi pro zadani sitove cilove slozky, do ktere se ma adresar z DFS zkopirovat (pokud zaroven zadate computerName, nakopiruje se i do %WINDIR%\Scripts)
-        musi jit o cestu v UNC tvaru (napr.: \\dfs\skripty)
-        pouzije se v ramci repo_sync.ps1 skriptu
-        pozn.:
-            - aby fungovalo, musi mit do dane cesty clenove skupiny repo_writer pravo full control!
-            - pri kopirovani se pouzije robocopy mirror, tzn jakekoli soubory, ktere nejsou ve zdrojove slozce v DFS, budou z cilove slozky odstraneny!
-            - po zmene cesty nedojde k odstraneni jiz nakopirovanych dat
-            - nedojde k nastaveni NTFS prav, pokud neni definovano customDestinationNTFS (share jako takovy uz ma nastavena prava, tak by mohlo byt kontraproduktivni), to same plati pro zanoreny Log adresar
+        (optional) [string] key
+        - used to copy folder to shared folder
+            - in case you also define computerName key, folder will be copied also to this computers
+        - path has to be in UNC format and repo_writer group members has to have Full Control access to it
+        - BEWARE, if you define this key
+            - copied folder won't be deleted in case value of this key changes
+            - NTFS permissions won't be set unless you explicitly define key customDestinationNTFS (to minimize risk for break something), same goes for Log subfolder
+
+        eg.: customShareDestination = "C:\Program Files\PowerShell\7-preview\Modules"
 
     - copyJustContent
-        (nepovinny) klic
-        slouzi pro urceni, ze se do cile nema kopirovat cela slozka, ale pouze jeji obsah
-        typicky pro kopirovani configu, ini atp, takze do cile chci co nejmene zasahovat
-        pozn.:
-            - nedojde k nastaveni NTFS prav (ani customDestinationNTFS)!
-            - nevytvori se Log podadresar
-            - jiz nepotrebne soubory nebudou smazany (nepouzije se robocopy mirror)
-            - aplikuje se pouze pri nastaveni customLocalDestination ci customShareDestination
+        (optional) [switch] key
+        - used to copy just folder content not folder itself
+        - typical use case would be to copy config files, ini etc
+        - can be used only with customLocalDestination and customShareDestination
+        - BEWARE, if you define this key
+            - copied content won't be deleted in case value of this key changes
+            - NTFS permissions won't be set (nor customDestinationNTFS)
+            - Log subfolder won't be created
+
+        eg.: copyJustContent = $true
 
     - scheduledTask
-        (nepovinny) klic
-        slouzi pro zadani nazvu XML souboru (bez koncovky) s definici scheduled tasku, ktery se ma na stroji vytvorit
-        pozn.:
-            - XML musi byt ulozeno v rootu Custom slozky
-                - XML s definici tasku ziskate klasicky exportem tasku v Task Scheduler konzoli
-            - vytvoreny task se bude jmenovat dle nazvu XML, at uz je v obsahu XML definovano cokoli
-            - task se vzdy vytvori v rootu Task Scheduler konzole
-            - jako autor se nastavi nazev sync skriptu (PS_env_set_up), kvuli dohledatelnosti a nasledne sprave
-            - pri zmene v definici, dojde k modifikaci tasku
-            - tasky, ktere jiz na klientovi byt nemaji, budou smazany
+        (optional) [string[]] key
+        - used to automatically create scheduled task from given xml definition
+            - for getting xml definition easiest approach is to create task in Task Scheduler and Export it
+        - value has to be the name of the existing xml file (without extension)
+            - name is case sensitive
+            - xml file has to be placed in folder root
+        - created Scheduled task will
+            - be named as xml file itself no matter what is defined in it
+            - be created in Task Scheduled root
+            - have as author name of synchronization script (PS_env_set_up)
+                - because of easy identification and manageability
+            - be replaced in case, the base xml will be modified
+            - be deleted in case, it should'n be on client anymore
 
-PRIKLADY:
+        eg.: scheduledTask = "performanceMonitoring", "auditMonitoring"
 
-$customConfig = @(
-    # vykopirovani "SomeTools" na APP-1 a stroje v $servers_app do C:\Windows\Scripts\SomeTools s tim, ze pouze o365sync$ ucet bude mit READ prava
+
+## EXAMPLES:
+
+    !!! BEWARE because of AST analyze, comma between objects always need to be on same line as the objects closing brace ie.
+    $customConfig = @(
+        [PSCustomObject]@{
+            folderName   = "SomeTools"
+            computerName = "APP-1", $servers_app
+        },
+        [PSCustomObject]@{
+            folderName   = "SomeOtherTools"
+            computerName = "APP-1"
+        }
+    )
+
+    # copy folder "SomeTools" to APP-1 and computers in variable $servers_app to C:\Windows\Scripts\SomeTools and moreover just o365sync$ gmsa account will have READ rights to this folder
     [PSCustomObject]@{
         folderName   = "SomeTools"
         computerName = "APP-1", $servers_app
         customDestinationNTFS   = "contoso\o365sync$"
-    },
-    # nakopirovani slozky "Monitoring_Scripts" s monitorovacimi skripty na server $monitoringServer do C:\Windows\Scripts\Monitoring_Scripts
-    # a vytvoreni scheduled tasku z XML definice ulozene v monitor_AD_Admins.xml, monitor_backup.xml (ktere budou tyto skripty volat)
+    }
+
+    # copy folder "Monitoring_Scripts" which contains some monitoring scripts and xml sch. task definitions to server defined in $monitoringServer to C:\Windows\Scripts\Monitoring_Scripts
+    # and create scheduled tasks from XML definitions monitor_AD_Admins.xml, monitor_backup.xml (which can call these monitoring scripts) on that server
     [PSCustomObject]@{
-        folderName   = "Monitoring_Scripts" # obsahuje skripty + xml definice scheduled tasku
+        folderName   = "Monitoring_Scripts"
         scheduledTask = "monitor_AD_Admins", "monitor_backup"
         computerName = $monitoringServer
-    },
-    # ukazka, ze computerName se muze dynamicky plnit dle obsahu OU Notebooks
+    }
+
+    # example of dynamically defined computerName (by computers in OU Notebooks)
     [PSCustomObject]@{
-        folderName   = "slozkaY"
+        folderName   = "notebookScripts"
         computerName = (New-Object System.DirectoryServices.DirectorySearcher((New-Object System.DirectoryServices.DirectoryEntry("LDAP://OU=Notebooks,OU=Computer_Accounts,DC=contoso,DC=com")) , "objectCategory=computer")).FindAll() | ForEach-Object { $_.Properties.name }
-    },
-    # nakopirovani web.config z IISConfig do "C:\inetpub\wwwroot\" na webovem serveru
+    }
+
+    # copy content of IISConfig (for example web.config) to "C:\inetpub\wwwroot\" on web server
     [PSCustomObject]@{
-        folderName   = "IISConfig" # obsahuje web.config
+        folderName   = "IISConfig"
         computerName = $webServer
         customLocalDestination = "C:\inetpub\wwwroot\"
         copyJustContent   = 1
-    },
-    # nakopirovani slozky "Secrets" do sdilene slozky "\\DFS\root\skripty", pricemz pouze "APP-1$", "APP-2$", "domain admins" budou mit moznost cist jeji obsah
+    }
+
+    # copy folder "Scripts" to shared folder "\\DFS\root\privateScrips" moreover just comptuers "APP-1$", "APP-2$" and group "Domain Admins" will have rights to read its content
     [PSCustomObject]@{
-        folderName   = "Secrets"
-        customShareDestination = "\\DFS\root\skripty"
-        customDestinationNTFS   = "APP-1$", "APP-2$", "domain admins"
-    },
-    # nakopirovani "Admin_Secrets" do DFS repozitare\Custom (ale na klienty uz ne) pricemz pouze "Domain Admins" budou mit READ prava na teto slozce
+        folderName   = "Scripts"
+        customShareDestination = "\\DFS\root\privateScrips"
+        customDestinationNTFS   = "APP-1$", "APP-2$", "Domain Admins"
+    }
+
+    # leave "Admin_Secrets" just in your DFS share and limit access just to "Domain Admins"
     [PSCustomObject]@{
         folderName   = "Admin_Secrets"
         customSourceNTFS = "Domain Admins"
     }
-)
-
-V kazdem nakopirovanem adresari (folderName) se automaticky vytvori Log adresar s modify pravy (pro customDestinationNTFS nebo Auth users), aby skripty mohly logovat sve vystupy (neplati pokud se ma kopirovat pouze obsah slozky (copyJustContent)).
-Log adresar se ignoruje pri porovnavani obsahu remote repo vs lokalni kopie a pri synchronizaci zmen je zachovan.
-!!! pokud spoustene skripty generuji nejake soubory, at je ukladaji do tohoto Log adresare, jinak dojde pri kazde synchronizaci s remote repo k jejich smazani (protoze robocopy mirror).
 #>
 
-#FIXME oddelovaci carka mezi objekty musi byt na stejnem radku jako uzaviraci slozena zavorka objektu, jinak nefunguje AST kontrola
 $customConfig = @(
     [PSCustomObject]@{
         folderName   = "Repo_sync"
