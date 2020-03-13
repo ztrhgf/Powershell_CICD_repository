@@ -1,10 +1,9 @@
 # CI/CD solution for (not just) PowerShell content management in your Active Directory environment
-Repository contains necessary files to create your own company CI/CD-like Powershell repository.
+Repository contains necessary files and instructions to create your own company fully automated CI/CD-like repository for managing whole lifecycle of (primarly) Powershell content. 
 
 To set up please follow [instructions](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20-%20INITIAL%20CONFIGURATION.md)
 
 In case you found any bug or have improvement suggestion, please contact me at ztrhgf'at'seznam.cz.
-
 
   
 # Main features:
