@@ -1,8 +1,7 @@
 #Requires -Version 3.0
 
 <#
-    .SYNOPSIS
-    Script is used to synchronize:
+    Script is used on clients to synchronize:
      - PS modules
      - global PS profile
      - per server scripts/data (content of Custom)
@@ -11,11 +10,12 @@
 
     Script should be regularly run through scheduled task created by PS_env_set_up GPO
 
-    Moreover script configures NTFS access to these locally copied data:
-     - edit content can just members of group repo_writer + SYSTEM
-     - read can just members of group repo_reader + Authenticated Users
+    Script also configures NTFS permissions on locally copied data:
+     - content can MODIFY just members of group repo_writer + SYSTEM
+     - READ content can just members of group repo_reader + Authenticated Users
 
-    In case of per server data (Custom), script furthemore create Log subfolder, which must be used for any additional content which will be created on client itself. To this Log folder can write just accounts defined in customDestinationNTFS key and if not defined members of Authenticated Users.
+    In case of per server data (Custom), script creates Log subfolder in root of copied folder.
+    Always use this folder to store scripts output and never store it in copied folder root (otherwise whole folder will be replaced on next sync cycle!). To this Log folder can write just accounts defined in customDestinationNTFS key and if not defined, members of Authenticated Users.
     
     .NOTES
     Author: Ondřej Šebela - ztrhgf@seznam.cz
@@ -23,37 +23,35 @@
 
 #__TODO__ modify function Send-Email to suit your company environment or comment its usage here
 
-
 # for debugging purposes
 Start-Transcript -Path "$env:SystemRoot\temp\PS_env_set_up.log" -Force
 
 $ErrorActionPreference = 'stop'
 
-# UNC path to (DFS) repository ie \\someDomain\DFS\repository
+# UNC path to (DFS) share ie \\someDomain\DFS\repository
 $repoSrc = "\\__TODO__"
 
-# skupina ktera ma pravo cist obsah DFS repozitare (i lokalni kopie)
-# zaroven pouzivam pro detekci, co jsem nakopiroval timto skriptem == NERUSIT (nebo adekvatne upravit cely skript)
-# PRI ZMENE ZMENIT I V SET-PERMISSIONS kde je hardcoded, aby i nadale fungovala spravne detekce
+# AD group that has READ right on DFS share
+# also used to identify data, that was copied through this script and therefore be able to delete them if needed
+# in case that group name would change, made change also in SET-PERMISSIONS where it is hardcoded
 [string] $readUser = "repo_reader"
-# skupina ktera ma pravo editovat obsah DFS repozitare (i lokalni kopie)
+# AD group that has MODIFY right on DFS share
 [string] $writeUser = "repo_writer"
 
-# zdrojova slozka custom dat
+# source Custom folder (in DFS share)
 $customSrcFolder = Join-Path $repoSrc "Custom"
-# cilova slozka custom dat
+# destination path for Custom content
 $customDstFolder = Join-Path $env:systemroot "Scripts"
 
 "start synchronizing data from $repoSrc"
 
 $hostname = $env:COMPUTERNAME
 
-# pokud prestanu nastavovat specificka prava pro vybranou AD skupinu, bude potreba upravit detekci techto custom modulu viz nize!
+#region helper functions
 function Set-Permissions {
     <#
-    dle readUser detekuji moduly, ktere jsem nakopiroval timto sync skriptem
-
-    pokud uzivatel nema pristup k jednomu z modulu v "System32\WindowsPowerShell\v1.0\Modules\", tak se nenactou zadne moduly z tohoto adresare!
+    BEWARE that readUser is also used for detection, which modules and other data this script copied
+    and data detected this way can be therefore deleted in case, they are not needed anymore
     #>
     [cmdletbinding()]
     param (
@@ -73,7 +71,7 @@ function Set-Permissions {
         throw "Path isn't accessible"
     }
 
-    # osetrim pripad, kdy zadana kombinace stringu a pole
+    # flattens input in case, that string and arrays are entered at the same time
     function Flatten-Array {
         param (
             [array] $inputArray
@@ -97,23 +95,21 @@ function Set-Permissions {
     $permissions = @()
 
     if (Test-Path $path -PathType Container) {
-        # je to adresar
-        # vytvorim prazdne ACL
+        # it is folder
         $acl = New-Object System.Security.AccessControl.DirectorySecurity
 
         if ($resetACL) {
-            # reset ACL, tzn zruseni explicitnich ACL a povoleni dedeni
+            # reset ACL, ie remove explicit ACL and enable inheritance
             $acl.SetAccessRuleProtection($false, $false)
         } else {
-            # zakazani dedeni a odebrani zdedenych prav
+            # disable inheritance and remove inherited ACL
             $acl.SetAccessRuleProtection($true, $false)
 
             $permissions += @(, ("System", "FullControl", 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
-            # hardcoded, abych nastavil skutecne vzdy
+            # hardcoded, to be sure, that this right will be set at any circumstances
             $permissions += @(, ("repo_reader", "ReadAndExecute", 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
 
             if (!$justGivenUser) {
-                # pristup pro cteni povolim vsem
                 $permissions += @(, ("Authenticated Users", "ReadAndExecute", 'ContainerInherit,ObjectInherit', 'None', 'Allow'))
             }
 
@@ -126,23 +122,21 @@ function Set-Permissions {
             }
         }
     } else {
-        # je to soubor
+        # it is file
 
-        # vytvorim prazdne ACL
         $acl = New-Object System.Security.AccessControl.FileSecurity
         if ($resetACL) {
-            # reset ACL, tzn zruseni explicitnich ACL a povoleni dedeni
+            # reset ACL, ie remove explicit ACL and enable inheritance
             $acl.SetAccessRuleProtection($false, $false)
         } else {
-            # zakazani dedeni a odebrani zdedenych prav
+            # disable inheritance and remove inherited ACL
             $acl.SetAccessRuleProtection($true, $false)
 
             $permissions += @(, ("System", "FullControl", 'Allow'))
-            # hardcoded, abych nastavil skutecne vzdy
+            # hardcoded, to be sure, that this right will be set at any circumstances
             $permissions += @(, ("repo_reader", "ReadAndExecute", 'Allow'))
 
             if (!$justGivenUser) {
-                # pristup pro cteni povolim vsem
                 $permissions += @(, ("Authenticated Users", "ReadAndExecute", 'Allow'))
             }
 
@@ -161,17 +155,15 @@ function Set-Permissions {
         $acl.AddAccessRule($ace)
     }
 
-    # nastaveni ACL
     try {
-        # Set-Acl nejde pouzit protoze bug https://stackoverflow.com/questions/31611103/setting-permissions-on-a-windows-fileshare
+        # Set-Acl cannot be used because of bug https://stackoverflow.com/questions/31611103/setting-permissions-on-a-windows-fileshare
         (Get-Item $path).SetAccessControl($acl)
     } catch {
         throw "There was an error when setting NTFS rights: $_"
     }
 
-    # reset ACL na obsahu slozky (pro pripad, ze nekdo upravil NTFS prava)
-    # pozn. ownership nemenim
-    #TODO nekdy se na tomto kroku zaseklo, odkomentovat po vyreseni
+    # reset NTFS permissions on folder content (just in case somebody modified it)
+    #TODO sometimes it froze on this step, so uncomment after resolving this issue
     # if (Test-Path $path -PathType Container) {
     #     # Start the job that will reset permissions for each file, don't even start if there are no direct sub-files
     #     $SubFiles = Get-ChildItem $Path -File
@@ -272,24 +264,24 @@ function Send-EmailAndContinue {
 
     Send-Email -subject $subject -body $body
 }
-
+#endregion
 
 
 
 
 #
-# IMPORT PROMENNYCH z Variables modulu
+# IMPORT VARIABLES FROM VARIABLES MODULE
 #
 
-# kvuli Custom sekci (resp. aby slo pouzivat v definici computerName promenne) a kvuli specifikovani kam se ma kopirovat profile.ps1
-# chybu ignorujeme, protoze na fresh stroji, modul bude az po prvnim spusteni tohoto skriptu, ne driv :)
-# pozn.: importuji z DFS share, abych pracoval s nejnovejsimi daty
+# to support using variables from module Variables as value of computerName key in customConfig.ps1 and because of specifying computers where profile.ps1 should be copied
+# need to be done before dot sourcing customConfig.ps1 and modulesConfig.ps1
 try {
+    # at first try to import most current Variables module (from DFS share)
     Import-Module (Join-Path $repoSrc "modules\Variables") -ErrorAction Stop
 } catch {
-    # pokud selze, zkusim pouzit lokalni kopii modulu Variables
-    # muze napr selhat, protoze je umisteno v share
+    # import from DFS share failed, try import local copy
     "Module Variables cannot be loaded from DFS, trying to use local copy"
+    # ignore errors, because on computer, where this script run for the first time, module Variables wont be present
     Import-Module "Variables" -ErrorAction SilentlyContinue
 }
 
@@ -297,9 +289,10 @@ try {
 
 
 #
-# SYNCHRONIZACE MODULU
+# SYNCHRONIZATION OF POWERSHELL MODULES
 #
 
+#region sync of powershell modules
 $moduleSrcFolder = Join-Path $repoSrc "modules"
 $moduleDstFolder = Join-Path $env:systemroot "System32\WindowsPowerShell\v1.0\Modules\"
 
@@ -309,8 +302,6 @@ if (!(Test-Path $moduleSrcFolder -ErrorAction SilentlyContinue)) {
 
 $customModulesScript = Join-Path $moduleSrcFolder "modulesConfig.ps1"
 
-# nactu modulesConfig.ps1 skript respektive $modulesConfig promennou v nem definovanou
-# schvalne definuji v samostatnem souboru kvuli lepsi prehlednosti a editovatelnosti
 try {
     "Dot sourcing of modulesConfig.ps1 (to import variable `$modulesConfig)"
     . $customModulesScript
@@ -319,9 +310,9 @@ try {
     "Error was $_"
 }
 
-# jmena modulu, ktere maji omezeno, kam se maji kopirovat
+# names of modules, that should be copied just to selected computers
 $customModules = @()
-# jmena modulu, ktere se maji kopirovat na tento stroj
+# names of modules, that should be copied just to this computer
 $thisPCModules = @()
 
 $modulesConfig | ForEach-Object {
@@ -334,20 +325,19 @@ $modulesConfig | ForEach-Object {
 
 
 #
-# nakopirovani zmenenych PS modulu (po celych adresarich)
+# copy PS modules
 foreach ($module in (Get-ChildItem $moduleSrcFolder -Directory)) {
     $moduleName = $module.Name
 
     if ($moduleName -notin $customModules -or ($moduleName -in $customModules -and $moduleName -in $thisPCModules)) {
         $moduleDstPath = Join-Path $moduleDstFolder $moduleName
-        # jestli je potreba provest nejake zmeny necham posoudit robocopy
         try {
             "Copying module {0}" -f $moduleName
 
             $result = Copy-Folder $module.FullName $moduleDstPath -mirror
 
             if ($result.failures) {
-                # neskoncim s chybou, protoze se da cekat, ze pri dalsim pokusu uz to projde (ted muze napr bezet skript z teto slozky atp)
+                # just warn about error, it is likely, that it will end succesfully next time (module can be in use etc)
                 "There was an error when copying $($module.FullName)`n$($result.errMsg)"
             }
 
@@ -362,17 +352,18 @@ foreach ($module in (Get-ChildItem $moduleSrcFolder -Directory)) {
         "Module $moduleName shouldn't be copied to this computer"
     }
 }
-
+#endregion
 
 
 
 
 #
-# SYNCHRONIZACE HISTORIE COMMITU
+# SYNCHRONIZATION OF COMMIT HISTORY
 #
 
 $commitHistorySrc = Join-Path $repoSrc "commitHistory"
-# nakopiruji lokalne, aby nasledne cteni obsahu bylo co nejrychlejsi a nevadilo napr. pomale pripojeni pres VPN
+# copy file with commit history locally
+# so prompt function in profile.ps1 where this file is used to check how much is that console obsolete, will be as fast as possible
 if ((Test-Path $commitHistorySrc -ea SilentlyContinue) -and ($env:COMPUTERNAME -in $computerWithProfile)) {
     [Void][System.IO.Directory]::CreateDirectory($customDstFolder)
     Copy-Item $commitHistorySrc $customDstFolder -Force -Confirm:$false
@@ -383,70 +374,65 @@ if ((Test-Path $commitHistorySrc -ea SilentlyContinue) -and ($env:COMPUTERNAME -
 
 
 #
-# SYNCHRONIZACE PS PROFILU
+# SYNCHRONIZATION OF POWERSHELL GLOBAL PROFILE
 #
 
+#region sync of global PS profile
 $profileSrc = Join-Path $repoSrc "profile.ps1"
 $profileDst = Join-Path $env:systemroot "System32\WindowsPowerShell\v1.0\profile.ps1"
 $profileDstFolder = Split-Path $profileDst -Parent
 $isOurProfile = Get-Acl -Path $profileDst -ea silentlyContinue | Where-Object { $_.accessToString -like "*$readUser*" }
 
 if (Test-Path $profileSrc -ea SilentlyContinue) {
-    # v DFS repo je soubor profile.ps1
+    # DFS share contains profile.ps1
     if ($env:COMPUTERNAME -in $computerWithProfile) {
-        # profile.ps1 se ma na tento stroj nakopirovat
+        # profile.ps1 should be copied to this computer
         if (Test-Path $profileDst -ea SilentlyContinue) {
-            # kopirovany soubor jiz v cili existuje, zkontroluji zdali nedoslo ke zmene
+            # profile.ps1 already exist on this computer, check whether it differs
 
-            # porovnani dle velikosti neni dobre, protoze neakcentuje drobne upravy
             $sourceModified = (Get-Item $profileSrc).LastWriteTime
             $destinationModified = (Get-Item $profileDst).LastWriteTime
-            # doslo ke zmene, nahradim stary za novy
             if ($sourceModified -ne $destinationModified) {
+                # profile.ps1 was changed, overwrite it
                 "Copying global PS profile to {0}" -f $profileDstFolder
                 Copy-Item $profileSrc $profileDstFolder -Force -Confirm:$false
                 "Setting NTFS rights to $profileDst"
                 Set-Permissions $profileDst -readUser $readUser -writeUser $writeUser
             }
         } else {
-            # soubor v cili neexistuje, nakopiruji
+            # profile.ps1 doesn't exist on this computer
             "Copying global PS profile to {0}" -f $profileDstFolder
             Copy-Item $profileSrc $profileDstFolder -Force -Confirm:$false
             "Setting NTFS rights to $profileDst"
             Set-Permissions $profileDst -readUser $readUser -writeUser $writeUser
         }
     } else {
-        # profile.ps1 se nema na tento stroj kopirovat
+        # profile.ps1 shouldn't be on this computer
         if ((Test-Path $profileDst -ea SilentlyContinue) -and $isOurProfile) {
-            # je ale nakopirovan lokalne a nakopiroval jej tento skript == smazu
+            # profile.ps1 is on this computer and was copied by this script == delete it
             "Deleting $profileDst"
             Remove-Item $profileDst -force -confirm:$false
         }
     }
 } else {
-    # v DFS repo neni soubor profile.ps1
+    # in DFS share there is not profile.ps1
     if ((Test-Path $profileDst -ea SilentlyContinue) -and ($env:COMPUTERNAME -in $computerWithProfile) -and $isOurProfile) {
-        # je ale nakopirovan lokalne a nakopiroval jej tento skript == smazu
+        # profile.ps1 is on this computer and was copied by this script == delete it
         "Deleting $profileDst"
         Remove-Item $profileDst -force -confirm:$false
     }
 }
+#endregion
 
 
 
 #
-# SYNCHRONIZACE CUSTOM DAT
+# SYNCHRONIZATION OF CUSTOM CONTENT
 #
 
-<#
-Custom adresar v repozitari obsahuje slozky, ktere se maji kopirovat JEN NA VYBRANE stroje.
-To na jake stroje se budou kopirovat, je receno v promenne $customConfig, ktera je definovana v customConfig.ps1!
-Data se na klientech kopiruji do C:\Windows\Scripts\
-
-V kazdem adresari (folderName) se na klientovi automaticky navic vytvori Log adresar s modify pravy (pro customDestinationNTFS nebo Auth users), aby skripty mohly logovat sve vystupy.
-Log adresar se ignoruje pri porovnavani obsahu remote repo vs lokalni kopie a pri synchronizaci zmen je zachovan.
-!!! pokud spoustene skripty generuji nejake soubory, at je ukladaji do tohoto Log adresare, jinak dojde pri kazde synchronizaci s remote repo ke smazani teto slozky (porovnavam velikosti adresaru v repo a lokalu)
-#>
+#region sync of custom content
+# Repository Custom folder contains folders, that should be copied just to defined computers.
+# What should happen is defined in variable $customConfig, which is stored in customConfig.ps1 where you also can find more information.
 
 $customConfigScript = Join-Path $repoSrc "Custom\customConfig.ps1"
 
@@ -454,16 +440,15 @@ if (!(Test-Path $customConfigScript -ErrorAction SilentlyContinue)) {
     Send-EmailAndFail -subject "Custom" -body "script detected missing config file $customConfigScript. Event if you do not want to copy any Custom folders to any server, create empty $customConfigScript."
 }
 
-# nactu customConfig.ps1 skript respektive $customConfig promennou v nem definovanou
-# nastaveni Custom sekce schvalne definuji v samostatnem souboru kvuli lepsi prehlednosti a editovatelnosti
+# import $customConfig
 "Dot sourcing customConfig.ps1 (to import variable `$customConfig)"
 . $customConfigScript
 
-# objekty reprezentujici Custom slozky, ktere se maji kopirovat na tento stroj
+# objects from $customConfig, that represents folders from Custom, that should be copied to this computer
 $thisPCCustom = @()
-# jmena Custom slozek, ktere se maji kopirovat do \Windows\Scripts\
+# name of Custom folders, that should be copied to %windir%\Scripts\
 $thisPCCustFolder = @()
-# jmena Custom slozek, ktere se maji nakopirovat do systemoveho Modules adresare
+# name of Custom folders, that should be copied to system Modules
 $thisPCCustToModules = @()
 
 $customConfig | ForEach-Object {
@@ -471,7 +456,7 @@ $customConfig | ForEach-Object {
         $thisPCCustom += $_
 
         if (!$_.customLocalDestination) {
-            # pridam pouze pokud se kopiruji do vychozi slozky (Scripts)
+            # add just in case, folder should be copied to default folder
             $thisPCCustFolder += $_.folderName
         }
 
@@ -479,21 +464,21 @@ $customConfig | ForEach-Object {
         $modulesFolderRegex = "^" + ([regex]::Escape($normalizedModuleDstFolder)) + "$"
         $normalizedCustomLocalDestination = $_.customLocalDestination -replace "\\$"
         if ($_.customLocalDestination -and $normalizedCustomLocalDestination -match $modulesFolderRegex -and (!$_.copyJustContent -or ($_.copyJustContent -and $_.customDestinationNTFS))) {
-            # pozn. pokud ma copyJustContent ale ne customDestinationNTFS, tak se nenastavi prava pro $read_user >> adresar se nebude automaticky mazat, tzn je zbytecne pro nej delat vyjimku
+            # in case copyJustContent is set but not customDestinationNTFS, NTFS rights for $read_user wont be set == folder wont be automatically deleted in case it isn't needed so it is useless to make exception for it
             $thisPCCustToModules += $_.folderName
         }
     }
 }
 
 #
-# odstraneni jiz nepotrebnych Custom slozek
+# delete Custom folders, that shouldn't be on this computer
 Get-ChildItem $customDstFolder -Directory -ErrorAction SilentlyContinue | ForEach-Object {
     $folder = $_
     if ($folder.name -notin $thisPCCustFolder) {
         try {
             "Deleting unnecessary $($folder.FullName)"
             Remove-Item $folder.FullName -Recurse -Force -Confirm:$false -ErrorAction Stop
-            # obsah adresare muze byt zrovna pouzivan == nepovede se jej smazat == email poslu pouze pokud se povedlo
+            # content of folder can be in use == deletion will fail == email will be sent just in case delete was succesfull
             Send-EmailAndContinue -subject "Deletion of useless folder" -body "script deleted folder $($folder.FullName), because it is no more required here."
         } catch {
             "There was an error when deleting $($folder.FullName), error was`n$_"
@@ -503,7 +488,7 @@ Get-ChildItem $customDstFolder -Directory -ErrorAction SilentlyContinue | ForEac
 
 
 #
-# nakopirovani pozadovanych Custom slozek z repozitare
+# process folders from Custom, that should be on this computer
 if ($thisPCCustom) {
     [Void][System.IO.Directory]::CreateDirectory("$customDstFolder")
 
@@ -511,7 +496,6 @@ if ($thisPCCustom) {
         $folderSrcPath = Join-Path $customSrcFolder $_.folderName
         $folderDstPath = Join-Path $customDstFolder $_.folderName
 
-        # zmenim cilove umisteni, pokud vyzadovano
         if ($_.customLocalDestination) {
             if ($_.copyJustContent) {
                 $folderDstPath = $_.customLocalDestination
@@ -522,21 +506,22 @@ if ($thisPCCustom) {
             [Void][System.IO.Directory]::CreateDirectory("$folderDstPath")
         }
 
-        # kontrola, ze existuje zdrojovy adresar (to ze je v config neznamena, ze realne existuje)
+        # check that source folder really exists in DFS share
         if (!(Test-Path $folderSrcPath -ErrorAction SilentlyContinue)) {
             Send-EmailAndFail -subject "Missing folder" -body "it is not possible to copy $folderSrcPath, because it does not exist.`nSynchronization will not work until you solve this problem."
         }
 
-        # kontrola, ze neexistuje ve zdrojovem adresari Log adresar (ten vytvarime az lokalne na strojich a nepocitam s variantou, ze by se nasynchronizoval z repo)
+        # check that source folder doesn't contain subfolder named Log
+        # subfolder with such a name is automatically created in root of clients folder copy so it would cause conflict or unexpected behaviour
         if (Test-Path (Join-Path $folderSrcPath "Log") -ErrorAction SilentlyContinue) {
             Send-EmailAndFail -subject "Sync of PS scripts: Existing Log folder" -body "in $folderSrcPath exist folder 'Log' which is not supported. Delete it.`nSynchronization will not work until you solve this problem."
         }
 
-        # kontrola, ze zadany account jde na danem stroji pouzit
+        # check that given account can be used on this computer
         $customNTFS = $_.customDestinationNTFS
         # $customNTFSWithoutDomain = ($customNTFS -split "\\")[-1]
         if ($customNTFS) {
-            #TODO toto nelze pouzit pro gMSA ucty, upravit
+            #TODO this check cannot be used for gMSA accounts, fix
             # if (!(Get-WmiObject -Class win32_userAccount -Filter "name=`'$customNTFSWithoutDomain`'")) {
             #     Import-Module Scripts -Function Send-Email
             #     Send-Email -subject "Sync of PS scripts: Missing account" -body "Hi,`non $env:COMPUTERNAME it is not possible to grant NTFS permission to $folderDstPath to account $customNTFS. Is `$customConfig configuration correct?`nSynchronization of $folderSrcPath will not work until you solve this problem."
@@ -548,25 +533,25 @@ if ($thisPCCustom) {
         $customLogFolder = Join-Path $folderDstPath "Log"
 
         #
-        # nakopiruji Custom slozku do zadaneho cile
+        # copy Custom folder
         if ($_.copyJustContent) {
-            # kopiruji pouze obsah slozky
-            # nemohu tak pouzit robocopy mirror, protoze se da cekat, ze v cili budou i jine soubory
+            # copy just content of the folder
+            # cannot therefore use robocopy mirror, because it is likely, that destination folder will contain other files too
             "Copying content of Custom folder {0} to {1}" -f (Split-Path $folderSrcPath -leaf), $folderDstPath
             $result = Copy-Folder $folderSrcPath $folderDstPath
         } else {
-            # kopiruji celou slozku
+            # copy folder as whole
             "Copying of Custom folder {0} to {1}" -f (Split-Path $folderSrcPath -leaf), (Split-Path $folderDstPath -Parent)
             $result = Copy-Folder $folderSrcPath $folderDstPath -mirror -excludeFolder $customLogFolder
 
-            # vypisi smazane soubory
+            # output deleted files
             if ($result.deleted) {
                 "Deletion of unnecessary files:`n$(($result.deleted) -join "`n")"
             }
         }
 
         if ($result.failures) {
-            # neskoncim s chybou, protoze se da cekat, ze pri dalsim pokusu uz to projde (ted muze napr bezet skript z teto slozky atp)
+            # just warn about error, it is likely, that it will end succesfully next time (folder could be locked now etc)
             "There was an error when copying $folderSrcPath`n$($result.errMsg)"
         }
 
@@ -575,15 +560,15 @@ if ($thisPCCustom) {
         }
 
         #
-        # vytvorim Log adresar pokud dava smysl
+        # create Log subfolder if that makes sense
         if (!$_.copyJustContent -or ($_.copyJustContent -and !$_.customLocalDestination)) {
             [Void][System.IO.Directory]::CreateDirectory("$customLogFolder")
         }
 
         #
-        # nastavim NTFS prava
-        # delam pokazde (commit mohl zmenit customDestinationNTFS aniz by se zmenil obsah slozky, tzn nelze menit pouze pri zmene dat
-        # pokud zadana custom destinace, nastavim prava pouze pokud je definovano customDestinationNTFS a zaroven nekopiruji pouze obsah slozky (bylo by slozite/pomale/kontraproduktivni?!)
+        # set NTFS rights
+        # do every tim because commit could have changed customDestinationNTFS value even though data stayed the same
+        # if destination is customized, set NTFS only if customDestinationNTFS is set and whole folder is copied (otherwise it would be complicated/slow/contraproductive?!)
         if (!($_.customLocalDestination) -or ($_.customLocalDestination -and $_.customDestinationNTFS -and !($_.copyJustContent))) {
             $permParam = @{path = $folderDstPath; readUser = $readUser, "Administrators"; writeUser = $writeUser, "Administrators" }
             if ($customNTFS) {
@@ -598,14 +583,13 @@ if ($thisPCCustom) {
                 Send-EmailAndFail -subject "Set permission error" -body "there was failure:`n$_`n`n when set up permission (read: $readUser, write: $writeUser) on folder $folderDstPath"
             }
 
-            # nastavim i na Log podadresari
+            # set NTFS permissions also on Log subfolder
             $permParam = @{ path = $customLogFolder; readUser = $readUser; writeUser = $writeUser }
             if ($customNTFS) {
                 $permParam.readUser = "Administrators"
                 $permParam.writeUser = "Administrators", $customNTFS
                 $permParam.justGivenUser = $true
             } else {
-                # nezadal custom ucet tzn nevim pod kym to pobezi tzn nastavim write pro Authenticated Users
                 $permParam.writeUser = $permParam.writeUser, "Authenticated Users"
             }
 
@@ -617,10 +601,8 @@ if ($thisPCCustom) {
             }
 
         } elseif ($_.customLocalDestination -and !$_.customDestinationNTFS -and !$_.copyJustContent) {
-            # nemaji se nastavit zadna custom prava
-            # pro jistotu udelam reset NTFS prav (mohl jsem je jiz v minulosti nastavit)
-            # ale pouze pokud na danem adresari najdu read_user ACL == nastavil jsem v minulosti custom prava
-            # pozn.: detekuji tedy dle NTFS opravneni (pokud by se nenastavovalo, bude potreba zvolit jinou metodu detekce!)
+            # no custom NTFS rights should be applied
+            # reset NTFS just in case, there were some set earlier, but only read_user ACL is found == proof that NTFS was set by this script and therefore it is safe to reset them
             $folderhasCustomNTFS = Get-Acl -path $folderDstPath | ? { $_.accessToString -like "*$readUser*" }
             if ($folderhasCustomNTFS) {
                 "Folder $folderDstPath has custom NTFS rights even it shouldn't, resetting"
@@ -632,25 +614,25 @@ if ($thisPCCustom) {
         }
 
         #
-        # vytvorim Scheduled tasky z XML definici
-        # pripadne zmodifikuji/smazu existujici
-        # tasky se pojmenuji dle nazvu XML, kvuli vetsi prehlednosti (budou teda vzdy v rootu sched. task manageru)
-        # autora zmenim na nazev tohoto skriptu, kvuli jejich snadne identifikaci
+        # create Scheduled tasks from XML definitions
+        # or modify/delete existing one
+        # sched. tasks are always created with same name as have XML that defines them and will be placed in Task Scheduler root
+        # author will be set as name of this script for easy identification and manageability
 
-        # seznam sched. tasku, ktere se maji na tomto stroji vytvaret
+        # scheduled tasks that should be created on this computer
         $scheduledTask = $_.scheduledTask
 
         if ($scheduledTask) {
             foreach ($taskName in $scheduledTask) {
                 $definitionPath = Join-Path $folderSrcPath "$taskName.xml"
-                # zkontroluji, ze existuje XML s konfiguraci pro dany task
+                # check that corresponding XML exists
                 if (!(Test-Path $definitionPath -ea SilentlyContinue)) {
                     Send-EmailAndFail -subject "Custom" -body "script detected missing XML definition $definitionPath for scheduled task $taskName."
                 }
 
                 [xml]$xmlDefinition = Get-Content $definitionPath
                 $runasAccountSID = $xmlDefinition.task.Principals.Principal.UserId
-                # kontrola, ze runas ucet lze pouzit na tomto stroji
+                # check that runas account can be used on this computer
                 try {
                     $runasAccount = ((New-Object System.Security.Principal.SecurityIdentifier($runasAccountSID)).Translate([System.Security.Principal.NTAccount])).Value
                 } catch {
@@ -664,33 +646,36 @@ if ($thisPCCustom) {
                 # $taskExists = schtasks /tn "$taskName"
                 # if (!$taskExists) { }
 
-                # pred vytvorenim tasku, zmenim jmeno autora na nazev tohoto skriptu
+                # change author name to filename of this script
                 $xmlDefinition.task.RegistrationInfo.Author = $MyInvocation.MyCommand.Name
+                # create customized copy of XML definition
                 $xmlDefinitionCustomized = "$env:TEMP\22630001418512454850000.xml"
                 $xmlDefinition.Save($xmlDefinitionCustomized)
 
+                # create scheduled task from XML definition
                 schtasks /CREATE /XML "$xmlDefinitionCustomized" /TN "$taskName" /F
 
                 if (!$?) {
                     Remove-Item $xmlDefinitionCustomized -Force -Confirm:$false
                     throw "Unable to create scheduled task $taskName"
                 } else {
+                    # success
                     Remove-Item $xmlDefinitionCustomized -Force -Confirm:$false
-                    # Created/modified scheduled task
                 }
             }
-        } # konec zpracovani sched. tasku
-    } # konec zpracovani Custom objektu pro tento stroj
-} # konec nakopirovani pozadovanych Custom slozek
+        } # end of sched. task section
+    } # end of section that process objects from $customConfig that are targeted to this computer
+} # end of processing Custom folders that should be on this computer
 
 
 #
-# smazani sched. tasku, ktere jsem v minulosti vytvoril v ramci Custom, ale jiz zde byt nemaji
-# hledam pouze v rootu, protoze je vytvarim pouze v rootu
+# delete scheduled tasks that shouldn't be on this computer
+# and was created earlier by this script
+# check just tasks in root, because script creates them in root
 $taskInRoot = schtasks /QUERY /FO list | ? { $_ -match "^TaskName:\s+\\[^\\]+$" } | % { $_ -replace "^TaskName:\s+\\" }
 foreach ($taskName in $taskInRoot) {
     if ($taskName -notin $scheduledTask) {
-        # pred smazanim overim, ze byl vytvoren timto skriptem
+        # check that task was created by this script and only in that case delete it
         [xml]$xmlDefinitionExt = schtasks.exe /QUERY /XML /TN "$taskName"
         if ($xmlDefinitionExt.task.RegistrationInfo.Author -eq $MyInvocation.MyCommand.Name) {
             schtasks /DELETE /TN "$taskName" /F
@@ -700,15 +685,15 @@ foreach ($taskName in $taskInRoot) {
             }
         }
     }
-} # konec mazani nezadoucich sched. tasku
+} # end of deleting scheduled task section
+#endregion
 
 
 #
-# smazani lokalnich Modulu, ktere jiz v centralnim repo neexistuji
-# zamerne az za Custom sekci, abych nemusel 2x nacitat customConfig
+# delete Powershell modules that are no more in DFS share, so shouldn't be on client neither
+# this section is after Custom for a purpose to not have to dot source customConfig.ps1 twice
 if (Test-Path $moduleDstFolder -ea SilentlyContinue) {
-    # dohledam soubory/slozky, ktere jsem v minulosti nakopiroval do lokalnich Modules
-    # pozn.: poznam je dle NTFS opravneni (pokud by se nenastavovalo, bude potreba zvolit jinou metodu detekce!)
+    # save system modules that was copied by this script
     $repoModuleInDestination = Get-ChildItem $moduleDstFolder -Directory | Get-Acl | Where-Object { $_.accessToString -like "*$readUser*" } | Select-Object -ExpandProperty PSChildName
     if ($repoModuleInDestination) {
         $sourceModuleName = @((Get-ChildItem $moduleSrcFolder -Directory).Name)
