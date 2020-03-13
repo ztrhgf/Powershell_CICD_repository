@@ -92,7 +92,7 @@ if (!$local_user) {
 # customization console Title and prompt
 #
 
-# save commit identifier which was actual when this console start to user registry
+# save commit identifier which was actual when this console started to user registry
 # to be able later compare it with actual system commit
 $commitHistoryPath = "$env:SystemRoot\Scripts\commitHistory"
 $keyName = "consoleCommit_$PID"
