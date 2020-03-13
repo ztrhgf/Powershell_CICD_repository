@@ -1,39 +1,54 @@
 <#
-Zde je mozne omezit, na jake klienty se budou moduly z Modules kopirovat. Mysli se tim Modules v DFS, tzn i moduly vznikle z scripts2module.
-Pokud zde modul neni uveden, znamena to, ze se bude kopirovat na kazdeho klienta.
+Purpose of this file is to give you option to limit only on which computers should be selected modules from this repository copied.
+Both modules from modules and scripts2module (automatically generated) folders can be set.
 
-Standardne se obsah kopiruje do C:\Windows\System32\WindowsPowerShell\v1.0\Modules a dochazi automaticky k mazani toho, co tam jiz byt nema.
-Tento skript se dot sourcuje v PS_env_set_up.ps1 a nesmi proto obsahovat nic krome promenne modulesConfig!
+- modules not defined here will be copied to every computer joined to this CI/CD solution
+- modules are copied on clients to C:\Windows\System32\WindowsPowerShell\v1.0\Modules, so are globally available
+- any copied module, that shouldn't be on client anymore is deleted
+    - copied modules are recognized by their NTFS ACL
+- synchronization of modules is invoked from clients themself
+    - through PS_env_set_up scheduled task (ie ps1 script) under SYSTEM account
+    - by dot sourcing this file and behave accordingly to content of modulesConfig variable
+        - so IT SHOULD'N CONTAIN ANYTHING ELSE BESIDES variable modulesConfig
 
-Jak ma vypadat $modulesConfig a co muze obsahovat:
-$modulesConfig je pole objektu, kde kazdy objekt reprezentuje jednu slozku v Modules adresari.
-Objekt pak obsahuje nasledujici klice:
 
+## WHAT MODULESTONFIG VARIABLE IS AND WHAT IT SHOULD CONTAINS:
+- modulesConfig is defined as array of objects, where every object represents one folder (module) in root of Modules or scripts2module directory
+- object keys define, what should be done with this folder
+
+
+## POSSIBLE OBJECT KEYS:
     - folderName
-        jmeno slozky (ktera se nachazi v Modules adresari)
+        (mandatory) [string] key
+        - name of folder in modules or scripts2module directory, that this object represents
 
     - computerName
-        na jake stroje se ma slozka POUZE synchronizovat (je mozne pouzit i promennou (napr. z Variables modulu) obsahujici seznam stroju)
-        !nikam jinam se kopirovat nebude a pokud jiz byla nekam drive nakopirovana, tak dojde k jejimu smazani!
+        (mandatory) [string[]] key
+        - name of servers to which should be this folder copied (and nowhere else!)
+            - in case it was already copied to some computers, it will be automatically deleted there!
+        - variable (from module Variables) can be used also
 
 
+## EXAMPLES:
 
-PRIKLADY:
+    !!! BEWARE because of AST analyze, comma between objects always need to be on same line as the objects closing brace ie.
 
-$modulesConfig = @(
-    [PSCustomObject]@{
-        folderName   = "ConfluencePS"
-        computerName = "PC-1"
-    },
-    [PSCustomObject]@{
-        folderName   = "Posh-SSH"
-        computerName = $adminPC
-    }
-)
-
+    $modulesConfig = @(
+        [PSCustomObject]@{
+            folderName   = "ConfluencePS"
+            computerName = "PC-1"
+        },
+        [PSCustomObject]@{
+            folderName   = "Posh-SSH"
+            computerName = $adminPC
+        },
+        [PSCustomObject]@{
+            folderName   = "adminFunctions"
+            computerName = $adminPC
+        }
+    )
 #>
 
-#FIXME oddelovaci carka mezi objekty musi byt na stejnem radku jako uzaviraci slozena zavorka objektu, jinak nefunguje AST kontrola
 $modulesConfig = @(
     [PSCustomObject]@{
         folderName   = "adminFunctions"
