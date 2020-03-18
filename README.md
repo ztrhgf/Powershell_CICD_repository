@@ -62,7 +62,13 @@ In case you found any bug or have improvement suggestion, please contact me at z
 - support nesting of folders in Custom folder
 - support for Pester testing
 
+## [Known Issues]
+- scheduled task XML definition exported on Windows Server 2012 won't pass pre-commit.ps1 validation test. Because it doesn't contain URI, which therefore has to be manually added.
 
+
+## [2.0.19] - 2020-03-18
+### Changed
+- translation of git hooks
 
 ## [2.0.18] - 2020-03-13
 ### Changed
