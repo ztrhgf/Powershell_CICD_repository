@@ -1,5 +1,5 @@
 #!/bin/sh
-echo "commit cancelled" # pri chybe zpracovani VSC automaticky vypise obsah prvniho echo, proto tento text i kdyz ve vypisu konzole bude mast
+echo "commit cancelled" # when error occurs, VSC automatically output first echo here, therefore this strange output
 echo "#####################"
 echo "###### POST-MERGE git hook"
 echo "###### Notify if pull automerges files, that are actually modified"

@@ -1,8 +1,8 @@
 #!/bin/sh
-echo "commit cancelled" # pri chybe zpracovani VSC automaticky vypise obsah prvniho echo, proto tento text i kdyz ve vypisu konzole bude mast
+echo "commit cancelled" # when error occurs, VSC automatically output first echo here, therefore this strange output
 echo "#####################"
 echo "###### COMMIT-MSG git hook"
-echo "###### Check that name of commit is in correct form: 'text: text"
+echo "###### Checks that name of commit is in correct form: 'text: text"
 exec powershell.exe -NoProfile -ExecutionPolicy Bypass -file ".\.githooks\commit-msg.ps1" $1
 echo "#####################"
 exit

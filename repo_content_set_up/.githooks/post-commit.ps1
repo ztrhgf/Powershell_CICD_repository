@@ -1,6 +1,12 @@
-# script pushes commit to cloud repository
+<#
+script
+    - is automatically run after new commit is succesfully created (because of git post-commit hook)
+    - pushes commit to cloud repository
+#>
 
 $ErrorActionPreference = "stop"
+
+# Write-Host is used to display output in GIT console
 
 function _ErrorAndExit {
     param ($message)
@@ -15,12 +21,11 @@ function _ErrorAndExit {
 }
 
 try {
-    # prepnu se do rootu repozitare
+    # switch to repository root
     Set-Location $PSScriptRoot
     Set-Location ..
     $root = Get-Location
 
-    # _startProcess umi vypsat vystup (vcetne chyb) primo do konzole, takze se da pres Select-String poznat, jestli byla chyba
     function _startProcess {
         [CmdletBinding()]
         param (
@@ -44,21 +49,18 @@ try {
 
 
     #
-    # pushnuti zmen do remote repozitare
+    # push commit to cloud GIT repository
     "- push commit to cloud repository"
     $repoStatus = _startProcess git "push origin master"
-    # kontrola, ze se push povedl
+    # check that push was succesfull
     if ($repoStatus -match "\[rejected\]") {
         _ErrorAndExit "There was an error when trying to push commit to cloud repository:`n$repoStatus"
     }
 
-    # poznacim aktualni commit (duvod viz post-merge.ps1)
+    # save actual commit to file (reason to this is explained in post-merge.ps1)
     $lastCommitPath = Join-Path $root ".githooks\lastCommit"
-    # commit, ktery je aktualne posledni
     $actualLastCommit = git log -n 1 --pretty=format:"%H"
     $actualLastCommit | Out-File $lastCommitPath -Force
-
-    # rozkopirovani do DFS se deje ze spesl serveru, ktery udela pull pod servisnim uctem + zavola Update-Repo a tim dostane zmeny do DFS
 } catch {
     _ErrorAndExit "There ws an error:`n$_"
 }

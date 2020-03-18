@@ -1,11 +1,15 @@
 <#
-script automatically checks format of commit message
-in case format is not "text: text", ends with error and commit will be aborted
+script
+    - is automatically run before any commit is created (because of git commit-msg hook)
+    - checks format of commit message
+    - in case format is not in form "text: text", ends with error and commit itself will be aborted
 #>
 
 param ($commitPath)
 
 $ErrorActionPreference = "stop"
+
+# Write-Host is used to display output in GIT console
 
 function _ErrorAndExit {
     param ($message)
