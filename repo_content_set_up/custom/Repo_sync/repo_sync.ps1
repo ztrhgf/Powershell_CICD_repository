@@ -1180,7 +1180,7 @@ try {
         # git clone it
         # login.xml should contain repo_puller credentials and should be placed in same folder as this script
         # !credentials are valid for one year, so need to be renewed regularly!
-        #__TODO__ to login.xml export GIT credentials (access token in case of Azure DevOps) of repo_puller account (read only account which is used to clone your repository) (what is access token https://docs.microsoft.com/cs-cz/azure/devops/repos/git/auth-overview?view=azure-devops)
+        #__TODO__ to login.xml export GIT credentials (access token in case of Azure DevOps) of repo_puller account (read only account which is used to clone your repository) (what is access token https://docs.microsoft.com/cs-cz/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=preview-page)
         #__TODO__ how to export credentials safely to xml file https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20-%20INITIAL%20CONFIGURATION.md#on-server-which-will-be-used-for-cloning-and-processing-cloud-repository-data-and-copying-result-to-dfs-ie-mgm-server
         $acc = Import-Clixml "$PSScriptRoot\login.xml"
         $l = $acc.UserName
