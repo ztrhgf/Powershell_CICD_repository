@@ -280,17 +280,17 @@ try {
                             _ErrorAndExit "In customConfig.ps1 object that defines '$folderName' in key $key, defines scheduled task '$taskName', but associated config file $windowsPath is neither in remote GIT repository\Custom\$folderName nor in actual commit (name is case sensitive!). It would cause error on clients."
                         }
 
-                        # check that XML really contains scheduled task definition
-                        #FIXME tasks exported on Server 2012 doesn't contain this XML path
+                        # check (very basic) that XML really contains scheduled task definition
                         $XMLPath = Join-Path $rootFolder "Custom\$folderName\$taskName.xml"
                         [xml]$xmlDefinition = Get-Content $XMLPath
-                        if (!$xmlDefinition.Task.RegistrationInfo.URI) {
-                            _ErrorAndExit "In customConfig.ps1 object that defines '$folderName' in key $key, defines scheduled task '$taskName', but associated config file $windowsPath doesn't contain valid data. It would cause error on clients."
+                        if (!$xmlDefinition.Task.RegistrationInfo.Author) {
+                            _ErrorAndExit "In customConfig.ps1 object that defines '$folderName' in key $key, defines scheduled task '$taskName', but associated config file $windowsPath doesn't contain valid data (Author tag is missing). This would cause error on clients, fix it."
                         }
 
-                        # warn if name of XML file differs from name in CustomConfig
+                        # warn if scheduled task name defined in XML file differs from name in CustomConfig
+                        # won't work on scheduled task definition created on Windows Server 2012, because it doesn't contain URI tag
                         $taskNameInXML = $xmlDefinition.task.RegistrationInfo.URI -replace "^\\"
-                        if ($taskName -ne $taskNameInXML) {
+                        if ($taskNameInXML -and ($taskName -ne $taskNameInXML)) {
                             _WarningAndExit "In customConfig.ps1 object that defines '$folderName' in key $key, defines scheduled task '$taskName', but associated config file $windowsPath defines task '$taskNameInXML'.`nBeware, that this task will be created with name '$taskName'."
                         }
                     }
