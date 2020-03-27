@@ -16,7 +16,7 @@
 
     In case of per server data (Custom), script creates Log subfolder in root of copied folder.
     Always use this folder to store scripts output and never store it in copied folder root (otherwise whole folder will be replaced on next sync cycle!). To this Log folder can write just accounts defined in customDestinationNTFS key and if not defined, members of Authenticated Users.
-    
+        
     .NOTES
     Author: Ondřej Šebela - ztrhgf@seznam.cz
 #>
@@ -337,7 +337,7 @@ foreach ($module in (Get-ChildItem $moduleSrcFolder -Directory)) {
             $result = Copy-Folder $module.FullName $moduleDstPath -mirror
 
             if ($result.failures) {
-                # just warn about error, it is likely, that it will end succesfully next time (module can be in use etc)
+                # just warn about error, it is likely, that it will end successfully next time (module can be in use etc)
                 "There was an error when copying $($module.FullName)`n$($result.errMsg)"
             }
 
@@ -450,21 +450,27 @@ $thisPCCustom = @()
 $thisPCCustFolder = @()
 # name of Custom folders, that should be copied to system Modules
 $thisPCCustToModules = @()
+# name of Custom scheduled tasks, that should be created on this computer
+$thisPCCustSchedTask = @()
 
 $customConfig | ForEach-Object {
     if ($hostname -in $_.computerName) {
         $thisPCCustom += $_
 
         if (!$_.customLocalDestination) {
-            # add just in case, folder should be copied to default folder
+            # add only if folder should be copied to default (Scripts) folder
             $thisPCCustFolder += $_.folderName
+        }
+
+        if ($_.scheduledTask) {
+            $thisPCCustSchedTask += $_.scheduledTask
         }
 
         $normalizedModuleDstFolder = $moduleDstFolder -replace "\\$"
         $modulesFolderRegex = "^" + ([regex]::Escape($normalizedModuleDstFolder)) + "$"
         $normalizedCustomLocalDestination = $_.customLocalDestination -replace "\\$"
         if ($_.customLocalDestination -and $normalizedCustomLocalDestination -match $modulesFolderRegex -and (!$_.copyJustContent -or ($_.copyJustContent -and $_.customDestinationNTFS))) {
-            # in case copyJustContent is set but not customDestinationNTFS, NTFS rights for $read_user wont be set == folder wont be automatically deleted in case it isn't needed so it is useless to make exception for it
+            # in case copyJustContent is set but not customDestinationNTFS, NTFS rights for $read_user wont be set == folder won't be automatically deleted in case it isn't needed so it is useless to make exception for it
             $thisPCCustToModules += $_.folderName
         }
     }
@@ -478,7 +484,7 @@ Get-ChildItem $customDstFolder -Directory -ErrorAction SilentlyContinue | ForEac
         try {
             "Deleting unnecessary $($folder.FullName)"
             Remove-Item $folder.FullName -Recurse -Force -Confirm:$false -ErrorAction Stop
-            # content of folder can be in use == deletion will fail == email will be sent just in case delete was succesfull
+            # content of folder can be in use == deletion will fail == email will be sent just in case delete was successfull
             Send-EmailAndContinue -subject "Deletion of useless folder" -body "script deleted folder $($folder.FullName), because it is no more required here."
         } catch {
             "There was an error when deleting $($folder.FullName), error was`n$_"
@@ -551,7 +557,7 @@ if ($thisPCCustom) {
         }
 
         if ($result.failures) {
-            # just warn about error, it is likely, that it will end succesfully next time (folder could be locked now etc)
+            # just warn about error, it is likely, that it will end successfully next time (folder could be locked now etc)
             "There was an error when copying $folderSrcPath`n$($result.errMsg)"
         }
 
@@ -671,10 +677,10 @@ if ($thisPCCustom) {
 #
 # delete scheduled tasks that shouldn't be on this computer
 # and was created earlier by this script
-# check just tasks in root, because script creates them in root
+# check just tasks in root, because this script creates them in root
 $taskInRoot = schtasks /QUERY /FO list | ? { $_ -match "^TaskName:\s+\\[^\\]+$" } | % { $_ -replace "^TaskName:\s+\\" }
 foreach ($taskName in $taskInRoot) {
-    if ($taskName -notin $scheduledTask) {
+    if ($taskName -notin $thisPCCustSchedTask) {
         # check that task was created by this script and only in that case delete it
         [xml]$xmlDefinitionExt = schtasks.exe /QUERY /XML /TN "$taskName"
         if ($xmlDefinitionExt.task.RegistrationInfo.Author -eq $MyInvocation.MyCommand.Name) {
