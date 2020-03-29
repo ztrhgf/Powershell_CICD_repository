@@ -13,16 +13,20 @@ In case you found any bug or have improvement suggestion, please contact me at z
 - **fully automated code validation, formatting and content distribution**
   - using GIT hooks, Powershell scripts, GPO and VSC editor
   - automation is not applicable to code writing :)
-- **easy to use** (fully managed from Visual Studio Code editor)
-- **idiot-proof**
-  - warn about modification of functions and variables used in other scripts in repository etc, so chance, that you break your environment is less than ever :)
-- **customizable** (everything is written in Powershell)
-- possibility to **distribute selected content to selected computers** (to specified folder (with specified NTFS permissions))
-- can be used to **distribute any kind of content** (ps1, exe, ini, whatever) across company
+- Written by Windows administrator for Windows administrators i.e. 
+  - **easy to use**
+    - fully managed from Visual Studio Code editor
+    - GIT knowledge not needed
+  - **customizable**
+    - everything is written in Powershell
+  - **idiot-proof :)**
+    - warn about modification of functions and variables used elsewhere in repository, so chance that you break your environment is less than ever :)
+- can be used to 
+  - **distribute any kind of content** (ps1, exe, ini, whatever) to any local/remote location
+  - automatic script signing (if enabled)
+  - automatic scheduled task creation (from XML definition), so ps1 script and sched. task that should run it can be distributed together
 - **no paid tools needed**
-- GIT knowledge not needed
-- automatic script signing (if enabled)
-- possibility to auto create scheduled task from XML definition
+
 - check [examples](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md) for getting better insight
   
 # How code validation works
