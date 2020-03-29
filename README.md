@@ -9,25 +9,25 @@ In case you found any bug or have improvement suggestion, please contact me at z
 # Main features:
 - **unified Powershell environment across whole Active Directory**
   - same modules, functions and variables everywhere
-  - one global Powershell profile to unify administrators experience
+  - one global Powershell profile to unify repository administrators experience
 - **fully automated code validation, formatting and content distribution**
   - using GIT hooks, Powershell scripts, GPO and VSC editor
-  - automation is not applicable to code writing and making commits :)
+  - automation is not applicable to code writing :)
+- **easy to use** (fully managed from Visual Studio Code editor)
+- **idiot-proof**
+  - warn about modification of functions and variables used in other scripts in repository etc, so chance, that you break your environment is less than ever :)
+- **customizable** (everything is written in Powershell)
 - possibility to **distribute selected content to selected computers** (to specified folder (with specified NTFS permissions))
 - can be used to **distribute any kind of content** (ps1, exe, ini, whatever) across company
-- **easy to use** (fully managed from Visual Studio Code editor)
 - **no paid tools needed**
 - GIT knowledge not needed
-- **idiot-proof**
-  - warn about modification of functions and variables used in other scripts in repository etc
-- **customizable** (everything is written in Powershell)
 - automatic script signing (if enabled)
 - possibility to auto create scheduled task from XML definition
 - check [examples](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md) for getting better insight
   
 # How code validation works
 - after you commit your changes, pre-commit git hook initiate checks defined in pre-commit.ps1
-- only if all checks are passed, commit will be created
+- only if all checks are passed, commit will be created and content distributed
 
 ## What is validated before commit is created
 - that you are trying to delete important repository files
@@ -41,18 +41,17 @@ In case you found any bug or have improvement suggestion, please contact me at z
 - warn about deleted function (in case, the function is used elsewhere)
 - warn about changed variable value from module Variables (in case, the variable is used elsewhere)
 - warn about deleted variable from module Variables (in case, the variable is used elsewhere)
-- that format of $customConfig is right
-- that format of $modulesConfig is right
 - ...
 
 
 # How distribution of content works
 - after successful commit, content is automatically:
-  - pushed to GIT repository (post-commit GIT hook)
-  - pulled to local server, processed and distributed to DFS share (repo_sync.ps1)
-    - being regularly run every X minutes by manually created scheduled task
-  - from DFS share the content is downloaded to clients in your Active Directory (PS_env_set_up.ps1)
-    - being regularly run on client every X minutes by automatically created scheduled task (created via GPO PS_env_set_up)
+  - pushed to GIT repository
+    - by post-commit GIT hook (post-commit.ps1)
+  - pulled to local server, processed and distributed to DFS share
+    - by repo_sync.ps1 which is regularly run every 15 minutes by scheduled task
+  - from DFS share the content is being downloaded by clients in your Active Directory
+    - by PS_env_set_up.ps1 which is regularly run on client every 30 minutes by automatically created scheduled task (created via GPO PS_env_set_up)
   
   
 # Changelog
@@ -64,9 +63,11 @@ In case you found any bug or have improvement suggestion, please contact me at z
 - scheduled task validity check in pre-commit.ps1 now instead of URI tag checks for existence of Author tag in task XML definition
   - so sched. tasks exported from Windows Server 2012 can be used too without problem 
 
+
 ## [2.0.19] - 2020-03-18
 ### Changed
 - translation of git hooks
+
 
 ## [2.0.18] - 2020-03-13
 ### Changed
@@ -75,19 +76,23 @@ In case you found any bug or have improvement suggestion, please contact me at z
 - translation of repo_sync.ps1
 - translation of PS_env_st_up.ps1
 
+
 ## [2.0.17] - 2020-03-09
 ### Changed
 - translation of profile.ps1
 ### Bug fixes
 - another fix for showing "how many commits behind" number in ISE title
 
+
 ## [2.0.16] - 2020-03-09
 ### Bug fixes
 - fixed showing "how many commits behind" number in ISE title
 
+
 ## [2.0.15] - 2020-01-02
 ### Bug fixes
 - output git errors in repo_sync.ps1 as error objects, so try{} catch{} block works as exptected
+
 
 ## [2.0.14] - 2019-12-18
 ### Added
@@ -98,6 +103,7 @@ In case you found any bug or have improvement suggestion, please contact me at z
 
 beware, that it sais, how much "behind" is your console to your system state, not git repository itself
 
+
 ## [2.0.13] - 2019-11-25
 ### Bug fixes
 - missing computerName in sent emails (from PS_env_set_up)
@@ -106,15 +112,18 @@ beware, that it sais, how much "behind" is your console to your system state, no
 - better examples in customConfig
 - quote output of TAB completition in PS profile
 
+
 ## [2.0.12] - 2019-11-21
 ### Changed
 - compatibility check is now voluntary because of it's impact on pre-commit checks performance
   - to enable check, just uncomment rules section in PSScriptAnalyzerSettings.psd1
 
+
 ## [2.0.11] - 2019-11-20
 ### Changed
 - profile.ps1 cleanup
 - move functions from profile.ps1 to separate adminFunctions module
+
 
 ## [2.0.10] - 2019-11-12
 ### Bug fixes
