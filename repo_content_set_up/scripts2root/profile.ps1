@@ -75,7 +75,8 @@ $computerSB = {
 # given string (on which TAB was used) is searched in name and description of AD computer accounts
 Register-ArgumentCompleter -CommandName ((Get-Command -Module Scripts).name) -ParameterName computerName -ScriptBlock $computerSB
 # TAB completion of AD computer names in identity parameter of commands with "computer" in their name from module ActiveDirectory
-Register-ArgumentCompleter -CommandName ((Get-Command -Module ActiveDirectory -Noun *computer*).name) -ParameterName identity -ScriptBlock $computerSB
+#__TODO__ uncomment only in case you have RSAT installed on your admin computers 
+#Register-ArgumentCompleter -CommandName ((Get-Command -Module ActiveDirectory -Noun *computer*).name) -ParameterName identity -ScriptBlock $computerSB
 
 
 
