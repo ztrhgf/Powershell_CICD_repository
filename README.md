@@ -58,7 +58,7 @@ In case you found any bug or have improvement suggestion, please contact me at z
 
 ## [2.0.20] - 2020-03-27
 ### Bug fixes
-- fixed bug that caused deletion of scheduled tasks, that were created thanks to customConfig settings in case, computer was defined in multiple objects in customConfig variable
+- fixed bug that caused deletion of scheduled tasks (that were created by this solution) in case, that computer was defined in multiple objects in customConfig variable
 ### Changed
 - scheduled task validity check in pre-commit.ps1 now instead of URI tag checks for existence of Author tag in task XML definition
   - so sched. tasks exported from Windows Server 2012 can be used too without problem 
