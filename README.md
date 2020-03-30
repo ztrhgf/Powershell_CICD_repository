@@ -1,9 +1,11 @@
 # CI/CD solution for (not just) PowerShell content management in your Active Directory environment
 Repository contains necessary files and instructions to create your own company fully automated CI/CD-like repository for managing whole lifecycle of (primarly) Powershell content. 
 
-To set up please follow [instructions](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20-%20INITIAL%20CONFIGURATION.md)
+To set this up in your environment please follow [instructions](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20-%20INITIAL%20CONFIGURATION.md).
 
-In case you like this solution, found any bug or have improvement suggestion, please contact me at ztrhgf'at'seznam.cz.
+In case you like this solution, found any bug or have improvement suggestion, please contact me at ondrejsebela'at'gmail.com.
+
+If you enjoy listening to bad english :), you can [watch my video](https://youtu.be/R3wjRT0zuOk) introduction with a **lot of examples** (examples starts at 10:12).
 
   
 # Main features:
@@ -27,7 +29,7 @@ In case you like this solution, found any bug or have improvement suggestion, pl
   - automatic scheduled task creation (from XML definition), so ps1 script and sched. task that should run it can be distributed together
 - **no paid tools needed**
 
-- check [examples](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md) for getting better insight
+- check [examples](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md) or [watch video](https://youtu.be/R3wjRT0zuOk?t=612) for getting better insight.
   
 # How code validation works
 - after you commit your changes, pre-commit git hook initiate checks defined in pre-commit.ps1
