@@ -29,7 +29,7 @@ If you enjoy listening to bad english :), you can [watch my video](https://youtu
   - automatic scheduled task creation (from XML definition), so ps1 script and sched. task that should run it can be distributed together
 - **no paid tools needed**
 
-- check [examples](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md) or [watch video](https://youtu.be/R3wjRT0zuOk?t=612) for getting better insight.
+- check [examples](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md) or [watch video](https://youtu.be/R3wjRT0zuOk?t=612) for getting better insight
   
 # How code validation works
 - after you commit your changes, pre-commit git hook initiate checks defined in pre-commit.ps1
