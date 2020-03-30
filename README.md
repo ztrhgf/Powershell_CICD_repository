@@ -100,7 +100,7 @@ In case you found any bug or have improvement suggestion, please contact me at z
 
 ## [2.0.14] - 2019-12-18
 ### Added
-- console Title now shows number of commits, this console is "behind" ie how old are data you are working with
+- console Title now shows number of commits, this console is "behind" i.e. how old are data you are working with
 ![How new Title looks like](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/_other/commitBehind.JPG)
 
 (so you have a hint, how urgent is to start new console (to be able to work with new repository content), or run Refresh-Console to get new content to this console)
