@@ -3,7 +3,7 @@ Repository contains necessary files and instructions to create your own company 
 
 - To set this up in your environment please follow [instructions](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20-%20INITIAL%20CONFIGURATION.md).
 
-- If you enjoy listening to bad english :), you can [watch my video](https://youtu.be/R3wjRT0zuOk) introduction with a **lot of examples** (examples starts at 10:12).
+- If you enjoy listening to bad english :), you can watch [short introduction video of basic features](https://youtu.be/-xSJXbmOgyk) or [more detailed video with a lot of examples and explanation of how this works](https://youtu.be/R3wjRT0zuOk) (examples starts at 10:12).
 
 - In case you like this solution, found any bug or have improvement suggestion, please contact me at ondrejsebela'at'gmail.com.
 
