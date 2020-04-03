@@ -1,7 +1,7 @@
 # CI/CD solution for (not just) PowerShell content management in your Active Directory environment
-Repository contains necessary files and instructions to create your own company fully automated CI/CD-like repository for managing whole lifecycle of (primarly) Powershell content. 
+Repository contains necessary files and instructions to create your own company fully automated CI/CD-like repository for managing whole lifecycle of (primarly) Powershell content. So the only thing you will have to worry about is code writing :)
 
-- To see some of the features, this solution offers watch this [short introduction video](https://youtu.be/-xSJXbmOgyk). For more examples and explanation of how this works watch [quite long but detailed video](https://youtu.be/R3wjRT0zuOk) (examples starts at 10:12).
+- To see some of the features this solution offers, watch this [short introduction video](https://youtu.be/-xSJXbmOgyk). For more examples and explanation of how this works watch [quite long but detailed video](https://youtu.be/R3wjRT0zuOk) (examples starts at 10:12).
 
 - To set this up in your environment please follow these [instructions](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20-%20INITIAL%20CONFIGURATION.md).
 
@@ -14,7 +14,6 @@ Repository contains necessary files and instructions to create your own company 
   - one global Powershell profile to unify repository administrators experience
 - **fully automated code validation, formatting and content distribution**
   - using GIT hooks, Powershell scripts, GPO and VSC editor
-  - automation is not applicable to code writing :)
 - Written by Windows administrator for Windows administrators i.e. 
   - **easy to use**
     - fully managed from Visual Studio Code editor
@@ -23,7 +22,7 @@ Repository contains necessary files and instructions to create your own company 
     - everything is written in Powershell
   - **idiot-proof :)**
     - warn about modification of functions and variables used elsewhere in repository, so chance that you break your environment is less than ever :)
-- can be used to 
+- can be used also to 
   - **distribute any kind of content** (ps1, exe, ini, whatever) to any local/remote location
   - automatic script signing (if enabled)
   - automatic scheduled task creation (from XML definition), so ps1 script and sched. task that should run it can be distributed together
