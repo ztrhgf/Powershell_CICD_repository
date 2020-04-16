@@ -12,7 +12,7 @@ Both modules from modules and scripts2module (automatically generated) folders c
         - so IT SHOULD'N CONTAIN ANYTHING ELSE BESIDES variable modulesConfig
 
 
-## WHAT MODULESTONFIG VARIABLE IS AND WHAT IT SHOULD CONTAINS:
+## WHAT MODULESCONFIG VARIABLE IS AND WHAT IT SHOULD CONTAINS:
 - modulesConfig is defined as array of objects, where every object represents one folder (module) in root of Modules or scripts2module directory
 - object keys define, what should be done with this folder
 
