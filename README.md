@@ -1,29 +1,34 @@
 # CI/CD solution for (not just) PowerShell content management in your Active Directory environment
-Repository contains necessary files and instructions to create your own company fully automated CI/CD-like repository for managing whole lifecycle of (primarly) Powershell content. 
+Repository contains necessary files and instructions to create your own company fully automated CI/CD-like repository for managing whole lifecycle of (primarly) Powershell content. So the only thing you will have to worry about is code writing :)
 
-To set up please follow [instructions](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20-%20INITIAL%20CONFIGURATION.md)
+- To see some of the features this solution offers, watch this [short introduction video](https://youtu.be/-xSJXbmOgyk). For more examples and explanation of how this works watch [quite long but detailed video](https://youtu.be/R3wjRT0zuOk) (examples starts at 10:12).
 
-In case you found any bug or have improvement suggestion, please contact me at ztrhgf'at'seznam.cz.
+- To set this up in your environment please follow these [instructions](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20-%20INITIAL%20CONFIGURATION.md).
 
-  
+- In case you like this solution, found any bug or have improvement suggestion, please contact me at **ondrejsebela'at'gmail.com**.
+
+
 # Main features:
 - **unified Powershell environment across whole Active Directory**
   - same modules, functions and variables everywhere
   - one global Powershell profile to unify repository administrators experience
 - **fully automated code validation, formatting and content distribution**
   - using GIT hooks, Powershell scripts, GPO and VSC editor
-  - automation is not applicable to code writing :)
-- **easy to use** (fully managed from Visual Studio Code editor)
-- **idiot-proof**
-  - warn about modification of functions and variables used in other scripts in repository etc, so chance, that you break your environment is less than ever :)
-- **customizable** (everything is written in Powershell)
-- possibility to **distribute selected content to selected computers** (to specified folder (with specified NTFS permissions))
-- can be used to **distribute any kind of content** (ps1, exe, ini, whatever) across company
+- Written by Windows administrator for Windows administrators i.e. 
+  - **easy to use**
+    - fully managed from Visual Studio Code editor
+    - GIT knowledge not needed
+  - **customizable**
+    - everything is written in Powershell
+  - **idiot-proof :)**
+    - warn about modification of functions and variables used elsewhere in repository, so chance that you break your environment is less than ever :)
+- can be used also to 
+  - **distribute any kind of content** (ps1, exe, ini, whatever) to any local/remote location
+  - automatic script signing (if enabled)
+  - automatic scheduled task creation (from XML definition), so ps1 script and sched. task that should run it can be distributed together
 - **no paid tools needed**
-- GIT knowledge not needed
-- automatic script signing (if enabled)
-- possibility to auto create scheduled task from XML definition
-- check [examples](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md) for getting better insight
+
+- check [examples](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md) or [watch video](https://youtu.be/R3wjRT0zuOk?t=612) for getting better insight
   
 # How code validation works
 - after you commit your changes, pre-commit git hook initiate checks defined in pre-commit.ps1
@@ -58,7 +63,7 @@ In case you found any bug or have improvement suggestion, please contact me at z
 
 ## [2.0.20] - 2020-03-27
 ### Bug fixes
-- fixed bug that caused deletion of scheduled tasks, that were created thanks to customConfig settings in case, computer was defined in multiple objects in customConfig variable
+- fixed bug that caused deletion of scheduled tasks (that were created by this solution) in case, that computer was defined in multiple objects in customConfig variable
 ### Changed
 - scheduled task validity check in pre-commit.ps1 now instead of URI tag checks for existence of Author tag in task XML definition
   - so sched. tasks exported from Windows Server 2012 can be used too without problem 
@@ -96,7 +101,7 @@ In case you found any bug or have improvement suggestion, please contact me at z
 
 ## [2.0.14] - 2019-12-18
 ### Added
-- console Title now shows number of commits, this console is "behind" ie how old are data you are working with
+- console Title now shows number of commits, this console is "behind" i.e. how old are data you are working with
 ![How new Title looks like](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/_other/commitBehind.JPG)
 
 (so you have a hint, how urgent is to start new console (to be able to work with new repository content), or run Refresh-Console to get new content to this console)
