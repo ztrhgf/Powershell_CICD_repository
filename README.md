@@ -58,7 +58,13 @@ Repository contains necessary files and instructions to create your own company 
   - from DFS share the content is being downloaded by clients in your Active Directory
     - by PS_env_set_up.ps1 which is regularly run on client every 30 minutes by automatically created scheduled task (created via GPO PS_env_set_up)
   
-  
+
+# [1. Installation](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20-%20INITIAL%20CONFIGURATION.md)
+# [2. Examples](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md)
+# [3. FAQ](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/FAQ.md)
+# [4. Repository content explanation](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/3.%20SIMPLIFIED%20EXPLANATION%20OF%20HOW%20IT%20WORKS.md)
+
+
 # Changelog
 
 ## [2.0.20] - 2020-03-27
