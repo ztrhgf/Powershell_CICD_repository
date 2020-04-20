@@ -22,6 +22,7 @@ Repository contains necessary files and instructions to create your own company 
     - everything is written in Powershell
   - **idiot-proof :)**
     - warn about modification of functions and variables used elsewhere in repository, so chance that you break your environment is less than ever :)
+    - ...
 - can be used also to 
   - **distribute any kind of content** (ps1, exe, ini, whatever) to any local/remote location
   - automatic script signing (if enabled)
