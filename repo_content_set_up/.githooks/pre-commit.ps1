@@ -283,7 +283,7 @@ try {
                         # check (very basic) that XML really contains scheduled task definition
                         $XMLPath = Join-Path $rootFolder "Custom\$folderName\$taskName.xml"
                         [xml]$xmlDefinition = Get-Content $XMLPath
-                        if (!$xmlDefinition.Task.RegistrationInfo.Author) {
+                        if (!$xmlDefinition.Task.RegistrationInfo.Author -and !$xmlDefinition.Task.RegistrationInfo.URI) {
                             _ErrorAndExit "In customConfig.ps1 object that defines '$folderName' in key $key, defines scheduled task '$taskName', but associated config file $windowsPath doesn't contain valid data (Author tag is missing). This would cause error on clients, fix it."
                         }
 
