@@ -3,6 +3,8 @@
 ## [2.0.21] - 2020-04-24
 ### Bug fixes
 - fixed detection of renamed files in pre-commit.ps1
+### Changed
+- relax more checks for sched. task xml validity
 
 
 ## [2.0.20] - 2020-03-27
