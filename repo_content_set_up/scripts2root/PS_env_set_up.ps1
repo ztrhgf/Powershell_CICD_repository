@@ -653,6 +653,14 @@ if ($thisPCCustom) {
                 # if (!$taskExists) { }
 
                 # change author name to filename of this script
+                try {
+                    $xmlDefinition.task.RegistrationInfo.Author.GetType()
+                } catch {
+                    # author node doesn't exist, I will create it
+                    $xdNS = $xmlDefinition.DocumentElement.NamespaceURI
+                    $authorElem = $xmlDefinition.CreateElement("Author", $xdNS)
+                    [void]$xmlDefinition.task.RegistrationInfo.AppendChild($authorElem)
+                }
                 $xmlDefinition.task.RegistrationInfo.Author = $MyInvocation.MyCommand.Name
                 # create customized copy of XML definition
                 $xmlDefinitionCustomized = "$env:TEMP\22630001418512454850000.xml"
