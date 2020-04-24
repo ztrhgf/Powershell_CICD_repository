@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.0.21] - 2020-04-24
+### Bug fixes
+- fixed detection of renamed files in pre-commit.ps1
+
+
 ## [2.0.20] - 2020-03-27
 ### Bug fixes
 - fixed bug that caused deletion of scheduled tasks (that were created by this solution) in case, that computer was defined in multiple objects in customConfig variable
