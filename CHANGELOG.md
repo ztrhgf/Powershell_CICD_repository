@@ -4,7 +4,7 @@
 ### Bug fixes
 - fixed detection of renamed files in pre-commit.ps1
 ### Changed
-- relax more checks for sched. task xml validity
+- relaxed checks for sched. task xml validity + handle xml without author in PS_env_set_up.ps1
 
 
 ## [2.0.20] - 2020-03-27
