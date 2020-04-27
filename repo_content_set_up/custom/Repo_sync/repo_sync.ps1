@@ -6,7 +6,7 @@
     - copy processed content which is intended for clients to shared folder (DFS)
 
     BEWARE, repo_puller account used to pull data from GIT repository has to have 'alternate credentials' created and these credentials has to be exported to login.xml (under account which is used to run this script ie SYSTEM)
-        
+            
     .NOTES
     Author: Ondřej Šebela - ztrhgf@seznam.cz
 #>
@@ -33,8 +33,10 @@ $destination = "__TODO__" # UNC path to DFS repository (ie.: \\myDomain\dfs\repo
 # AD group that has MODIFY right on DFS share
 [string] $writeUser = "repo_writer"
 
-#__TODO__ configure and uncomment one of the rows that initialize variable $signingCert, if you want automatic code signing to happen (using specified certificate)
+# path to file where will be stored list of last 20 commit hashes
+$commitHistoryPath = Join-Path $destination commitHistory
 
+#__TODO__ configure and uncomment one of the rows that initialize variable $signingCert, if you want automatic code signing to happen (using specified certificate)
 # certificate which will be used to sign ps1, psm1, psd1 and ps1xml files
 # USE ONLY IF YOU KNOW, WHAT ARE YOU DOING
 # tutorial how to create self signed certificate http://woshub.com/how-to-sign-powershell-script-with-a-code-signing-certificate/
@@ -248,18 +250,6 @@ function _updateRepo {
     }
     if ($uncommitedDeletedFile) {
         Write-Verbose "Skipping these deleted, but uncommited files:`n$($uncommitedDeletedFile -join "`n")"
-    }
-
-
-
-
-
-    #
-    # SAVE COMMITS HISTORY TO FILE IN DFS SHARE ROOT
-    # for clients to be able to determine how many commits behind is their running Powershell console behind client itself
-    #
-    if ($commitHistory) {
-        $commitHistory | Out-File (Join-Path $destination commitHistory) -Force
     }
 
 
@@ -753,7 +743,7 @@ function _exportScriptsToModule {
 
         Write-Verbose "To $modulePath`n"
 
-        # to hash $lastCommitFileContent add  pair, where key is name of function and value is its text definition
+        # to hash $lastCommitFileContent add pair, where key is name of the function and value is its text definition
         $script2Export | % {
             $script = $_
             $fName = [System.IO.Path]::GetFileNameWithoutExtension($script)
@@ -1167,7 +1157,7 @@ try {
             # delete untracked files and folders (generated modules etc)
             _startProcess git -argumentList "clean -fd"
 
-            # save last 20 commits
+            # get last 20 commits
             $commitHistory = _startProcess git -argumentList "log --pretty=format:%h -20"
             $commitHistory = $commitHistory -split "`n" | ? { $_ }
         } catch {
@@ -1178,10 +1168,10 @@ try {
     } else {
         # there isn't local copy of GIT repository
         # git clone it
-        # login.xml should contain repo_puller credentials and should be placed in same folder as this script
-        #__TODO__ to login.xml export GIT credentials (access token in case of Azure DevOps) of repo_puller account (read only account which is used to clone your repository) (what is access token https://docs.microsoft.com/cs-cz/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=preview-page)
+        # login.xml should contain repo_puller credentials
+                #__TODO__ to login.xml export GIT credentials (access token in case of Azure DevOps) of repo_puller account (read only account which is used to clone your repository) (what is access token https://docs.microsoft.com/cs-cz/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=preview-page)
         #__TODO__ how to export credentials safely to xml file https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20-%20INITIAL%20CONFIGURATION.md#on-server-which-will-be-used-for-cloning-and-processing-cloud-repository-data-and-copying-result-to-dfs-ie-mgm-server
-        # ! if you use Personal Access Token, beware that it's valid just for limited time, so need to be renewed regularly!
+        # !credentials are valid for one year, so need to be renewed regularly!
         $acc = Import-Clixml "$PSScriptRoot\login.xml"
         $l = $acc.UserName
         $p = $acc.GetNetworkCredential().Password
@@ -1245,6 +1235,17 @@ try {
         _emailAndExit "There was an error when copying changes to DFS repository:`n$_"
     }
     #endregion
+
+
+
+    #
+    # SAVE COMMITS HISTORY TO FILE IN DFS SHARE ROOT
+    # for clients to be able to determine how many commits is their running Powershell console behind the client itself
+    #
+    if ($commitHistory) {
+        $commitHistory | Out-File $commitHistoryPath -Force
+    }
+
 
 
 
