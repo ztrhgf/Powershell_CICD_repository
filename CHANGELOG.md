@@ -1,5 +1,9 @@
 # Changelog
 
+## [2.0.22] - 2020-04-29
+### Bug fixes
+- correctly handle situation when computerName key in $customConfig or $modulesConfig contains as value array that consists from string and array. And the same fix goes also for $computerWithProfile
+
 ## [2.0.21] - 2020-04-24
 ### Bug fixes
 - fixed detection of renamed files in pre-commit.ps1
