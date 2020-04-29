@@ -16,7 +16,7 @@
 
     In case of per server data (Custom), script creates Log subfolder in root of copied folder.
     Always use this folder to store scripts output and never store it in copied folder root (otherwise whole folder will be replaced on next sync cycle!). To this Log folder can write just accounts defined in customDestinationNTFS key and if not defined, members of Authenticated Users.
-        
+            
     .NOTES
     Author: Ondřej Šebela - ztrhgf@seznam.cz
 #>
@@ -48,6 +48,25 @@ $customDstFolder = Join-Path $env:systemroot "Scripts"
 $hostname = $env:COMPUTERNAME
 
 #region helper functions
+function Flatten-Array {
+    # flattens input in case, that string and arrays are entered at the same time
+    param (
+        [array] $inputArray
+    )
+
+    foreach ($item in $inputArray) {
+        if ($item -ne $null) {
+            # recurse for arrays
+            if ($item.gettype().BaseType -eq [System.Array]) {
+                Flatten-Array $item
+            } else {
+                # output non-arrays
+                $item
+            }
+        }
+    }
+}
+
 function Set-Permissions {
     <#
     BEWARE that readUser is also used for detection, which modules and other data this script copied
@@ -71,24 +90,6 @@ function Set-Permissions {
         throw "Path isn't accessible"
     }
 
-    # flattens input in case, that string and arrays are entered at the same time
-    function Flatten-Array {
-        param (
-            [array] $inputArray
-        )
-
-        foreach ($item in $inputArray) {
-            if ($item -ne $null) {
-                # recurse for arrays
-                if ($item.gettype().BaseType -eq [System.Array]) {
-                    Flatten-Array $item
-                } else {
-                    # output non-arrays
-                    $item
-                }
-            }
-        }
-    }
     $readUser = Flatten-Array $readUser
     $writeUser = Flatten-Array $writeUser
 
@@ -318,7 +319,7 @@ $thisPCModules = @()
 $modulesConfig | ForEach-Object {
     $customModules += $_.folderName
 
-    if ($hostname -in $_.computerName) {
+    if ($hostname -in (Flatten-Array $_.computerName)) {
         $thisPCModules += $_.folderName
     }
 }
@@ -364,7 +365,7 @@ foreach ($module in (Get-ChildItem $moduleSrcFolder -Directory)) {
 $commitHistorySrc = Join-Path $repoSrc "commitHistory"
 # copy file with commit history locally
 # so prompt function in profile.ps1 where this file is used to check how much is that console obsolete, will be as fast as possible
-if ((Test-Path $commitHistorySrc -ea SilentlyContinue) -and ($env:COMPUTERNAME -in $computerWithProfile)) {
+if ((Test-Path $commitHistorySrc -ea SilentlyContinue) -and ($env:COMPUTERNAME -in (Flatten-Array $computerWithProfile))) {
     [Void][System.IO.Directory]::CreateDirectory($customDstFolder)
     Copy-Item $commitHistorySrc $customDstFolder -Force -Confirm:$false
 }
@@ -385,7 +386,7 @@ $isOurProfile = Get-Acl -Path $profileDst -ea silentlyContinue | Where-Object { 
 
 if (Test-Path $profileSrc -ea SilentlyContinue) {
     # DFS share contains profile.ps1
-    if ($env:COMPUTERNAME -in $computerWithProfile) {
+    if ($env:COMPUTERNAME -in (Flatten-Array $computerWithProfile)) {
         # profile.ps1 should be copied to this computer
         if (Test-Path $profileDst -ea SilentlyContinue) {
             # profile.ps1 already exist on this computer, check whether it differs
@@ -416,7 +417,7 @@ if (Test-Path $profileSrc -ea SilentlyContinue) {
     }
 } else {
     # in DFS share there is not profile.ps1
-    if ((Test-Path $profileDst -ea SilentlyContinue) -and ($env:COMPUTERNAME -in $computerWithProfile) -and $isOurProfile) {
+    if ((Test-Path $profileDst -ea SilentlyContinue) -and ($env:COMPUTERNAME -in (Flatten-Array $computerWithProfile)) -and $isOurProfile) {
         # profile.ps1 is on this computer and was copied by this script == delete it
         "Deleting $profileDst"
         Remove-Item $profileDst -force -confirm:$false
@@ -454,7 +455,7 @@ $thisPCCustToModules = @()
 $thisPCCustSchedTask = @()
 
 $customConfig | ForEach-Object {
-    if ($hostname -in $_.computerName) {
+    if ($hostname -in (Flatten-Array $_.computerName)) {
         $thisPCCustom += $_
 
         if (!$_.customLocalDestination) {

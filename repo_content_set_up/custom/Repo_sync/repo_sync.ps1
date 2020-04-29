@@ -6,7 +6,7 @@
     - copy processed content which is intended for clients to shared folder (DFS)
 
     BEWARE, repo_puller account used to pull data from GIT repository has to have 'alternate credentials' created and these credentials has to be exported to login.xml (under account which is used to run this script ie SYSTEM)
-            
+                
     .NOTES
     Author: Ondřej Šebela - ztrhgf@seznam.cz
 #>
@@ -376,9 +376,9 @@ function _updateRepo {
             if ($configData -and ($configData.computerName)) {
                 # it is defined, where this module should be copied
                 # limit NTFS rights accordingly
-                [string[]] $readUserC = $configData.computerName
+                $readUserC = $configData.computerName
                 # computer AD accounts end with $
-                $readUserC = $readUserC | % { $_ + "$" }
+                $readUserC = (_flattenArray $readUserC) | % { $_ + "$" }
 
                 " - limiting NTFS rights on $folder (grant access just to: $($readUserC -join ', '))"
                 _setPermissions $folder -readUser $readUserC -writeUser $writeUser
@@ -444,7 +444,7 @@ function _updateRepo {
                         $destProfile = (Join-Path $destination "profile.ps1")
                         if ($computerWithProfile) {
                             # computer AD accounts end with $
-                            [string[]] $readUserP = $computerWithProfile | % { $_ + "$" }
+                            $readUserP = (_flattenArray $computerWithProfile) | % { $_ + "$" }
 
                             "  - limiting NTFS rights on $destProfile (grant access just to: $($readUserP -join ', '))"
                             _setPermissions $destProfile -readUser $readUserP -writeUser $writeUser
@@ -540,9 +540,9 @@ function _updateRepo {
                 if ($configData.customSourceNTFS) {
                     [string[]] $readUserC = $configData.customSourceNTFS
                 } else {
-                    [string[]] $readUserC = $configData.computerName
+                    $readUserC = $configData.computerName
                     # computer AD ucty maji $ za svym jmenem, pridam
-                    $readUserC = $readUserC | % { $_ + "$" }
+                    $readUserC = (_flattenArray $readUserC) | % { $_ + "$" }
                 }
 
                 " - limiting NTFS rights on $folder (grant access just to: $($readUserC -join ', '))"
@@ -1008,6 +1008,24 @@ Function _copyFolder {
     }
 } # end of _copyFolder
 
+function _flattenArray {
+    # flattens input in case, that string and arrays are entered at the same time
+    param (
+        [array] $inputArray
+    )
+
+    foreach ($item in $inputArray) {
+        if ($item -ne $null) {
+            # recurse for arrays
+            if ($item.gettype().BaseType -eq [System.Array]) {
+                _flattenArray $item
+            } else {
+                # output non-arrays
+                $item
+            }
+        }
+    }
+}
 function _setPermissions {
     [cmdletbinding()]
     param (
@@ -1025,26 +1043,8 @@ function _setPermissions {
         throw "zadana cesta neexistuje"
     }
 
-    # flattens input in case, that string and arrays are entered at the same time
-    function Flatten-Array {
-        param (
-            [array] $inputArray
-        )
-
-        foreach ($item in $inputArray) {
-            if ($item -ne $null) {
-                # recurse for arrays
-                if ($item.gettype().BaseType -eq [System.Array]) {
-                    Flatten-Array $item
-                } else {
-                    # output non-arrays
-                    $item
-                }
-            }
-        }
-    }
-    $readUser = Flatten-Array $readUser
-    $writeUser = Flatten-Array $writeUser
+    $readUser = _flattenArray $readUser
+    $writeUser = _flattenArray $writeUser
 
     $permissions = @()
 
@@ -1169,7 +1169,7 @@ try {
         # there isn't local copy of GIT repository
         # git clone it
         # login.xml should contain repo_puller credentials
-                #__TODO__ to login.xml export GIT credentials (access token in case of Azure DevOps) of repo_puller account (read only account which is used to clone your repository) (what is access token https://docs.microsoft.com/cs-cz/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=preview-page)
+        #__TODO__ to login.xml export GIT credentials (access token in case of Azure DevOps) of repo_puller account (read only account which is used to clone your repository) (what is access token https://docs.microsoft.com/cs-cz/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=preview-page)
         #__TODO__ how to export credentials safely to xml file https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20-%20INITIAL%20CONFIGURATION.md#on-server-which-will-be-used-for-cloning-and-processing-cloud-repository-data-and-copying-result-to-dfs-ie-mgm-server
         # !credentials are valid for one year, so need to be renewed regularly!
         $acc = Import-Clixml "$PSScriptRoot\login.xml"
