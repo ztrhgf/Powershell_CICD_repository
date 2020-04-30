@@ -125,7 +125,7 @@ try {
         # get added/modified/renamed files from this commit (but not deleted)
         $filesToCommitNoDEL = $filesToCommit | ForEach-Object {
             $item = $_
-            if ($filesToCommitStatus -match "(A|M|R)\s+[`"]?" -and $filesToCommitStatus -match [Regex]::Escape($item)) {
+            if ($filesToCommitStatus -match ("^\s*(A|M|R)\s+[`"]?.+" + [Regex]::Escape($item) + "\s*$")) {
                 # transform relative path to absolute + replace unix slashes for backslashes
                 Join-Path (Get-Location) $item
             }
