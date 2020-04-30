@@ -996,6 +996,10 @@ Function _copyFolder {
             if ($_ -match "^ERROR: ") {
                 $errMsg += ($_ -replace "^ERROR:\s+")
             }
+            # captures errors like: 2020/04/27 09:01:27 ERROR 2 (0x00000002) Accessing Source Directory C:\temp
+            if ($match = ([regex]"^[0-9 /]+ [0-9:]+ ERROR \d+ \([0-9x]+\) (.+)").Match($_).captures.groups) {
+                $errMsg += $match[1].value
+            }
         }
 
         return [PSCustomObject]@{
