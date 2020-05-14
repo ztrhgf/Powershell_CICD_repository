@@ -12,10 +12,9 @@ GLOBAL POWERSHELL PROFILE
 #>
 
 # don't apply to system accounts
-$whoami = whoami
-if ($whoami -in "NT AUTHORITY\SYSTEM", "NT AUTHORITY\NETWORK SERVICE", "NT AUTHORITY\LOCAL SERVICE") { return }
+if ((whoami) -in "NT AUTHORITY\SYSTEM", "NT AUTHORITY\NETWORK SERVICE", "NT AUTHORITY\LOCAL SERVICE") { return }
 
-$local_user = $env:USERDOMAIN -eq $env:COMPUTERNAME
+$_isLocalUser = $env:USERDOMAIN -eq $env:COMPUTERNAME
 
 # set working directory to user profile
 Set-Location $env:USERPROFILE
@@ -64,7 +63,7 @@ $PSDefaultParameterValues = @{
 #
 #__TODO__ replace used LDAP:// paths according to your organization or you can delete this section completely :)
 
-$computerSB = {
+$_computerSB = {
     param ($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
 
     $searcher = New-Object System.DirectoryServices.DirectorySearcher (([adsi]"LDAP://DC=kontoso,DC=com"), '(objectCategory=computer)', ('name', 'description'))
@@ -73,10 +72,10 @@ $computerSB = {
 }
 # TAB completion of AD computer names in computerName parameter of any command from module Scripts, ..
 # given string (on which TAB was used) is searched in name and description of AD computer accounts
-Register-ArgumentCompleter -CommandName ((Get-Command -Module Scripts).name) -ParameterName computerName -ScriptBlock $computerSB
+Register-ArgumentCompleter -CommandName ((Get-Command -Module Scripts).name) -ParameterName computerName -ScriptBlock $_computerSB
 # TAB completion of AD computer names in identity parameter of commands with "computer" in their name from module ActiveDirectory
 #__TODO__ uncomment only in case you have RSAT installed on your admin computers 
-#Register-ArgumentCompleter -CommandName ((Get-Command -Module ActiveDirectory -Noun *computer*).name) -ParameterName identity -ScriptBlock $computerSB
+#Register-ArgumentCompleter -CommandName ((Get-Command -Module ActiveDirectory -Noun *computer*).name) -ParameterName identity -ScriptBlock $_computerSB
 
 
 
@@ -84,7 +83,7 @@ Register-ArgumentCompleter -CommandName ((Get-Command -Module Scripts).name) -Pa
 #
 # import Variables module
 #
-if (!$local_user) {
+if (!$_isLocalUser) {
     Import-Module Variables
 }
 
