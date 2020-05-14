@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.26] - 2020-05-14
+### Bug fixes
+- fixed detection of variables from Variables module in pre-commit.ps1
+### Changed
+- detection of possible duplicates variables in Variables module no longer ends commit, but you can continue if you consider it ok
+
+
 ## [2.0.25] - 2020-05-14
 ### Bug fixes
 - fixed duplicating console Title (profile.ps1) in case that working path contains spaces
