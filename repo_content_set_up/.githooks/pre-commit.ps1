@@ -650,7 +650,7 @@ try {
         $AST = [System.Management.Automation.Language.Parser]::ParseFile($variablesModule, [ref]$null, [ref]$null)
         $actVariables = $AST.FindAll( { $args[0] -is [System.Management.Automation.Language.VariableExpressionAst ] }, $true)
         # all defined variables
-        $actVariables = $actVariables | Where-Object { $_.parent.left -or $_.parent.type } | Select-Object @{n = "name"; e = { $_.variablepath.userPath } }, @{n = "value"; e = {
+        $actVariables = $actVariables | Where-Object { $_.parent.left -or $_.parent.type -and ($_.parent.operator -eq 'Equals' -or $_.parent.parent.operator -eq 'Equals') } | Select-Object @{n = "name"; e = { $_.variablepath.userPath } }, @{n = "value"; e = {
                 if ($value = $_.parent.right.extent.text) {
                     $value
                 } else {
@@ -673,7 +673,7 @@ try {
             $AST = [System.Management.Automation.Language.Parser]::ParseInput(($lastCommitContent -join "`n"), [ref]$null, [ref]$null)
             $prevVariables = $AST.FindAll( { $args[0] -is [System.Management.Automation.Language.VariableExpressionAst ] }, $true)
             # all defined variables in previous module version
-            $prevVariables = $prevVariables | Where-Object { $_.parent.left -or $_.parent.type } | Select-Object @{n = "name"; e = { $_.variablepath.userPath } }, @{n = "value"; e = {
+            $prevVariables = $prevVariables | Where-Object { $_.parent.left -or $_.parent.type -and ($_.parent.operator -eq 'Equals' -or $_.parent.parent.operator -eq 'Equals') } | Select-Object @{n = "name"; e = { $_.variablepath.userPath } }, @{n = "value"; e = {
                     if ($value = $_.parent.right.extent.text) {
                         $value
                     } else {
@@ -694,7 +694,7 @@ try {
         # check that module doesn't define one variable multiple times
         $duplicateVariable = $actVariables | Group-Object name | Where-Object { $_.count -gt 1 } | Select-Object -ExpandProperty name
         if ($duplicateVariable) {
-            _ErrorAndExit "In module Variables are following variables defined more than once: $($duplicateVariable -join ', ')`n`nFix and commit again."
+            _WarningAndExit "In module Variables are following variables defined more than once: $($duplicateVariable -join ', ')"
         }
 
 
