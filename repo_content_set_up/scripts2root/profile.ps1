@@ -92,60 +92,62 @@ if (!$local_user) {
 #
 # customization console Title and prompt
 #
-
+$_commitHistoryPath = "$env:SystemRoot\Scripts\commitHistory"
+$_keyName = "consoleCommit_$PID"
+$_keyPath = "HKCU:\Software"
 # save commit identifier which was actual when this console started to user registry
 # to be able later compare it with actual system commit
-$commitHistoryPath = "$env:SystemRoot\Scripts\commitHistory"
-$keyName = "consoleCommit_$PID"
-$keyPath = "HKCU:\Software"
-if ($consoleCommit = Get-Content $commitHistoryPath -First 1 -ErrorAction SilentlyContinue) {
-    $null = New-ItemProperty $keyPath -Name $keyName -PropertyType string -Value $consoleCommit -Force
+if ($_consoleCommit = Get-Content $_commitHistoryPath -First 1 -ErrorAction SilentlyContinue) {
+    $null = New-ItemProperty $_keyPath -Name $_keyName -PropertyType string -Value $_consoleCommit -Force
 }
 # cleanup of registry records, for not existing console processes (identified by PID)
-$pssId = Get-Process powershell, powershell_ise -ErrorAction SilentlyContinue | select -exp id
-Get-Item $keyPath | select -exp property | % {
+$_pssId = Get-Process powershell, powershell_ise -ErrorAction SilentlyContinue | select -exp id
+Get-Item $_keyPath | select -exp property | % {
     $id = ($_ -split "_")[-1]
-    if ($id -notin $pssId) {
-        Remove-ItemProperty $keyPath $_
+    if ($id -notin $_pssId) {
+        Remove-ItemProperty $_keyPath $_
     }
 }
 
 # function for showing, how many commits is this console behind the system state
 function _commitDelay {
-    $space = "   "
     try {
-        $consoleCommit = Get-ItemPropertyValue $keyPath -Name $keyName -ea Stop
+        $_consoleCommit = Get-ItemPropertyValue $_keyPath -Name $_keyName -ea Stop
     } catch { }
-    if (!$consoleCommit -or !(Test-Path $commitHistoryPath -ea SilentlyContinue)) {
-        return "$space(*unknown*)"
+    if (!$_consoleCommit -or !(Test-Path $_commitHistoryPath -ea SilentlyContinue)) {
+        return "(*unknown*)"
     }
 
     $i = 0
-    $commitHistory = @(Get-Content $commitHistoryPath)
+    $commitHistory = @(Get-Content $_commitHistoryPath)
     foreach ($commit in $commitHistory) {
-        if ($commit -eq $consoleCommit) {
-            return "$space($i)"
+        if ($commit -eq $_consoleCommit) {
+            return "($i)"
         }
 
         ++$i
     }
 
     # commit jsem nenasel
-    return ($space + "(>" + $commitHistory.count + ")")
+    return ("(>" + $commitHistory.count + ")")
+}
+
+function _setTitle {
+    $title = ''
+    $space = "      "
+    if (([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+        $title = "[ELEVATED] "
+    }
+    $title += ($env:USERNAME).toupper() + $space + (_commitDelay) + $space + (Get-Location).path
+    $Host.UI.RawUI.Windowtitle = $title
 }
 
 # Title customization
-$title = ''
-$space = "      "
-$identity = [Security.Principal.WindowsIdentity]::GetCurrent() ; $principal = [Security.Principal.WindowsPrincipal] $identity
-if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) { $title = "[ELEVATED] " }
-$title += ($env:USERNAME).toupper()
-$title += $space + (_commitDelay) + $space + (Get-Location).path
-$Host.UI.RawUI.Windowtitle = $title
-# Prompt customization
+_setTitle
+
+# Title and Prompt customization
 function prompt {
-    $titleItems = $Host.UI.RawUI.Windowtitle -split "\s+"
-    $Host.UI.RawUI.Windowtitle = (($titleItems | Select-Object -First ($titleItems.count - 2)) -join " ") + $space + (_commitDelay) + $space + (Get-Location).path
+    _setTitle
 
     $color = "white"
     if ($env:USERNAME -match "^adm_") {
