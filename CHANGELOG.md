@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.0.25] - 2020-05-14
+### Bug fixes
+- fixed duplicating console Title (profile.ps1) in case that working path contains spaces
+### Changed
+- renaming helper variables in profile.ps1 to minimize possibility to interfere with regular work in console
+
+
 ## [2.0.24] - 2020-05-04
 ### Bug fixes
 - fixed detection of commited files with spaces in pre-commit.ps1
