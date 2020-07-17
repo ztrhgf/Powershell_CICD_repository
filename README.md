@@ -3,7 +3,7 @@ Repository contains necessary files and instructions to create your own company 
 
 - To see some of the features this solution offers, watch this [short introduction video](https://youtu.be/-xSJXbmOgyk). For more examples and explanation of how this works watch [quite long but detailed video](https://youtu.be/R3wjRT0zuOk) (examples starts at 10:12). Případně [českou verzi videa](https://youtu.be/Jylfq7lYzG4).
 
-- To set this up in your environment please follow these [instructions](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20-%20INITIAL%20CONFIGURATION.md).
+- To set this up in your environment please follow these [installation instructions](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20INSTALL.md).
 
 - In case you like this solution, found any bug or have improvement suggestion, please contact me at **ondrejsebela'at'gmail.com**.
 
@@ -61,7 +61,7 @@ Repository contains necessary files and instructions to create your own company 
     - by PS_env_set_up.ps1 which is regularly run on client every 30 minutes by automatically created scheduled task (created via GPO PS_env_set_up)
   
 
-# [Installation](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20-%20INITIAL%20CONFIGURATION.md)
+# [Installation](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20INSTALL.md)
 # [Examples](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md)
 # [FAQ](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/FAQ.md)
 # [Repository content explanation](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/3.%20SIMPLIFIED%20EXPLANATION%20OF%20HOW%20IT%20WORKS.md)
