@@ -4,7 +4,7 @@ GLOBAL POWERSHELL PROFILE
 
 - intended for unifying company admins Powershell experience
     - setting console GUI, importing Variables module, defining per-user functions etc
-- is automatically copied to computers listed in $computerWithProfile variable (defined in Variables module)
+- is automatically copied to computers listed in $_computerWithProfile variable (defined in Variables module)
     - to %WINDIR%\System32\WindowsPowershell\v1.0 ie its gloval powershell profile
 - is applied only in local session, no remote
 - when editing, BE VERY CAREFUL, because it is basically script, that will be run on every console start!
