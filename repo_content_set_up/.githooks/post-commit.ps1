@@ -15,7 +15,16 @@ function _ErrorAndExit {
         Add-Type -AssemblyName System.Windows.Forms
     }
 
-    $message
+    # to GIT console output whole message
+    Write-Host $message
+
+    # in case message is too long, trim
+    $messagePerLine = $message -split "`n"
+    $lineLimit = 40
+    if ($messagePerLine.count -gt $lineLimit) {
+        $message = (($messagePerLine | select -First $lineLimit) -join "`n") + "`n..."
+    }
+
     $null = [System.Windows.Forms.MessageBox]::Show($this, $message, 'ERROR', 'ok', 'Error')
     exit 1
 }
@@ -57,12 +66,13 @@ try {
         _ErrorAndExit "There was an error when trying to push commit to cloud repository:`n$repoStatus"
     }
 
-    # save actual commit to file (reason to this is explained in post-merge.ps1)
+    #
+    # save actual commit hash to file (reason to this is explained in post-merge.ps1)
     $lastCommitPath = Join-Path $root ".githooks\lastCommit"
     $actualLastCommit = git log -n 1 --pretty=format:"%H"
     $actualLastCommit | Out-File $lastCommitPath -Force
 } catch {
-    _ErrorAndExit "There ws an error:`n$_"
+    _ErrorAndExit "There was an error:`n$_"
 }
 
 "DONE"
