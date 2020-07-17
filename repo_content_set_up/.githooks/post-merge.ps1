@@ -17,7 +17,16 @@ function _ErrorAndExit {
         Add-Type -AssemblyName System.Windows.Forms
     }
 
-    $message
+    # to GIT console output whole message
+    Write-Host $message
+
+    # in case message is too long, trim
+    $messagePerLine = $message -split "`n"
+    $lineLimit = 40
+    if ($messagePerLine.count -gt $lineLimit) {
+        $message = (($messagePerLine | select -First $lineLimit) -join "`n") + "`n..."
+    }
+
     $null = [System.Windows.Forms.MessageBox]::Show($this, $message, 'ERROR', 'ok', 'Error')
     exit 1
 }
@@ -81,7 +90,16 @@ try {
                 Add-Type -AssemblyName System.Windows.Forms
             }
 
-            $message
+            # to GIT console output whole message
+            Write-Host $message
+
+            # in case message is too long, trim
+            $messagePerLine = $message -split "`n"
+            $lineLimit = 40
+            if ($messagePerLine.count -gt $lineLimit) {
+                $message = (($messagePerLine | select -First $lineLimit) -join "`n") + "`n..."
+            }
+
             $null = [System.Windows.Forms.MessageBox]::Show($this, $message, 'ERROR', 'ok', 'Error')
         }
     }
