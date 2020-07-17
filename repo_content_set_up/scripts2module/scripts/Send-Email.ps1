@@ -1,71 +1,57 @@
 ﻿function Send-Email {
     <#
-		.SYNOPSIS
-			Fce pro poslání emailu.
+    .SYNOPSIS
+    Function for sending emails through company SMTP server.
 
-        .DESCRIPTION
-            Fce pro poslání emailu.
-            Umožňuje poslat jak HTML, tak plain text email včetně přílohy.
-            Standardně je replyto nastaveno na adresu it@TODONAHRADIT.cz.
-            Standardne se pouziva SSL.
+    .DESCRIPTION
+    Function for sending emails through company SMTP server.
+    Function is much more smarter than default Send-MailMessage.
 
-		.PARAMETER SmtpServer
-			Adresa SMTP serveru, který se má použít pro odeslání emailu.
-			Vychozi je "TODONAHRADIT".
+    .PARAMETER SmtpServer
+    Address of the SMTP server.
+    Default is $_smtpServer.
 
-		.PARAMETER From
-			Adresa odesílatele.
-			Vychozi je "monitoring@TODONAHRADIT.cz".
+    .PARAMETER From
+    Address of the sender.
+    Default is $_from.
 
-		.PARAMETER To
-			Adresa příjemce/ů. Je možné zadat víc adres.
-            Vychozi je "it@TODONAHRADIT.cz".
-            Adresatum bez domeny, se automaticky doplni @TODONAHRADIT.cz (it >> it@TODONAHRADIT.cz).
+    .PARAMETER To
+    Address of the recipient(s).
+    Default is $_adminEmail.
+    If you omit domain (part after @), it will be automatically set to same domain as has sender.
 
-		.PARAMETER Cc
-			Komu poslat v kopii. Je možné zadat víc adres.
-            Adresatum bez domeny, se automaticky doplni @TODONAHRADIT.cz (it >> it@TODONAHRADIT.cz).
+    .PARAMETER Cc
+    Address of the cc recipient(s).
+    If you omit domain (part after @), it will be automatically set to same domain as has sender.
 
-		.PARAMETER ReplyTo
-			Adresa, která se použije v případě odpovědi na email.
-			Vychozi je "it@TODONAHRADIT.cz".
+    .PARAMETER ReplyTo
+    Address of reply-to.
+    Default is $_adminEmail.
 
-		.PARAMETER Subject
-            Nepovinny parametr. Subjekt emailu.
-            Pokud nezadan, nastavi se jmeno skriptu ci funkce, ktery/a tuto funkci zavolal/a.
-            Jako vychozi pak je Send-Email tzn jmeno teto funkce.
+    .PARAMETER Subject
+    Subject of the email.
+    It is optional, if omitted, name of the script/functions which call this Send-Email function will be used. Otherwise Send-Email will be used.
 
-		.PARAMETER Body
-			Text, který se zobrazí v těle emailu. Pokud chci vypsat nějakou proměnnou tak takto: $($promenna | out-string).
+    .PARAMETER Body
+    Body of the email.
 
-		.PARAMETER Attachment
-			Cesta k příloze/hám.
+    .PARAMETER Attachment
+    Path to file attachment.
 
-		.PARAMETER UseHTMLformat
-            Switch pro kódování emailu jako HTML, jinak se odešle klasický plain text.
+    .PARAMETER UseHTMLformat
+    Switch for send email as HTML, otherwise it will be send as plaintext.
 
-        .PARAMETER Critical
-            Switch ktery zmeni odesilatele na monitoring_critical@TODONAHRADIT.cz a k subjektu prida prefix CRITICAL:
-            Pouzivat pro zpravy, ktere by nemely zapadnout.
+    .PARAMETER Critical
+    Switch for adding CRITICAL: prefix to subject.
 
-        .PARAMETER enableSSL
-            Switch pro povoleni pouziti SSL. Tzn vychozi stav je, ze se SSL NEpouziva.
+    .PARAMETER enableSSL
+    Switch for enabling SSL.
 
-        .PARAMETER Credentials
-            Pro predani credentials, ktere se pouziji pro autentizaci vuci SMTP serveru.
+    .PARAMETER Credentials
+    Credentials for authentication to SMTP server.
 
-		.EXAMPLE
-            Send-Email -to sebela@domain.cz,karel@domain.cz -subject pozdrav -body "Ahoj `njak se vede"
-
-            Na zadane adresy odesle email.
-
-		.EXAMPLE
-            Send-Email -body "Ahoj `njak se vede" -attachment C:\temp\log.txt
-
-            Na it@TODONAHRADIT.cz posle email, kde v subjektu bude jmeno skriptu ci funkce, ze ktere jsem inicioval poslani emailu. V priloze bude log.txt.
-
-		.NOTES
-			Author: Ondřej Šebela - ztrhgf@seznam.cz
+    .EXAMPLE
+    Send-Email -to sebela@domain.cz, karel@domain.cz -subject "hi buddy" -body "Hi`nhow are you?"
 	#>
 
     [CmdletBinding()]
@@ -74,17 +60,19 @@
         ,
         [string] $body = "Ahoj,`ntoto je vychozi zprava`nza minuly den... $($result | Out-String) `nKontrola probiha na..."
         ,
-        [string[]]$to = "it@TODONAHRADIT.cz"
+        [ValidateNotNullOrEmpty()]
+        [string[]]$to = $_adminEmail
         ,
         [string[]]$cc
         ,
-        [string] $smtpServer = "TODONAHRADIT"
+        [ValidateNotNullOrEmpty()]
+        [string] $smtpServer = $_smtpServer
         ,
         [ValidateScript( { $_ -match '@' })]
-        [string] $from = "monitor@TODONAHRADIT.cz"
+        [string] $from = $_from
         ,
         [ValidateScript( { $_ -match '@' })]
-        [string] $replyTo = "it@TODONAHRADIT.cz"
+        [string] $replyTo = $_adminEmail
         ,
         [ValidateScript( { Test-Path $_ -PathType 'Leaf' })]
         [string[]] $attachment
@@ -96,43 +84,48 @@
         [switch] $enableSSL
         ,
         [PSCredential] $credentials
+        ,
+        [int] $smtpServerPort = 25
     )
 
-    # auto nastaveni subject
-    # na nazev skriptu ci funkce, ze ktereho se tato funkce zavolala ci jmeno teto funkce
     if (!$subject) {
-        $MyName = $MyInvocation.MyCommand.Name
-        $lastCaller = Get-PSCallStack | Where-Object { $_.Command -ne $MyName -and $_.command -ne "<ScriptBlock>" } | Select-Object -Last 1 -Exp Command
-        # zkusim ziskat cestu ke skriptu, ktery vola tuto funkci
+        $thisFunctionName = $MyInvocation.MyCommand.Name
+        $lastCaller = Get-PSCallStack | Where-Object { $_.Command -ne $thisFunctionName -and $_.command -ne "<ScriptBlock>" } | Select-Object -Last 1 -Exp Command
+        # trying to get path to script that called this function
         try {
             $subject = (Split-Path $MyInvocation.ScriptName -Leaf) -replace "\.\w+$"
-        } catch { }
-        # zkusim ziskat jmeno funkce, ktera vola tuto funkci
+        }
+        catch { }
+        # trying to get name of function that called this function
         if (!$subject) {
             $subject = $lastCaller
         }
         # nastavim jako subjekt jmeno teto funkce
         if (!$subject) {
-            $subject = $MyName
+            $subject = $thisFunctionName
         }
     }
 
-    # prijemci bez domeny budou automaticky mit @TODONAHRADIT.cz
+    
+    $position = $from.IndexOf("@")
+    $defaultDomain = $from.Substring($position + 1)
+
+    # fill default domain for recipients without any
     [System.Collections.ArrayList] $to2 = @()
     foreach ($recipient in $to) {
         if ($recipient -notmatch '@') {
-            $recipient = $recipient + '@TODONAHRADIT.cz'
+            $recipient = $recipient + "@" + $defaultDomain
         }
         $null = $to2.Add($recipient)
     }
 
     $to = $to2
 
-    # prijemci bez domeny budou automaticky mit @TODONAHRADIT.cz
+    # fill default domain for recipients without any
     [System.Collections.ArrayList] $cc2 = @()
     foreach ($recipient in $cc) {
         if ($recipient -notmatch '@') {
-            $recipient = $recipient + '@TODONAHRADIT.cz'
+            $recipient = $recipient + "@" + $defaultDomain
         }
         $null = $cc2.Add($recipient)
     }
@@ -144,9 +137,7 @@
             $Subject = "CRITICAL: $Subject"
         }
 
-        # vytvorim si objekt se zpravou emailu
         $msg = New-Object System.Net.Mail.MailMessage
-        # nastavim ruzne property
         $msg.From = $From
         foreach ($Recipient in $To) { $msg.To.Add($Recipient) }
         foreach ($Recipient in $Cc) { $msg.CC.Add($Recipient) }
@@ -156,15 +147,13 @@
         if ($Attachment) { $attachment.ForEach( { $msg.Attachments.Add( (New-Object Net.Mail.Attachment($_))) }) }
         if ($UseHTMLformat) { $msg.IsBodyHTML = $true } else { $msg.IsBodyHTML = $false }
 
-        # vytvorim objekt pro odeslani emailu
-        $smtpClient = New-Object Net.Mail.SmtpClient($smtpServer, 25252)
+        $smtpClient = New-Object Net.Mail.SmtpClient($smtpServer, $smtpServerPort)
 
         if ($enableSSL) {
             # http://nicholasarmstrong.com/2009/12/sending-email-with-powershell-implicit-and-explicit-ssl/
-            # zakaze pouziti SSL3
+            # disable SSL3
             $protocol = [System.Net.ServicePointManager]::SecurityProtocol
             [System.Net.ServicePointManager]::SecurityProtocol = 'TLS,TLS11,TLS12'
-            [System.Net.ServicePointManager]::SecurityProtocol
             $smtpClient.EnableSsl = $true
 
             if ($credentials) {
@@ -173,17 +162,30 @@
             }
         }
 
-        # odeslu zpravu na smtp server
+        Write-Verbose "
+        subject: $subject
+        to: $to
+        cc: $cc
+        smtpServer: $smtpServer
+        from: $from
+        replyTo: $replyTo
+        attachment: $attachment
+        useHTMLformat: $useHTMLformat
+        critical: $critical
+        enableSSL: $enableSSl
+        smtpServerPort: $smtpServerPort
+        "
+
         $smtpClient.Send($msg)
 
         if ($enableSSL) {
-            # nastavim puvodni hodnoty
+            # set original values
             [System.Net.ServicePointManager]::SecurityProtocol = $protocol
         }
 
-        # zruseni objektu (aby nedrzel handle na soubory priloh atd)
-        $msg.Dispose();
-    } catch {
+        $msg.Dispose()
+    }
+    catch {
         throw $_
     }
 }
