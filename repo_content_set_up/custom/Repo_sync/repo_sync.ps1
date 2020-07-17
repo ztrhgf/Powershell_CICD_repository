@@ -1,18 +1,35 @@
 <#
-    script is processing GIT cloud repository content and distribute clients part to DFS share (read only share from which clients will download content to themselves)
+    .SYNOPSIS
+    script is processing GIT cloud repository content and distribute "client" part to DFS share (read only share from which clients will download content to themselves)
     how it works:
     - pull/clone GIT cloud repository locally
     - process cloned content (generate PSM modules from scripts2module, copy Custom content to shares,..)
     - copy processed content which is intended for clients to shared folder (DFS)
 
-    BEWARE, repo_puller account used to pull data from GIT repository has to have 'alternate credentials' created and these credentials has to be exported to login.xml (under account which is used to run this script ie SYSTEM)
-                
+    BEWARE, repo_puller account used to pull data from GIT repository has to have 'alternate credentials' created and these credentials has to be exported to login.xml (under account which is used to run this script i.e. SYSTEM)
+
+    .PARAMETER force
+    Switch for forcing synchronization of all content, even not changed one.
+    If not used, just changes from unprocessed commit will be processed.
+
+    ! USE IT FOR REGULAR SYNCHRONIZATION BY DEFAULT! in other case changes in NTFS permission defined by AD membership will be set only after processing of new commit
+
+    .PARAMETER omitDeletion
+    Switch for omitting deletion of needless files.
+    Usable for making synchronization as fast as possible.
+    
     .NOTES
     Author: Ondřej Šebela - ztrhgf@seznam.cz
 #>
 
+param (
+    [switch] $force
+    ,
+    [switch] $omitDeletion
+)
+
 # for debugging purposes
-Start-Transcript -Path "$env:SystemRoot\temp\repo_sync.log" -Force
+Start-Transcript (Join-Path "$env:SystemRoot\temp" ((Split-Path $PSCommandPath -Leaf) + ".log"))
 
 $ErrorActionPreference = "stop"
 
@@ -25,16 +42,33 @@ Import-Module Scripts -Function Send-Email -ErrorAction SilentlyContinue
 $lastSendEmail = Join-Path $logFolder "lastSendEmail"
 $treshold = 30
 
-# path to DFS share, where processed content will be copied
-$destination = "__TODO__" # UNC path to DFS repository (ie.: \\myDomain\dfs\repository)
+# UNC path to (DFS) share, where repository data for clients are stored and therefore processed content will be copied
+$repository = "__TODO__" # UNC path to DFS repository (ie.: \\myDomain\dfs\repository)
+
+$clonedRepository = Join-Path $logFolder "PS_repo"
+
+$modulesSrc = Join-Path $clonedRepository "modules"
+$modulesDst = Join-Path $repository "modules"
+$scripts2moduleSrc = Join-Path $clonedRepository "scripts2module"
+$scripts2rootSrc = Join-Path $clonedRepository "scripts2root"
+$customSrc = Join-Path $clonedRepository "custom"
+$customDst = Join-Path $repository "custom"
+
+$somethingChanged = 0
 
 # AD group that has READ right on DFS share
 [string] $readUser = "repo_reader"
 # AD group that has MODIFY right on DFS share
 [string] $writeUser = "repo_writer"
 
-# path to file where will be stored list of last 20 commit hashes
-$commitHistoryPath = Join-Path $destination commitHistory
+"$(Get-Date -Format HH:mm:ss) - START synchronizing data to $repository"
+
+# path to file that contains hashes of last 20 processed commits
+$processedCommitPath = Join-Path $repository commitHistory
+# list of hashes of already processed commits
+$processedCommit = Get-Content $processedCommitPath -ErrorAction SilentlyContinue | ? { $_ }
+# hash of last processed commit
+$lastProcessedCommit = $processedCommit | Select-Object -First 1
 
 #__TODO__ configure and uncomment one of the rows that initialize variable $signingCert, if you want automatic code signing to happen (using specified certificate)
 # certificate which will be used to sign ps1, psm1, psd1 and ps1xml files
@@ -49,535 +83,7 @@ if ($signingCert -and $signingCert.EnhancedKeyUsageList.friendlyName -ne "Code S
 
 #
 #region helper function
-function _updateRepo {
-    <#
-    .SYNOPSIS
-        Function used to process and copy local commited changes from local GIT repository to DFS share.
-        Automatically skip modified but not commited or untracked files.
-
-    .DESCRIPTION
-        Function used to process and copy local commited changes from local GIT repository to DFS share.
-        Automatically skip modified but not commited or untracked files.
-
-        - from ps1 scripts in folders that are in scripts2module generates Powershell modules to \Modules\.
-        - content of Modules folder is copied to Modules in DFS share
-        - content of scripts2roor is copied to root of DFS share
-        - content of Custom folder is copied to Custom in DFS share
-
-        Function copies all files, not just changed one to replace possible modifications, that someone could have made in DFS share.
-
-    .PARAMETER source
-        Path to locally cloned GGIT repository.
-
-    .PARAMETER destination
-        Path to DFS share which should contain clients repository data.
-
-    .PARAMETER force
-        Force copy of all repository sections, not just changed one.
-        Not commited and untracked files are still skipped.
-
-    .EXAMPLE
-        _updateRepo -source C:\DATA\repo\Powershell\ -destination \\somedomain\repository
-    #>
-
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory = $true, ValueFromPipeline = $True)]
-        [ValidateNotNullOrEmpty()]
-        [ValidateScript( {
-                If (Test-Path $_) {
-                    $true
-                } else {
-                    Throw "Enter path to locally cloned repository"
-                }
-            })]
-        [string] $source
-        ,
-        [ValidateNotNullOrEmpty()]
-        [string] $destination
-        ,
-        [switch] $force
-    )
-
-    # quick check, that this PC is in domain
-    $inDomain = (Get-WmiObject Win32_ComputerSystem).Domain -match "\."
-    # local destination to which function should generate Powershell modules
-    $modules = Join-Path $source "modules"
-    # DFS share destination to which function should copy all Powershell modules
-    $destModule = Join-Path $destination "modules"
-    # local path to folder from which Powershell modules should be generated
-    $scripts2module = Join-Path $source "scripts2module"
-    # local path to folder shich content should be copied to root of DFS share
-    $scripts2root = Join-Path $source "scripts2root"
-
-    $somethingChanged = 0
-    $moduleChanged = 0
-
-    if (!$inDomain -or !(Test-Path $destination -ErrorAction SilentlyContinue)) {
-        throw "Path $destination is not available"
-    }
-
-
-    #
-    # get modified and deleted files
-    #
-
-    # variable will contain files, that cannot be copied to DFS share
-    $unfinishedFile = @()
-    $location = Get-Location
-    Set-Location $source
-    try {
-        # locally cloned GIT repository state
-        $repoStatus = git status -uno
-        # unpushed commits
-        $unpushedCommit = git log origin/master..HEAD
-        # files in last commit
-        $commitedFile = @(git show HEAD --pretty="" --name-only)
-        # deleted files in last commit
-        $commitedDeletedFile = @(git show HEAD --pretty="" --name-status | ? { $_ -match "^D\s+" } | % { $_ -replace "^D\s+" })
-        # deleted files not in staging area
-        $uncommitedDeletedFile = @(git ls-files -d)
-        # modified and deleted files not in staging area
-        $unfinishedFile += @(git ls-files -m)
-        # untracked files
-        $unfinishedFile += @(git ls-files --others --exclude-standard)
-    } catch {
-        $err = $_
-        if ($err -match "is not recognized as the name of a cmdlet") {
-            Set-Location $location
-            throw "git command failed. Is GIT installed? Error was:`n$err"
-        } else {
-            Set-Location $location
-            throw "$err"
-        }
-    }
-    Set-Location $location
-
-    #
-    # check that local repository contains most recent data
-    if ($repoStatus -match "Your branch is behind") {
-        throw "Repository doesn't contain actual data. Pull them using command 'git pull' (Sync in VSC editor) and run again"
-    }
-
-    $isForced = ($PSBoundParameters.GetEnumerator() | ? { $_.key -eq "force" }).value.isPresent
-
-    if (!$unpushedCommit -and $isForced -ne "True") {
-        Write-Warning "`nIn repository there is none unpushed commit. Function will copy just changes from last commit.`nIf you want to copy all, use -force switch`n`n"
-    }
-
-    # git command return path with /, replace to \
-    $unfinishedFile = $unfinishedFile -replace "/", "\"
-    $commitedFile = $commitedFile -replace "/", "\"
-    $commitedDeletedFile = $commitedDeletedFile -replace "/", "\"
-    $uncommitedDeletedFile = $uncommitedDeletedFile -replace "/", "\"
-
-    # full path instead of relative
-    $unfinishedFileAbsPath = $unfinishedFile | % { Join-Path $source $_ }
-
-    #
-    # preparation of string in format, that robocopy parameter /XF needs
-    # it will contain file absolute paths, that robocopy will ignore
-    # it has to be source path
-    $excludeFile = ""
-    if ($unfinishedFileAbsPath) {
-        $unfinishedFileAbsPath | % {
-            $excludeFile += " " + "`"$_`""
-        }
-    }
-    # add deleted and uncommited files
-    # it has to be destination path, so robocopy won't delete it
-    $folderWithUncommitedDeletedFile = @()
-
-    if ($uncommitedDeletedFile) {
-        $uncommitedDeletedFile | % {
-            $file = $_
-            $destAbsPath = ""
-            if ($file -match "scripts2root\\") {
-                # file goes to root
-                $file = Split-Path $file -Leaf
-                $destAbsPath = Join-Path $destination $file
-            } elseif ($file -match "scripts2module\\") {
-                # files from scripts2module are not being copied to DFS share, ignoring
-            } else {
-                # path in GIT repository is same as in DFS share
-                $destAbsPath = Join-Path $destination $_
-            }
-
-            if ($destAbsPath) {
-                $excludeFile += " " + "`"$destAbsPath`""
-                $folderWithUncommitedDeletedFile += Split-Path $destAbsPath -Parent
-            }
-        }
-    }
-
-    # also folders, where some files were deleted needs to be ignored
-    # in case whole folder was deleted in source it's not enough to exclude all deleted files from it, robocopy would still delete it
-    # so $excludeFolder will be used as value for /XD robocopy parameter
-    $folderWithUncommitedDeletedFile = $folderWithUncommitedDeletedFile | Select-Object -Unique
-    $excludeFolder = ""
-    if ($folderWithUncommitedDeletedFile) {
-        $folderWithUncommitedDeletedFile | % {
-            $excludeFolder += " " + "`"$_`""
-        }
-    }
-
-    # convert to arraylist to be able effectively add/remove items
-    [System.Collections.ArrayList] $commitedFile = @($commitedFile)
-    [System.Collections.ArrayList] $unfinishedFile = @($unfinishedFile)
-
-
-
-
-    #
-    # remove from commited files list files that was modified after addind to staging area
-    #
-
-    if ($commitedFile) {
-        Write-Verbose "Last commit contains these files:`n$($commitedFile -join ', ')"
-        $commitedFile2 = $commitedFile.Clone()
-        $commitedFile2 | % {
-            $file = $_
-            $commitedFileMatch = [regex]::Escape($file) + "$"
-            if ($unfinishedFile -match $commitedFileMatch -or $uncommitedDeletedFile -match $commitedFileMatch) {
-                Write-Warning "File $file is in commit, but is also modified outside staging area. Skipping"
-                $commitedFile.remove($file)
-            }
-        }
-    }
-
-    if ($unfinishedFile) {
-        Write-Warning "Skipping these changed, but uncommited files:`n$($unfinishedFileAbsPath -join "`n")"
-    }
-    if ($uncommitedDeletedFile) {
-        Write-Verbose "Skipping these deleted, but uncommited files:`n$($uncommitedDeletedFile -join "`n")"
-    }
-
-
-
-
-    #
-    # GENERATE POWERSHELL MODULES FROM SCRIPTS2MODULE SUBFOLDERS CONTENT
-    #
-
-    # create special hashtable for function _exportScriptsToModule to know what modules it should generate
-    $configHash = @{ }
-
-    if ($force) {
-        # generate all modules no matter they was changed
-        Get-ChildItem $scripts2module -Directory | Select-Object -ExpandProperty FullName | % {
-            $moduleName = Split-Path $_ -Leaf
-            $absPath = $_
-            $TextInfo = (Get-Culture).TextInfo
-            $moduleName = $TextInfo.ToTitleCase($moduleName)
-            $configHash[$absPath] = Join-Path $modules $moduleName
-        }
-
-        ++$moduleChanged
-    } else {
-        # generate just modules where some change in source script data was made
-        $commitedFile | ? { $_ -match "^scripts2module\\" } | % { ($_ -split "\\")[-2] } | Select-Object -Unique | % {
-            $moduleName = $_
-            $absPath = Join-Path $scripts2module $moduleName
-            $TextInfo = (Get-Culture).TextInfo
-            $moduleName = $TextInfo.ToTitleCase($moduleName)
-            $configHash[$absPath] = Join-Path $modules $moduleName
-        }
-
-        if ($commitedFile -match "^modules\\") {
-            # take a note, that some module was changed
-            Write-Output "Some modules changed, copying"
-            ++$moduleChanged
-        }
-    }
-
-    #
-    # generate Powershell modules
-    if ($configHash.Keys.count) {
-        ++$somethingChanged
-
-        _exportScriptsToModule -configHash $configHash -dontIncludeRequires
-    }
-
-
-    #
-    # SYNCHRONIZE CONTENT OF LOCAL MODULES FOLDER TO DFS SHARE
-    #
-
-    #region
-    if ($moduleChanged -or $configHash.Keys.count) {
-        [Void][System.IO.Directory]::CreateDirectory("$destModule")
-        if (!(Test-Path $destModule -ErrorAction SilentlyContinue)) {
-            throw "Path $destModule isn't accessible"
-        }
-
-        ++$somethingChanged
-
-        Write-Output "### Copying modules to $destModule"
-
-        # exclude automatically generated modules from excluded files
-        # they could get into list because of not being listed in .gitignore, therefore are considered as untracked
-        if ($configHash.Keys.count) {
-            $reg = ""
-
-            $configHash.Values | % {
-                Write-Verbose "Won't skip content of $_, it's automatically generated module"
-                $esc = [regex]::Escape($_)
-                if ($reg) {
-                    $reg += "|$esc"
-                } else {
-                    $reg += "$esc"
-                }
-            }
-
-            $excludeFile2 = $excludeFile | ? { $_ -notmatch $reg }
-
-            if ($excludeFile.count -ne $excludeFile2.count) {
-                Write-Warning "When copy modules skip just these: $($excludeFile2 -join ', ')"
-            }
-        } else {
-            $excludeFile2 = $excludeFile
-        }
-
-        # sign Powershell scripts if requested
-        if ($signingCert) {
-            Get-ChildItem $modules -Recurse -Include *.ps1, *.psm1, *.psd1, *.ps1xml -File | % {
-                Set-AuthenticodeSignature -Certificate $signingCert -FilePath $_.FullName
-            }
-        }
-
-        # copy modules to DFS share
-        # result variable will contain list of deleted files and/or errors
-        $result = Invoke-Expression "Robocopy.exe `"$modules`" `"$destModule`" /MIR /S /NFL /NDL /NJH /NJS /R:4 /W:5 /XF $excludeFile2 /XD $excludeFolder"
-
-        # output deleted files
-        $deleted = $result | ? { $_ -match [regex]::Escape("*EXTRA File") } | % { ($_ -split "\s+")[-1] }
-        if ($deleted) {
-            Write-Output "Deletion of unnecessary files:`n$($deleted -join "`n")"
-        }
-
-        # filter from result all except errors
-        # lines with *EXTRA File\Dir contains deleted files
-        $result = $result | ? { $_ -notmatch [regex]::Escape("*EXTRA ") }
-        if ($result) {
-            Write-Error "There was an error when copying module $($_.name):`n`n$result`n`nRun again command: $($MyInvocation.Line) -force"
-        }
-
-        # limit NTFS rights on Modules in DFS share
-        # so just computers listed in computerName key in modulesConfig variable can access it
-        # in case computerName is not set NTFS permissions will be reset
-        # do it on every synch cycle because of possibility, that computerName is defined by variable which value could have changed
-        "### Setting NTFS rights on modules"
-        foreach ($folder in (Get-ChildItem $destModule -Directory)) {
-            $folder = $folder.FullName
-            $folderName = Split-Path $folder -Leaf
-
-            # $modulesConfig was loaded by dot sourcing modulesConfig.ps1 script file
-            $configData = $modulesConfig | ? { $_.folderName -eq $folderName }
-            if ($configData -and ($configData.computerName)) {
-                # it is defined, where this module should be copied
-                # limit NTFS rights accordingly
-                $readUserC = $configData.computerName
-                # computer AD accounts end with $
-                $readUserC = (_flattenArray $readUserC) | % { $_ + "$" }
-
-                " - limiting NTFS rights on $folder (grant access just to: $($readUserC -join ', '))"
-                _setPermissions $folder -readUser $readUserC -writeUser $writeUser
-            } else {
-                # it is not defined, where this module should be copied
-                # reset NTFS rights to default
-                " - resetting NTFS rights on $folder"
-                _setPermissions $folder -resetACL
-            }
-        }
-    }
-
-    #
-    # remove empty module folders from DFS share
-    Get-ChildItem $destModule -Directory | % {
-        $item = $_.FullName
-        if (!(Get-ChildItem $item -Recurse -File)) {
-            try {
-                Write-Verbose "Deleting empty folder $item"
-                Remove-Item $item -Force -Recurse -Confirm:$false
-            } catch {
-                Write-Error "There was an error when deleting $item`:`n`n$_`n`nRun again command: $($MyInvocation.Line) -force"
-            }
-        }
-    }
-    #endregion
-
-
-
-    #
-    # SYNCHRONIZE CONTENT OF LOCAL SCRIPTS2ROOT FOLDER TO DFS SHARE
-    #
-
-    #region
-    if ($commitedFile -match "^scripts2root" -or $force) {
-        Write-Output "### Copying root files from $scripts2root to $destination`n"
-
-        # copy all files that can be copied
-        $script2Copy = (Get-ChildItem $scripts2root -File).FullName | ? {
-            if ($unfinishedFileAbsPath -match [regex]::Escape($_)) {
-                return $false
-            } else {
-                return $true
-            }
-        }
-        if ($script2Copy) {
-            ++$somethingChanged
-
-            $script2Copy | % {
-                $item = $_
-                Write-Output (" - " + ([System.IO.Path]::GetFileName("$item")))
-
-                try {
-                    # signing the script if requested
-                    if ($signingCert -and $item -match "ps1$|psd1$|psm1$|ps1xml$") {
-                        Set-AuthenticodeSignature -Certificate $signingCert -FilePath $item
-                    }
-
-                    Copy-Item $item $destination -Force -ErrorAction Stop
-
-                    # in case of profile.ps1 limit NTFS rights just to computers which can download it
-                    if ($item -match "\\profile\.ps1$") {
-                        $destProfile = (Join-Path $destination "profile.ps1")
-                        if ($computerWithProfile) {
-                            # computer AD accounts end with $
-                            $readUserP = (_flattenArray $computerWithProfile) | % { $_ + "$" }
-
-                            "  - limiting NTFS rights on $destProfile (grant access just to: $($readUserP -join ', '))"
-                            _setPermissions $destProfile -readUser $readUserP -writeUser $writeUser
-                        } else {
-                            "  - resetting NTFS rights on $destProfile"
-                            _setPermissions $destProfile -resetACL
-                        }
-                    }
-                } catch {
-                    Write-Error "There was an error when copying root file $item`:`n`n$_`n`nRun again command: $($MyInvocation.Line) -force"
-                }
-            }
-        }
-
-
-
-        #
-        # DELETE UNNEEDED FILES FROM DFS SHARE ROOT
-        #
-        $DFSrootFile = Get-ChildItem $destination -File | ? { $_.extension }
-        $GITrootFileName = Get-ChildItem $scripts2root -File | Select-Object -ExpandProperty Name
-        $uncommitedDeletedRootFileName = $uncommitedDeletedFile | ? { $_ -match "scripts2root\\" } | % { ([System.IO.Path]::GetFileName($_)) }
-        $DFSrootFile | % {
-            if ($GITrootFileName -notcontains $_.Name -and $uncommitedDeletedRootFileName -notcontains $_.Name) {
-                try {
-                    Write-Verbose "Deleting $($_.FullName)"
-                    Remove-Item $_.FullName -Force -Confirm:$false -ErrorAction Stop
-                } catch {
-                    Write-Error "There was an error when deleting file $item`:`n`n$_`n`nRun again command: $($MyInvocation.Line) -force"
-                }
-            }
-        }
-    }
-    #endregion
-
-
-
-
-    #
-    # SYNCHRONIZE CONTENT OF CUSTOM FOLDER TO DFS SHARE
-    #
-
-    #region
-    if ($commitedFile -match "^custom\\.+" -or $force) {
-        $customSource = Join-Path $source "custom"
-        $customDestination = Join-Path $destination "custom"
-
-        if (!(Test-Path $customSource -ErrorAction SilentlyContinue)) {
-            throw "Path $customSource isn't accessible"
-        }
-
-        Write-Output "### Copying Custom data from $customSource to $customDestination`n"
-
-        # signing of scripts if requested
-        if ($signingCert) {
-            Get-ChildItem $customSource -Recurse -Include *.ps1, *.psm1, *.psd1, *.ps1xml -File | % {
-                Set-AuthenticodeSignature -Certificate $signingCert -FilePath $_.FullName
-            }
-        }
-
-        $result = Invoke-Expression "Robocopy.exe $customSource $customDestination /S /MIR /NFL /NDL /NJH /NJS /R:4 /W:5 /XF $excludeFile /XD $excludeFolder"
-
-        # output deleted files
-        $deleted = $result | ? { $_ -match [regex]::Escape("*EXTRA File") } | % { ($_ -split "\s+")[-1] }
-        if ($deleted) {
-            Write-Verbose "Unnecessary files was deleted:`n$($deleted -join "`n")"
-        }
-
-        # filter from result all except errors
-        # lines with *EXTRA File\Dir contains deleted files
-        $result = $result | ? { $_ -notmatch [regex]::Escape("*EXTRA ") }
-        if ($result) {
-            Write-Error "There was an error when copying Custom section`:`n`n$result`n`nRun again command: $($MyInvocation.Line) -force"
-        }
-
-
-        # limit NTFS rights on Custom folders in DFS share
-        # so just computers listed in computerName or customSourceNTFS key in customConfig variable can access it
-        # in case neither of this keys are set, NTFS permissions will be reset
-        # do it on every synch cycle because of possibility, that computerName/customSourceNTFS is defined by variable which value could have changed
-        "### Setting NTFS rights on Custom"
-        foreach ($folder in (Get-ChildItem $customDestination -Directory)) {
-            $folder = $folder.FullName
-            $folderName = Split-Path $folder -Leaf
-
-            # $customConfig was loaded by dot sourcing customConfig.ps1 script file
-            $configData = $customConfig | ? { $_.folderName -eq $folderName }
-            if ($configData -and ($configData.computerName -or $configData.customSourceNTFS)) {
-                # it is defined, where this folder should be copied
-                # limit NTFS rights accordingly
-
-                # custom share NTFS rights defined in customSourceNTFS has precedence by design
-                if ($configData.customSourceNTFS) {
-                    [string[]] $readUserC = $configData.customSourceNTFS
-                } else {
-                    $readUserC = $configData.computerName
-                    # computer AD ucty maji $ za svym jmenem, pridam
-                    $readUserC = (_flattenArray $readUserC) | % { $_ + "$" }
-                }
-
-                " - limiting NTFS rights on $folder (grant access just to: $($readUserC -join ', '))"
-                _setPermissions $folder -readUser $readUserC -writeUser $writeUser
-            } else {
-                # it is not defined, where this folder should be copied
-                # reset NTFS rights to default
-                " - resetting NTFS rights on $folder"
-                _setPermissions $folder -resetACL
-            }
-        }
-
-
-        ++$somethingChanged
-    }
-    #endregion
-
-
-
-
-    #
-    # WARN IF NO CHANGE WAS DETECTED
-    #
-
-    # these files are not copied to DFS share but could be changed, take a note if this is the case to now show warning unnecessarily
-    if ($commitedFile -match "\.githooks\\|\.vscode\\|\.gitignore|!!!README!!!|powershell\.json") {
-        ++$somethingChanged
-    }
-
-    if (!$somethingChanged) {
-        Write-Error "`nIn $source there was no change == there is nothing to copy!`nIf you wish to force copying of current content, use:`n$($MyInvocation.Line) -force`n"
-    }
-} # end of _updateRepo
-
-function _exportScriptsToModule {
+function _exportScripts2Module {
     <#
     .SYNOPSIS
         Function for generating Powershell module from ps1 scripts (that contains definition of functions) that are stored in given folder.
@@ -605,8 +111,12 @@ function _exportScriptsToModule {
         Switch that will lead to ignoring all #requires in scripts, so generated module won't contain them.
         Otherwise just module #requires will be added.
 
+    .PARAMETER markAutoGenerated
+        Switch will add comment '# _AUTO_GENERATED_' on first line of each module, that was created by this function.
+        For internal use, so I can distinguish which modules was created from functions stored in scripts2module and therefore easily generate various reports.
+
     .EXAMPLE
-        _exportScriptsToModule @{"C:\DATA\POWERSHELL\repo\scripts" = "c:\DATA\POWERSHELL\repo\modules\Scripts"}
+        _exportScripts2Module @{"C:\DATA\POWERSHELL\repo\scripts" = "c:\DATA\POWERSHELL\repo\modules\Scripts"}
     #>
 
     [CmdletBinding()]
@@ -621,11 +131,17 @@ function _exportScriptsToModule {
         [switch] $dontCheckSyntax
         ,
         [switch] $dontIncludeRequires
+        ,
+        [switch] $markAutoGenerated
     )
 
-    if (!(Get-Command Invoke-ScriptAnalyzer -ErrorAction SilentlyContinue) -and !$dontCheckSyntax) {
-        Write-Warning "Syntax won't be checked, because function Invoke-ScriptAnalyzer is not available (part of module PSScriptAnalyzer)"
+    function _checkSyntax {
+        param ($file)
+        $syntaxError = @()
+        [void][System.Management.Automation.Language.Parser]::ParseFile($file, [ref]$null, [ref]$syntaxError)
+        return $syntaxError
     }
+
     function _generatePSModule {
         [CmdletBinding()]
         param (
@@ -667,36 +183,12 @@ function _exportScriptsToModule {
         if ($unfinishedFile) {
             [System.Collections.ArrayList] $unfinishedFile = @($unfinishedFile)
 
-            # helper function to be able to catch errors and all outputs
-            # dont wait for exit
-            function _startProcess {
-                [CmdletBinding()]
-                param (
-                    [string] $filePath = 'notepad.exe',
-                    [string] $argumentList = '/c dir',
-                    [string] $workingDirectory = (Get-Location)
-                )
-
-                $p = New-Object System.Diagnostics.Process
-                $p.StartInfo.UseShellExecute = $false
-                $p.StartInfo.RedirectStandardOutput = $true
-                $p.StartInfo.RedirectStandardError = $true
-                $p.StartInfo.WorkingDirectory = $workingDirectory
-                $p.StartInfo.FileName = $filePath
-                $p.StartInfo.Arguments = $argumentList
-                [void]$p.Start()
-                # $p.WaitForExit() # cannot be used otherwise if git show HEAD:$file returned something, process stuck
-                $p.StandardOutput.ReadToEnd()
-                if ($err = $p.StandardError.ReadToEnd()) {
-                    Write-Error $err
-                }
-            }
-
             Set-Location $scriptFolder
+
             $unfinishedFile2 = $unfinishedFile.Clone()
             $unfinishedFile2 | % {
                 $file = $_
-                $lastCommitContent = _startProcess git "show HEAD:$file"
+                $lastCommitContent = _startProcess git "show HEAD:$file" -dontWait # don't wait because if git show HEAD:$file returned anything, process stuck
                 if (!$lastCommitContent -or $lastCommitContent -match "^fatal: ") {
                     Write-Warning "Skipping changed but uncommited/untracked file: $file"
                 } else {
@@ -795,7 +287,7 @@ function _exportScriptsToModule {
                 $content += $functionText
 
                 # add aliases defined by Set-Alias
-                $ast.EndBlock.Statements | ? { $_ -match "^\s*Set-Alias .+" } | % { $_.extent.text } | % {
+                $ast.EndBlock.Statements | ? { $_ -match "^\s*Set-Alias .+" -and $_ -match [regex]::Escape($functionDefinition.name) } | % { $_.extent.text } | % {
                     $parts = $_ -split "\s+"
 
                     $content += "`n$_"
@@ -841,6 +333,11 @@ function _exportScriptsToModule {
             }
         }
 
+        if ($markAutoGenerated) {
+            "# _AUTO_GENERATED_" | Out-File $modulePath $enc
+            "" | Out-File $modulePath -Append $enc
+        }
+
         #
         # save all functions content to module file
         # store name of every funtion for later use in Export-ModuleMember
@@ -863,7 +360,7 @@ function _exportScriptsToModule {
             throw "There are none functions to export! Wrong path??"
         } else {
             if ($function2Export -match "#") {
-                Remove-Item $modulePath -recurse -force -confirm:$false
+                Remove-Item $modulePath -Recurse -Force -Confirm:$false
                 throw "Exported function contains unnaproved character # in it's name. Module was removed."
             }
 
@@ -874,7 +371,7 @@ function _exportScriptsToModule {
 
         if ($alias2Export) {
             if ($alias2Export -match "#") {
-                Remove-Item $modulePath -recurse -force -confirm:$false
+                Remove-Item $modulePath -Recurse -Force -Confirm:$false
                 throw "Exported alias contains unnaproved character # in it's name. Module was removed."
             }
 
@@ -884,8 +381,7 @@ function _exportScriptsToModule {
         }
     } # end of _generatePSModule
 
-    "### Generating modules from corresponding scripts2module folder"
-    $configHash.GetEnumerator() | % {
+    $scripts2ModuleConfig.GetEnumerator() | % {
         $scriptFolder = $_.key
         $moduleFolder = $_.value
 
@@ -898,19 +394,21 @@ function _exportScriptsToModule {
             $param["includeUncommitedUntracked"] = $true
         }
 
-        Write-Output " - $moduleFolder"
+        Write-Output "      - $(Split-Path $moduleFolder -Leaf)"
         _generatePSModule @param
 
-        if (!$dontCheckSyntax -and (Get-Command Invoke-ScriptAnalyzer -ErrorAction SilentlyContinue)) {
+        if (!$dontCheckSyntax) {
             # check generated module syntax
-            $syntaxError = Invoke-ScriptAnalyzer $moduleFolder -Severity Error
-            if ($syntaxError) {
-                Write-Warning "In module $moduleFolder was found these problems:"
-                $syntaxError
+            Get-ChildItem $moduleFolder -File -Recurse | % {
+                $file = $_.FullName
+                $syntaxError = _checkSyntax $file
+                if ($syntaxError) {
+                    throw "In module file $file were found these syntax problems:`n$syntaxError"
+                }
             }
         }
     }
-} # end of _exportScriptsToModule
+} # end of _exportScripts2Module
 
 function _emailAndExit {
     param ($body)
@@ -932,9 +430,16 @@ function _emailAndExit {
 function _startProcess {
     [CmdletBinding()]
     param (
-        [string] $filePath = '',
-        [string] $argumentList = '',
+        [string] $filePath = ''
+        ,
+        [string] $argumentList = ''
+        ,
         [string] $workingDirectory = (Get-Location)
+        ,
+        [switch] $dontWait
+        ,
+        # lot of git commands output verbose output to error stream
+        [switch] $outputErr2Std
     )
 
     $p = New-Object System.Diagnostics.Process
@@ -945,9 +450,17 @@ function _startProcess {
     $p.StartInfo.FileName = $filePath
     $p.StartInfo.Arguments = $argumentList
     [void]$p.Start()
-    $p.WaitForExit()
+    if (!$dontWait) {
+        $p.WaitForExit()
+    }
     $p.StandardOutput.ReadToEnd()
-    $p.StandardError.ReadToEnd()
+    if ($outputErr2Std) {
+        $p.StandardError.ReadToEnd()
+    } else {
+        if ($err = $p.StandardError.ReadToEnd()) {
+            Write-Error $err
+        }
+    }
 } # end of _startProcess
 
 Function _copyFolder {
@@ -1029,7 +542,8 @@ function _flattenArray {
             }
         }
     }
-}
+} # end of _flattenArray
+
 function _setPermissions {
     [cmdletbinding()]
     param (
@@ -1044,11 +558,17 @@ function _setPermissions {
     )
 
     if (!(Test-Path $path)) {
-        throw "zadana cesta neexistuje"
+        throw "path doesn't exist"
     }
 
     $readUser = _flattenArray $readUser
     $writeUser = _flattenArray $writeUser
+
+    # adding SYSTEM account
+    # for case when data should be copied to server X (so NTFS will be limited to just his account) and that server at the same time hosts shared folder with this repository data. Therefore he uses SYSTEM account for accessing that (in fact locally stored) data, so granting access just for it's computer account wouldn't suffice and lead to access denied
+    if (!($readUser -match 'SYSTEM')) {
+        $readUser = @($readUser) + 'SYSTEM'
+    }
 
     $permissions = @()
 
@@ -1107,114 +627,114 @@ function _setPermissions {
         # Set-Acl cannot be used because of bug https://stackoverflow.com/questions/31611103/setting-permissions-on-a-windows-fileshare
         (Get-Item $path).SetAccessControl($acl)
     } catch {
-        throw "Setting of NTFS rights wasn't successful: $_"
+        throw "Setting of NTFS permissions wasn't successful: $_"
     }
 } # end of _setPermissions
-#endregion
+#endregion helper function
 
 try {
     #
     # check that script has write permission to DFS share
     try {
-        $rFile = Join-Path $destination Get-Random
+        $rFile = Join-Path $repository Get-Random
         $null = New-Item -Path ($rFile) -ItemType File -Force -Confirm:$false
     } catch {
-        _emailAndExit -body "Hi,`nscript doesn't have right to write in $destination. Changes in GIT repository can't be propagated.`nIs computer account $env:COMPUTERNAME in group repo_writer?"
+        _emailAndExit -body "Hi,`nscript doesn't have right to write in $repository. Changes in GIT repository can't be propagated.`nIs computer account $env:COMPUTERNAME in group repo_writer?"
     }
     Remove-Item $rFile -Force -Confirm:$false
 
     #
     # check that GIT is installed
     try {
-        git --version
+        $null = git --version
     } catch {
-        _emailAndExit -body "Hi,`nGIT isn't installed on $env:COMPUTERNAME. Changes in GIT repository can't be propagated to $destination.`nInstall it."
+        _emailAndExit -body "Hi,`nGIT isn't installed on $env:COMPUTERNAME. Changes in GIT repository can't be propagated to $repository.`nInstall it."
     }
 
 
 
     #
-    # GET CURRENT CONTENT OF CLOUD GIT REPOSITORY LOCALLY
+    #region PULL NEWEST CONTENT OF CLOUD GIT REPOSITORY LOCALLY
     #
 
-    #region
-    $PS_repo = Join-Path $logFolder PS_repo
-
-    if (Test-Path $PS_repo -ea SilentlyContinue) {
-        # there is local copy of GIT repository
-        # fetch recent data and replace old ones
-        Set-Location $PS_repo
+    if (Test-Path $clonedRepository -ea SilentlyContinue) {
+        # there is already local copy of GIT repository
+        # fetch recent data and replace the old ones
+        Set-Location $clonedRepository
         try {
+            "$(Get-Date -Format HH:mm:ss) - Pulling newest repository data to $clonedRepository"
             # download the latest data from GIT repository without trying to merge or rebase anything
-            _startProcess git -argumentList "fetch --all"
-
-            # # ukoncim pokud nedoslo k zadne zmene
-            # # ! pripadne manualni upravy v DFS repo se tim padem prepisi az po zmene v cloud repo, ne driv !
-            # $status = _startProcess git -argumentList "status"
-            # if ($status -match "Your branch is up to date with") {
-            #     "nedoslo k zadnym zmenam, ukoncuji"
-            #     exit
-            # }
-
+            #TODO catch error message when credentials are wrong
+            $null = _startProcess git -argumentList "fetch --all" -outputErr2Std
             # resets the master branch to what you just fetched. The --hard option changes all the files in your working tree to match the files in origin/master
-            _startProcess git -argumentList "reset --hard origin/master"
+            "$(Get-Date -Format HH:mm:ss) - Discarding local changes"
+            $null = _startProcess git -argumentList "reset --hard origin/master"
             # delete untracked files and folders (generated modules etc)
             _startProcess git -argumentList "clean -fd"
 
-            # get last 20 commits
+            # last 20 commits
             $commitHistory = _startProcess git -argumentList "log --pretty=format:%h -20"
             $commitHistory = $commitHistory -split "`n" | ? { $_ }
+            # latest commit
+            $newestCommit = $commitHistory | Select-Object -First 1
+            $status = _startProcess git -argumentList "status"
+            # end if there are no changes to process
+            if (!$force -and $status -match "Your branch is up to date with" -and $lastProcessedCommit -eq $newestCommit) {
+                "No changes detected, exiting"
+                exit
+            }
+
+            "$(Get-Date -Format HH:mm:ss) - Last processed commit: $lastProcessedCommit, newest commit: $newestCommit"
         } catch {
             Set-Location ..
-            Remove-Item $PS_repo -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue
+            Remove-Item $clonedRepository -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue
             _emailAndExit -body "Hi,`nthere was an error when pulling changes from repository. Script deleted local copy of repository and will try git clone next time.`nError was:`n$_."
         }
     } else {
-        # there isn't local copy of GIT repository
-        # git clone it
+        # there isn't local copy of GIT repository yet
+        # clone it
         # login.xml should contain repo_puller credentials
         #__TODO__ to login.xml export GIT credentials (access token in case of Azure DevOps) of repo_puller account (read only account which is used to clone your repository) (what is access token https://docs.microsoft.com/cs-cz/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=preview-page)
         #__TODO__ how to export credentials safely to xml file https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20-%20INITIAL%20CONFIGURATION.md#on-server-which-will-be-used-for-cloning-and-processing-cloud-repository-data-and-copying-result-to-dfs-ie-mgm-server
         # !credentials are valid for one year, so need to be renewed regularly!
+        "$(Get-Date -Format HH:mm:ss) - Cloning repository data to $clonedRepository"
+        $force = $true
         $acc = Import-Clixml "$PSScriptRoot\login.xml"
         $l = $acc.UserName
         $p = $acc.GetNetworkCredential().Password
         try {
-            _startProcess git -argumentList "clone `"https://$l`:$p@__TODO__`" `"$PS_repo`"" # instead __TODO__ use URL of your company repository (ie somethink like: dev.azure.com/ztrhgf/WUG_show/_git/WUG_show). Finished URL will be look like this: https://altLogin:altPassword@dev.azure.com/ztrhgf/WUG_show/_git/WUG_show)
+            # instead __TODO__ use URL of your company repository (ie somethink like: dev.azure.com/ztrhgf/WUG_show/_git/WUG_show). Final URL will than be something like this: https://altLogin:altPassword@dev.azure.com/ztrhgf/WUG_show/_git/WUG_show)
+            _startProcess git -argumentList "clone `"https://$l`:$p@__TODO__`" `"$clonedRepository`"" -outputErr2Std # git clone outputs progress to err stream
         } catch {
-            Remove-Item $PS_repo -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue
+            Remove-Item $clonedRepository -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue
             _emailAndExit -body "Hi,`nthere was an error when cloning repository. Wasn't the password of service account changed? Try generate new credentials to login.xml."
         }
     }
-    #endregion
+    #endregion PULL NEWEST CONTENT OF CLOUD GIT REPOSITORY LOCALLY
+
 
 
     #
-    # importing variables
-    # to be able to limit NTFS rights on folders in Custom, Modules and profile.ps1 etc
-    # need to be done before dot sourcing customConfig.ps1 and modulesConfig.ps1
-    $repoModules = Join-Path $PS_repo "modules"
+    #region SYNCHRONIZE DATA TO DFS SHARE
+    #
     try {
-        # at first try to import Variables module pulled from cloud repo (so the newest version)
-        Import-Module (Join-Path $repoModules "Variables") -ErrorAction Stop
-    } catch {
-        # if error, try to import Variables from system location
-        # errors are ignored, because on fresh machine, module will be presented right after first run of PS_env_set_up.ps1 not sooner :)
-        "importing Variables module from $((Join-Path $repoModules "Variables")) was unsuccessful"
-        Import-Module Variables -ErrorAction "Continue"
-    }
+        # import Variables module
+        # to be able to limit NTFS rights on folders in Custom, Modules and profile.ps1 etc
+        # need to be done before dot sourcing customConfig.ps1 and modulesConfig.ps1
+        "$(Get-Date -Format HH:mm:ss) - Importing module Variables"
+        try {
+            # at first try to import Variables module pulled from cloud repo (so the newest version)
+            Import-Module (Join-Path $modulesSrc "Variables") -ErrorAction Stop
+        } catch {
+            # if error, try to import Variables from system location
+            # errors are ignored, because on fresh machine, module will be presented right after first run of PS_env_set_up.ps1 not sooner :)
+            "importing Variables module from $((Join-Path $modulesSrc "Variables")) was unsuccessful"
+            Import-Module Variables -ErrorAction "Continue"
+        }
 
-
-
-    #
-    # SYNCHRONIZE DATA TO DFS SHARE
-    #
-
-    #region sync data to dfs share
-    try {
         # import $customConfig
-        $customSource = Join-Path $PS_repo "custom"
-        $customConfigScript = Join-Path $customSource "customConfig.ps1"
+        "$(Get-Date -Format HH:mm:ss) - Dot sourcing customConfig.ps1"
+        $customConfigScript = Join-Path $customSrc "customConfig.ps1"
 
         if (!(Test-Path $customConfigScript -ea SilentlyContinue)) {
             Write-Warning "$customConfigScript is missing, it is problem for 99,99%!"
@@ -1222,10 +742,9 @@ try {
             . $customConfigScript
         }
 
-
         # import $modulesConfig
-        $modulesSource = Join-Path $PS_repo "modules"
-        $modulesConfigScript = Join-Path $modulesSource "modulesConfig.ps1"
+        "$(Get-Date -Format HH:mm:ss) - Dot sourcing modulesConfig.ps1"
+        $modulesConfigScript = Join-Path $modulesSrc "modulesConfig.ps1"
 
         if (!(Test-Path $modulesConfigScript -ea SilentlyContinue)) {
             Write-Warning "$modulesConfigScript is missing"
@@ -1233,105 +752,505 @@ try {
             . $modulesConfigScript
         }
 
-        # synchronize data to DFS share
-        _updateRepo -source $PS_repo -destination $destination -force
+        # get changed files from last processed commit to the most recent one
+        if ($lastProcessedCommit) {
+            $changedFile = @(git diff --name-only $lastProcessedCommit HEAD)
+        } else {
+            # probably the first run
+            $force = $true
+        }
+
+        # variable will contain files, that cannot be copied to DFS share
+        $location = Get-Location
+        Set-Location $clonedRepository
+        try {
+            # locally cloned GIT repository state
+            $repoStatus = git status -uno
+        } catch {
+            $err = $_
+            if ($err -match "is not recognized as the name of a cmdlet") {
+                Set-Location $location
+                throw "git command failed. Is GIT installed? Error was:`n$err"
+            } else {
+                Set-Location $location
+                throw $err
+            }
+        }
+        Set-Location $location
+
+        if (!$changedFile -and !$force) {
+            Write-Warning "`nIn repository there are no changes detected.`nIf you want to copy data anyway, use -force switch`n`n"
+        }
+
+        # git command return path with /, replace to \
+        $changedFile = $changedFile -replace "/", "\"
+
+        $changedVariables = $changedFile | ? { $_ -match "^modules\\Variables\\" }
+
+
+
+        #
+        #region SYNCHRONIZE MODULES
+        #
+
+        #
+        #region generate powershell module from scripts2module
+        # special hashtable for function _exportScripts2Module to define, what modules it should generate
+        $scripts2ModuleConfig = @{ }
+
+        if ($force) {
+            # generate all modules no matter if there was any change
+            Get-ChildItem $scripts2moduleSrc -Directory | Select-Object -ExpandProperty FullName | % {
+                $moduleName = Split-Path $_ -Leaf
+                $absPath = $_
+                $moduleName = (Get-Culture).TextInfo.ToTitleCase($moduleName)
+                $scripts2ModuleConfig[$absPath] = Join-Path $modulesSrc $moduleName
+            }
+        } else {
+            # generate just modules where some change in source script data was made
+            $changedFile | ? { $_ -match "^scripts2module\\" } | % { ($_ -split "\\")[-2] } | Select-Object -Unique | % {
+                if ((Get-ChildItem $scripts2moduleSrc -Directory | select -exp Name) -contains $_) {
+                    $moduleName = $_
+                    $absPath = Join-Path $scripts2moduleSrc $moduleName
+                    $moduleName = (Get-Culture).TextInfo.ToTitleCase($moduleName)
+                    $scripts2ModuleConfig[$absPath] = Join-Path $modulesSrc $moduleName
+                } else {
+                    # module was deleted
+                    "   - $_ was deleted"
+                }
+            }
+        }
+
+        # generate Powershell modules from scripts2module content
+        if ($scripts2ModuleConfig.Keys.count) {
+            "$(Get-Date -Format HH:mm:ss) - Generating modules from $scripts2moduleSrc"
+            ++$somethingChanged
+
+            _exportScripts2Module -configHash $scripts2ModuleConfig -dontIncludeRequires -markAutoGenerated
+            "$(Get-Date -Format HH:mm:ss) - Finished generating modules"
+        }
+        #endregion generate powershell module from scripts2module
+
+        # name of modules changed from last processed commit
+        $changedModule = $changedFile | ? { $_ -match "^scripts2module\\" -or $_ -match "^modules\\" } | % { ($_ -split "\\")[-2] } | Select-Object -Unique
+        $changedModulesConfig = $changedFile | ? { $_ -match "^modules\\modulesConfig.ps1$" }
+
+        #region copy content of modules to DFS share
+        if ($changedModule -or $force) {
+            [Void][System.IO.Directory]::CreateDirectory($modulesDst)
+            if (!(Test-Path $modulesDst -ErrorAction SilentlyContinue)) {
+                throw "Path $modulesDst isn't accessible"
+            }
+
+            ++$somethingChanged
+
+            "$(Get-Date -Format HH:mm:ss) - Copying Modules data to $modulesDst"
+
+            foreach ($item in (Get-ChildItem $modulesSrc)) {
+                $itemName = $item.Name
+                $itemPath = $item.FullName
+
+                if (!$force -and $itemName -notin $changedModule) { continue }
+
+                "       - $itemName"
+
+                if ((Get-Item $itemPath).attributes -ne "Directory") { $isFile = 1 } else { $isFile = 0 }
+
+                # sign Powershell files if requested
+                if ($signingCert) {
+                    if ($isFile) {
+                        $sign = $item.FullName
+                    } else {
+                        $sign = Get-ChildItem $itemPath -Recurse -Include *.ps1, *.psm1, *.psd1, *.ps1xml -File | select -exp FullName
+                    }
+
+                    $sign | % { Set-AuthenticodeSignature -Certificate $signingCert -FilePath $_ }
+                }
+
+                # copy content to DFS share
+                if ($isFile) {
+                    Copy-Item $itemPath $modulesDst -Force
+                } else {
+                    $result = _copyFolder -source $itemPath -destination (Join-Path $modulesDst $itemName) -mirror
+
+                    if ($result.deleted) {
+                        "               - deleted unnecessary files:`n$(($result.deleted) -join "`n")"
+                    }
+
+                    if ($result.failures) {
+                        # just warn about error, it is likely, that it will end successfully next time (folder could be locked now etc)
+                        Write-Error "There was an error when copying $itemName`:`n$($result.errMsg)"
+                    }
+                }
+            }
+        }
+        #endregion copy content of modules to DFS share
+
+        #region set NTFS permission on Modules in DFS share
+        # so just computers listed in computerName key in modulesConfig variable can access it
+        # in case computerName is not set NTFS permissions will be reset
+        # set only if files that defined permissions have changed (modulesConfig.ps1, Variables module)
+        # BEWARE, that if you use variable which is filled dynamically (by AD membership etc) to limit computerName or permissions, change will be made only after new commit occurs or force switch will be used!
+        if ($changedModulesConfig -or $changedVariables -or $force) {
+            "$(Get-Date -Format HH:mm:ss) - Setting NTFS permission on Modules"
+            foreach ($folder in (Get-ChildItem $modulesDst -Directory)) {
+                $folder = $folder.FullName
+                $folderName = Split-Path $folder -Leaf
+
+                # $modulesConfig was loaded by dot sourcing modulesConfig.ps1 script file
+                $configData = $modulesConfig | ? { $_.folderName -eq $folderName }
+                if ($configData -and ($configData.computerName)) {
+                    # it is defined, where this module should be copied
+                    # limit NTFS rights accordingly
+                    $readUserC = $configData.computerName
+                    # computer AD accounts end with $
+                    $readUserC = (_flattenArray $readUserC) | % { $_ + "$" }
+                    "       - limiting NTFS permissions on $folderName`n            - access just for: $($readUserC -join ', ')"
+                    _setPermissions $folder -readUser $readUserC -writeUser $writeUser
+                } else {
+                    # it is not defined, where this module should be copied
+                    # reset NTFS rights to default
+                    "       - resetting NTFS permissions on $folderName"
+                    _setPermissions $folder -resetACL
+                }
+            }
+        }
+        #endregion set NTFS permission on Modules in DFS share
+
+        #
+        #region remove empty and needless Module folders from DFS share
+        if (!$omitDeletion -or $force) {
+            "$(Get-Date -Format HH:mm:ss) - Deleting needless Module folders"
+            $allModule = (Get-ChildItem $scripts2moduleSrc -Directory | select -exp Name) + (Get-ChildItem $modulesSrc -Directory | select -exp Name)
+            Get-ChildItem $modulesDst -Directory | % {
+                $item = $_.FullName
+                $itemName = $_.Name
+                if ($itemName -notin $allModule -or (!(Get-ChildItem $item -Recurse -File))) {
+                    try {
+                        "       - $itemName"
+                        Remove-Item $item -Force -Recurse -Confirm:$false
+                    } catch {
+                        Write-Error "There was an error when deleting $item`:`n`n$_"
+                    }
+                }
+            }
+        }
+        #endregion remove empty and needless Module folders from DFS share
+
+        #endregion SYNCHRONIZE MODULES
+
+
+
+        #
+        #region SYNCHRONIZE SCRIPTS2ROOT
+        #
+
+        # name of scripts2root files changed from last processed commit
+        $changedSripts2root = $changedFile | ? { $_ -match "^scripts2root\\" } | % { Split-Path $_ -Leaf }
+
+        if ($changedSripts2root -or $force) {
+            "$(Get-Date -Format HH:mm:ss) - Copying root files from $scripts2rootSrc to $repository"
+            # copy all files that can be copied
+            foreach ($item in (Get-ChildItem $scripts2rootSrc -File)) {
+                $itemName = $item.Name
+                $itemPath = $item.FullName
+
+                if (!$force -and $itemName -notin $changedSripts2root) { continue }
+
+                ++$somethingChanged
+
+                "       - $itemName"
+
+                try {
+                    # signing the script if requested
+                    if ($signingCert -and $itemName -match "ps1$|psd1$|psm1$|ps1xml$") {
+                        Set-AuthenticodeSignature -Certificate $signingCert -FilePath $itemPath
+                    }
+
+                    Copy-Item $itemPath $repository -Force -ErrorAction Stop
+
+                    # in case of profile.ps1 limit NTFS permissions just to computers which should download it
+                    if ($itemName -match "\\profile\.ps1$") {
+                        $destProfile = (Join-Path $repository "profile.ps1")
+                        if ($_computerWithProfile) {
+                            # computer AD accounts end with $
+                            $readUserP = (_flattenArray $_computerWithProfile) | % { $_ + "$" }
+
+                            "       - limiting NTFS permissions on $destProfile`n            - access just for: $($readUserP -join ', ')"
+                            _setPermissions $destProfile -readUser $readUserP -writeUser $writeUser
+                        } else {
+                            "       - resetting NTFS permissions on $destProfile"
+                            _setPermissions $destProfile -resetACL
+                        }
+                    }
+                } catch {
+                    Write-Error "There was an error when copying root file $itemName`:`n`n$_"
+                }
+            }
+        }
+
+
+
+        #
+        # DELETE NEEDLESS FILES FROM DFS SHARE ROOT
+        #
+        if (!$omitDeletion -or $force) {
+            "$(Get-Date -Format HH:mm:ss) - Deleting needless files from root of $repository"
+            $destinationRootFile = Get-ChildItem $repository -File | ? { $_.extension } # don't want to delete 'commitHistory'
+            $sourceScripts2Root = Get-ChildItem $scripts2rootSrc -File | Select-Object -ExpandProperty Name
+            $destinationRootFile | % {
+                $item = $_
+                $itemName = $item.Name
+                $itemPath = $item.FullName
+                if ($sourceScripts2Root -notcontains $itemName) {
+                    try {
+                        Write-Verbose "     - $itemName"
+                        Remove-Item $itemPath -Force -Confirm:$false -ErrorAction Stop
+                    } catch {
+                        Write-Error "There was an error when deleting file $itemName`:`n`n$_"
+                    }
+                }
+            }
+        }
+        #endregion SYNCHRONIZE SCRIPTS2ROOT
+
+
+
+        #
+        #region SYNCHRONIZE CUSTOM
+        #
+
+        # name of Custom folders changed from last processed commit
+        $changedCustom = $changedFile | ? { $_ -match "^custom\\.+" } | % { ($_ -split "\\")[1] } | Select-Object -Unique
+        $changedCustomConfig = $changedFile | ? { $_ -match "^custom\\customConfig.ps1$" }
+
+        if ($changedCustom -or $force) {
+            [Void][System.IO.Directory]::CreateDirectory($customDst)
+            if (!(Test-Path $customSrc -ErrorAction SilentlyContinue)) {
+                throw "Path $customSrc isn't accessible"
+            }
+
+            ++$somethingChanged
+
+            "$(Get-Date -Format HH:mm:ss) - Copying Custom data to $customDst"
+
+            foreach ($item in (Get-ChildItem $customSrc)) {
+                $itemName = $item.Name
+                $itemPath = $item.FullName
+
+                if (!$force -and $itemName -notin $changedCustom) { continue }
+
+                "       - $itemName"
+
+                if ((Get-Item $itemPath).attributes -ne "Directory") { $isFile = 1 } else { $isFile = 0 }
+
+                # signing Powershell files if requested
+                if ($signingCert) {
+                    if ($isFile) {
+                        $sign = $item.FullName
+                    } else {
+                        $sign = Get-ChildItem $itemPath -Recurse -Include *.ps1, *.psm1, *.psd1, *.ps1xml -File | select -exp FullName
+                    }
+
+                    $sign | % { Set-AuthenticodeSignature -Certificate $signingCert -FilePath $_ }
+                }
+
+                # copy content to DFS share
+                if ($isFile) {
+                    Copy-Item $itemPath $customDst -Force
+                } else {
+                    $result = _copyFolder -source $itemPath -destination (Join-Path $customDst $itemName) -mirror
+
+                    if ($result.deleted) {
+                        "           - deleted unnecessary files:`n$(($result.deleted) -join "`n")"
+                    }
+
+                    if ($result.failures) {
+                        # just warn about error, it is likely, that it will end successfully next time (folder could be locked now etc)
+                        Write-Error "There was an error when copying $itemName`:`n$($result.errMsg)"
+                    }
+                }
+            }
+        }
+
+        #region set NTFS permission on Custom folders in DFS share
+        # so just computers listed in computerName or customSourceNTFS key in customConfig variable can access it
+        # in case neither of this keys are set, NTFS permissions will be reset
+        # set only if files that defined permissions have changed (customConfig.ps1, Variables module)
+        # BEWARE, that if you use variable which is filled dynamically (by AD membership etc) to limit computerName or permissions, change will be made only after new commit occurs or force switch will be used!
+        if ($changedCustomConfig -or $changedVariables -or $force) {
+            "$(Get-Date -Format HH:mm:ss) - Setting NTFS permission on Custom"
+            foreach ($folder in (Get-ChildItem $customDst -Directory)) {
+                $folder = $folder.FullName
+                $folderName = Split-Path $folder -Leaf
+
+                # $customConfig was loaded by dot sourcing customConfig.ps1 script file
+                $configData = $customConfig | ? { $_.folderName -eq $folderName }
+                if ($configData -and ($configData.computerName -or $configData.customSourceNTFS)) {
+                    # it is defined, where this folder should be copied
+                    # limit NTFS rights accordingly
+
+                    # custom share NTFS rights defined in customSourceNTFS has precedence by design
+                    if ($configData.customSourceNTFS) {
+                        [string[]] $readUserC = $configData.customSourceNTFS
+                    } else {
+                        $readUserC = $configData.computerName
+                        # computer AD ucty maji $ za svym jmenem, pridam
+                        $readUserC = (_flattenArray $readUserC) | % { $_ + "$" }
+                    }
+
+                    "       - limiting NTFS permissions on $folderName`n            - access just for: $($readUserC -join ', ')"
+                    _setPermissions $folder -readUser $readUserC -writeUser $writeUser
+                } else {
+                    # it is not defined, where this folder should be copied
+                    # reset NTFS rights to default
+                    "       - resetting NTFS permissions on $folderName"
+                    _setPermissions $folder -resetACL
+                }
+            }
+        }
+        #endregion set NTFS permission on Custom folders in DFS share
+
+        #
+        #region remove empty and needless Custom folders from DFS share
+        if (!$omitDeletion -or $force) {
+            "$(Get-Date -Format HH:mm:ss) - Deleting needless Custom folders"
+            Get-ChildItem $customDst -Directory | % {
+                $item = $_.FullName
+                $itemName = $_.Name
+                if ($itemName -notin (Get-ChildItem $customSrc -Directory | select -exp Name) -or (!(Get-ChildItem $item -Recurse -File))) {
+                    try {
+                        "           - $itemName"
+                        Remove-Item $item -Force -Recurse -Confirm:$false
+                    } catch {
+                        Write-Error "There was an error when deleting $item`:`n`n$_"
+                    }
+                }
+            }
+        }
+        #endregion remove empty and needless Custom folders from DFS share
+
+        #endregion SYNCHRONIZE CUSTOM
+
+
+
+        #
+        #region WARN IF NO CHANGE WAS DETECTED
+        #
+
+        # these files are not copied to DFS share but could be changed, take a note if this is the case to now show warning unnecessarily
+        if ($changedFile -match "\.githooks\\|\.vscode\\|\.gitignore|!!!README!!!|powershell\.json") {
+            ++$somethingChanged
+        }
+
+        if (!$somethingChanged) {
+            Write-Warning "In $clonedRepository nothing has changed. Use force switch if you want to copy content anyway."
+        }
+        #endregion WARN IF NO CHANGE WAS DETECTED
     } catch {
         _emailAndExit "There was an error when copying changes to DFS repository:`n$_"
     }
-    #endregion
+    #endregion SYNCHRONIZE DATA TO DFS SHARE
+
+
+
+    #
+    #region COPY FOLDERS FROM CUSTOM DIRECTORY THAT HAVE DEFINED CUSTOMSHAREDESTINATION KEY
+    # this isn't related to repository synchronization but I don't know where else to put it
+    #
+    $customToUNC = $customConfig | ? { $_.customShareDestination }
+    $changedCustomToUNC = $customToUNC | ? { $_.folderName -in $changedCustom }
+
+    if ($changedCustomToUNC -or $force) {
+        "$(Get-Date -Format HH:mm:ss) - Synchronizing Custom data, that should be copied to UNC"
+        foreach ($configData in $customToUNC) {
+            $folderName = $configData.folderName
+            $copyJustContent = $configData.copyJustContent
+            $customNTFS = $configData.customDestinationNTFS
+            $customShareDestination = $configData.customShareDestination
+            $folderSource = Join-Path $repository "Custom\$folderName"
+
+            if (!$force -and $folderName -notin $changedCustomToUNC.folderName) { continue }
+
+            "       - $folderName"
+
+            # check that $customShareDestination is UNC path
+            if ($customShareDestination -notmatch "^\\\\") {
+                Write-Warning "$customShareDestination isn't UNC path, skipping"
+                continue
+            }
+
+            # check that source folder exists
+            if (!(Test-Path $folderSource -ea SilentlyContinue)) {
+                Write-Warning "$folderSource doen't exist, skipping"
+                continue
+            }
+
+            if ($copyJustContent) {
+                $folderDestination = $customShareDestination
+
+                "           - copying to $folderDestination (in merge mode)"
+
+                $result = _copyFolder -source $folderSource -destination $folderDestination
+            } else {
+                $folderDestination = Join-Path $customShareDestination $folderName
+                $customLogFolder = Join-Path $folderDestination "Log"
+
+                "           - copying to $folderDestination (in replace mode)"
+
+                $result = _copyFolder -source $folderSource -destination $folderDestination -excludeFolder $customLogFolder -mirror
+
+                # create Log subfolder
+                if (!(Test-Path $customLogFolder -ea SilentlyContinue)) {
+                    "           - creating Log subfolder"
+
+                    New-Item $customLogFolder -ItemType Directory -Force -Confirm:$false
+                }
+            }
+
+            if ($result.failures) {
+                # just warn about error, it is likely, that it will end succesfully next time (shared folder could be locked now etc)
+                Write-Warning "There was an error when copying $folderName`n$($result.errMsg)"
+            }
+
+            # limit access by NTFS rights
+            # do it on every synch cycle because of possibility, that customDestinationNTFS is defined by variable which value could have changed
+            if ($customNTFS -and !$copyJustContent) {
+                "           - setting READ access to accounts in customDestinationNTFS"
+                _setPermissions $folderDestination -readUser $customNTFS -writeUser $writeUser
+
+                "           - setting FULL CONTROL access to accounts in customDestinationNTFS to Log subfolder"
+                _setPermissions $customLogFolder -readUser $customNTFS -writeUser $writeUser, $customNTFS
+            } elseif (!$customNTFS -and !$copyJustContent) {
+                # no custom NTFS are set
+                # just in case they were set previously reset them, but only in case ACL contains $readUser account ie this script have to set them in past
+                $folderhasCustomNTFS = Get-Acl -Path $folderDestination | ? { $_.accessToString -like "*$readUser*" }
+                if ($folderhasCustomNTFS) {
+                    "           - resetting NTFS permissions"
+                    _setPermissions -path $folderDestination -resetACL
+
+                    "           - resetting NTFS permission on Log subfolder"
+                    _setPermissions -path $customLogFolder -resetACL
+                }
+            }
+        }
+    }
+    #endregion COPY FOLDERS FROM CUSTOM DIRECTORY THAT HAVE DEFINED CUSTOMSHAREDESTINATION KEY
 
 
 
     #
     # SAVE COMMITS HISTORY TO FILE IN DFS SHARE ROOT
     # for clients to be able to determine how many commits is their running Powershell console behind the client itself
+    # and for this script to determine whether commits were processed succefully i.e. can exit if doesn't detect any new commit
     #
+
     if ($commitHistory) {
-        $commitHistory | Out-File $commitHistoryPath -Force
+        "$(Get-Date -Format HH:mm:ss) - Saving processed commit history to $processedCommitPath"
+        $commitHistory | Out-File $processedCommitPath -Force
     }
 
-
-
-
-    #
-    # COPY FOLDERS FROM CUSTOM DIRECTORY THAT HAVE DEFINED CUSTOMSHAREDESTINATION KEY
-    # this isn't related to repository synchronization but I don't know here else to put it
-    #
-
-    #region copy Custom folders to UNC
-    "### Synchronization of Custom data, which are supposed to be in specified shared folder"
-    $folderToUnc = $customConfig | ? { $_.customShareDestination }
-
-    foreach ($configData in $folderToUnc) {
-        $folderName = $configData.folderName
-        $copyJustContent = $configData.copyJustContent
-        $customNTFS = $configData.customDestinationNTFS
-        $customShareDestination = $configData.customShareDestination
-        $folderSource = Join-Path $destination "Custom\$folderName"
-
-        " - folder $folderName should be copied to $($configData.customShareDestination)"
-
-        # check that $customShareDestination is UNC path
-        if ($customShareDestination -notmatch "^\\\\") {
-            Write-Warning "$customShareDestination isn't UNC path, skipping"
-            continue
-        }
-
-        # check that source folder exists
-        if (!(Test-Path $folderSource -ea SilentlyContinue)) {
-            Write-Warning "$folderSource doen't exist, skipping"
-            continue
-        }
-
-        if ($copyJustContent) {
-            $folderDestination = $customShareDestination
-
-            " - copying to $folderDestination (in merge mode)"
-
-            $result = _copyFolder -source $folderSource -destination $folderDestination
-        } else {
-            $folderDestination = Join-Path $customShareDestination $folderName
-            $customLogFolder = Join-Path $folderDestination "Log"
-
-            " - copying to $folderDestination (in replace mode)"
-
-            $result = _copyFolder -source $folderSource -destination $folderDestination -excludeFolder $customLogFolder -mirror
-
-            # create Log subfolder
-            if (!(Test-Path $customLogFolder -ea SilentlyContinue)) {
-                " - creation of Log folder $customLogFolder"
-
-                New-Item $customLogFolder -ItemType Directory -Force -Confirm:$false
-            }
-        }
-
-        if ($result.failures) {
-            # just warn about error, it is likely, that it will end succesfully next time (shared folder could be locked now etc)
-            Write-Warning "There was an error when copying $folderName`n$($result.errMsg)"
-        }
-
-        # limit access by NTFS rights
-        # do it on every synch cycle because of possibility, that customDestinationNTFS is defined by variable which value could have changed
-        if ($customNTFS -and !$copyJustContent) {
-            " - set READ access to accounts in customDestinationNTFS to $folderDestination"
-            _setPermissions $folderDestination -readUser $customNTFS -writeUser $writeUser
-
-            " - set FULL CONTROL access to accounts in customDestinationNTFS to $customLogFolder"
-            _setPermissions $customLogFolder -readUser $customNTFS -writeUser $writeUser, $customNTFS
-        } elseif (!$customNTFS -and !$copyJustContent) {
-            # no custom NTFS are set
-            # just in case they were set previously reset them, but only in case ACL contains $readUser account ie this script have to set them in past
-            $folderhasCustomNTFS = Get-Acl -path $folderDestination | ? { $_.accessToString -like "*$readUser*" }
-            if ($folderhasCustomNTFS) {
-                " - folder $folderDestination has some custom NTFS even it shouldn't have, resetting"
-                _setPermissions -path $folderDestination -resetACL
-
-                " - resetting also on Log subfolder"
-                _setPermissions -path $customLogFolder -resetACL
-            }
-        }
-    }
-    #endregion
+    "$(Get-Date -Format HH:mm:ss) - END"
 } catch {
     _emailAndExit -body "Hi,`nthere was an error when synchronizing GIT repository to DFS repository share:`n$_"
 }
