@@ -14,10 +14,11 @@ Repository contains necessary files and instructions to create your own company 
   - one global Powershell profile to unify repository administrators experience
 - **fully automated code validation, formatting and content distribution**
   - using GIT hooks, Powershell scripts, GPO and VSC editor
-- Written by Windows administrator for Windows administrators i.e. 
+- written by Windows administrator for Windows administrators i.e. 
   - **easy to use**
     - fully managed from Visual Studio Code editor
     - GIT knowledge not needed
+    - Refresh-Console function for forcing synchronization of repository data on any client and importing such data to running Powershell console
   - **customizable**
     - everything is written in Powershell
   - **idiot-proof :)**
