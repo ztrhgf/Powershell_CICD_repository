@@ -23,7 +23,6 @@ $_from = "__TODO__" # for example monitoring@contoso.com
 for inspiration:
 
 $_dhcpServer = "server1"
-$_smtpServer = "server2"
 $_mbamSQLServer = "server3"
 $_computerAccountsOU = (New-Object System.DirectoryServices.DirectorySearcher((New-Object System.DirectoryServices.DirectoryEntry("LDAP://OU=Computer_Accounts,DC=contoso,DC=com")) , "objectCategory=computer")).FindAll() | ForEach-Object { $_.Properties.name }
 #>
