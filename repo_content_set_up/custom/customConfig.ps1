@@ -168,6 +168,6 @@ So to what computers or shares, to what location and with what permissions shoul
 $customConfig = @(
     [PSCustomObject]@{
         folderName   = "Repo_sync"
-        computerName = $RepoSyncServer
+        computerName = $_repoSyncServer
     }
 )

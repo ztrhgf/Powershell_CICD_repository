@@ -1,16 +1,22 @@
 # this module should export just variables!
 # is intended as central storage of "global" variables
 # global variables means, that they will be available (after importing of this module) on ANY computer, where GPO PS_env_set_up is applied
+# it's best practice to somehow distinguish variables defined here (for example prefix them with '_')
 
 # name of MGM server (used to pull and process GIT repository content and fill DFS with result)
-$repoSyncServer = "__TODO__"
-# name of computers, which should contain global Powershell profile (ie. scripts2root\profile.ps1) and admin functions (ie. scripts2module\adminFunctions)
-$computerWithProfile = "__TODO__"
+$_repoSyncServer = "__TODO__"
+# UNC path to share, where repository is stored (used in Refresh-Console)
+$_repoShare = "__TODO__"
+# name of computers, which should contain global Powershell profile (i.e. scripts2root\profile.ps1) and module with admin functions (i.e. scripts2module\adminFunctions)
+$_computerWithProfile = "__TODO__"
 
-# some examples of global variables...
-$dhcpServer = "server1"
-$smtpServer = "server2"
-# $computerAccountsOU = (New-Object System.DirectoryServices.DirectorySearcher((New-Object System.DirectoryServices.DirectoryEntry("LDAP://OU=Computer_Accounts,DC=contoso,DC=com")) , "objectCategory=computer")).FindAll() | ForEach-Object { $_.Properties.name }
+<# 
+for inspiration:
 
+$_dhcpServer = "server1"
+$_smtpServer = "server2"
+$_mbamSQLServer = "server3"
+$_computerAccountsOU = (New-Object System.DirectoryServices.DirectorySearcher((New-Object System.DirectoryServices.DirectoryEntry("LDAP://OU=Computer_Accounts,DC=contoso,DC=com")) , "objectCategory=computer")).FindAll() | ForEach-Object { $_.Properties.name }
+#>
 
 Export-ModuleMember -Variable *
