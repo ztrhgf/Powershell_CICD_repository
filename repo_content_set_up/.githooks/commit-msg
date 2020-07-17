@@ -3,6 +3,7 @@ echo "commit cancelled" # when error occurs, VSC automatically output first echo
 echo "#####################"
 echo "###### COMMIT-MSG git hook"
 echo "###### Checks that name of commit is in correct form: 'text: text"
-exec powershell.exe -NoProfile -ExecutionPolicy Bypass -file ".\.githooks\commit-msg.ps1" $1
+#__TODO__ uncomment line beneath if you want specific commit message format
+#exec powershell.exe -NoProfile -ExecutionPolicy Bypass -file ".\.githooks\commit-msg.ps1" $1
 echo "#####################"
 exit
