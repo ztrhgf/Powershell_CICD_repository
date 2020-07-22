@@ -219,8 +219,12 @@ function Refresh-Console {
         try {
             Invoke-Command -ComputerName $repoSyncServer -ScriptBlock $scriptBlock -ErrorAction stop
         } catch {
-            Write-Error $_
-            throw "`nCheck the log 'C:\Windows\Temp\Repo_sync.ps1.log' on $repoSyncServer for details."
+            if ($_.exception.gettype().fullname -match "System.Management.Automation.Remoting.PSRemotingTransportException" -and $_.exception.message -match "access is denied") {
+                throw "Access denied when connecting to $repoSyncServer"
+            } else {
+                Write-Error $_
+                throw "`nCheck the log 'C:\Windows\Temp\Repo_sync.ps1.log' on $repoSyncServer for details."
+            }
         }
         #endregion run sched. task i.e.  repo_sync.ps1
     } else {
