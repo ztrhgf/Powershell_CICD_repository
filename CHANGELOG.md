@@ -2,7 +2,7 @@
 
 ## [3.0.0] - 2020-07-17
 ### BREAKING CHANGE
-- to significantly speed up import of new repository data to PS console (Refresh-Console) I have rewritten all synchronization scripts. As side effect, **you now have to call Repo_sync.ps1 in eponymous Scheduled Task on MGM server with -force switch**. If you are unsure how to do that, check [install instructions](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20-%20INITIAL%20CONFIGURATION.md#on-server-which-will-be-used-for-cloning-and-processing-cloud-repository-data-and-copying-result-to-dfs-ie-mgm-server) but basically you have to call `powershell.exe` with arguments: `-ExecutionPolicy ByPass -NoProfile -Command "&{"C:\Windows\Scripts\Repo_Sync\Repo_Sync.ps1" -force}"`
+- to significantly speed up import of new repository data to PS console (Refresh-Console) I have rewritten all synchronization scripts. As side effect, **you now have to call Repo_sync.ps1 in eponymous Scheduled Task on MGM server with -force switch**. If you are unsure how to do that, check [install instructions](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20INSTALL.md#on-server-which-will-be-used-for-cloning-and-processing-cloud-repository-data-and-copying-result-to-dfs-ie-mgm-server) but basically you have to call `powershell.exe` with arguments: `-ExecutionPolicy ByPass -NoProfile -Command "&{"C:\Windows\Scripts\Repo_Sync\Repo_Sync.ps1" -force}"`
   - check help of Refresh-Console function for more information how to speed up synchronization even more (it can be almost 5x times faster than the old version!)
 ### Changed
 - PSScriptAnalyzer 1.18.1 was replaced by 1.19.0
