@@ -1,21 +1,21 @@
-function Refresh-Console {
+﻿function Refresh-Console {
     <#
     .SYNOPSIS
-    Use this function for invoking update of central repository data on MGM server, DFS repository share and on given computer.
+    Use this function for invoking update of central repository data on MGM server, repository share and on given computer.
     In case you run this function to synchronize new content to localhost, new content will be automatically imported to this console.
     For best user experience, by default just changed files are processed and synchronized. Caveat of this approach is, that NTFS permissions won't be set/reset if change in Variables module, customConfig.ps1 or modulesConfig.ps1 isn't detected (in such case use force switch).
 
     .DESCRIPTION
-    Use this function for invoking update of central repository data on MGM server, DFS repository share and on given computer.
+    Use this function for invoking update of central repository data on MGM server, repository share and on given computer.
     In case you run this function to synchronize new content to localhost, new content will be automatically imported to this console.
     For best user experience, by default just changed files are processed and synchronized. Caveat of this approach is, that NTFS permissions won't be set/reset if change in Variables module, customConfig.ps1 or modulesConfig.ps1 isn't detected (in such case use force switch).
 
     Default behaviour:
     - run Repo_sync scheduled task on MGM server (i.e. repo_sync.ps1)
         - pull new data to MGM server repository from cloud repository
-        - process ALL pulled data and copy them to DFS repository share
+        - process ALL pulled data and copy them to repository share
     - run PS_env_set_up scheduled task on given computer (i.e. PS_env_set_up.ps1)
-        - download data from DFS repository to the client
+        - download data from repository share to the client
         - if running locally, import data to this running Powershell console (not applicable if omitConsoleRefresh is used!)
             - update of $env:PATH included
 
@@ -25,14 +25,18 @@ function Refresh-Console {
     New temporary scheduled task will be created to apply custom parameters.
 
     .PARAMETER justLocalRefresh
-    Skip update of MGM and DFS repository i.e. just download actual content from DFS repository.
+    Skip update of MGM (repository share) i.e. just download current content from repository share.
+
+    .PARAMETER justConsoleRefresh
+    Skip update of MGM server (repository share) so as download of current content from repository share.
+    So just already existing data will be imported to this console.
 
     .PARAMETER computerName
     Remote computer where you want to sync new data.
     Powershell consoles won't be updated, so users will have to close and reopen them!
 
     .PARAMETER force
-    Switch for forcing full DFS repository synchronization.
+    Switch for forcing full repository share synchronization.
     Otherwise just changes in yet unprocessed commits will be processed and synchronized.
 
     .PARAMETER omitConsoleRefresh
@@ -70,7 +74,7 @@ function Refresh-Console {
     Default is (Join-Path $_repoShare "PS_env_set_up.ps1").
 
     .PARAMETER repoSyncServer
-    Name of MGM server. i.e. server which synchronizes pulled GIT repository data to central repository share location (DFS).
+    Name of MGM server. i.e. server which synchronizes pulled GIT repository data to central repository share location.
 
     .PARAMETER repo_Sync
     Local path to repo_sync.ps1 script (stored on $repoSyncServer).
@@ -80,38 +84,38 @@ function Refresh-Console {
     .EXAMPLE
     Refresh-Console
 
-    Update MGM server repository (just changed data), than DFS repository and in the end, download data from DFS to this PC and import them to this console.
+    Update MGM server repository (just changed data), than repository share and in the end, download data from repository share to this PC and import them to this console.
 
     .EXAMPLE
     Refresh-Console -force
 
-    Update MGM server repository (even unchanged data will be processed), than DFS repository and in the end, download data from DFS to this PC and import them to this console.
+    Update MGM server repository (even unchanged data will be processed), than repository share and in the end, download data from repository share to this PC and import them to this console.
 
     .EXAMPLE
     ref -computerName APP-15
 
-    Update MGM server repository (just changed data), than DFS repository and in the end, download data from DFS to APP-15 client.
+    Update MGM server repository (just changed data), than repository share and in the end, download data from repository share to APP-15 client.
 
     .EXAMPLE
     Refresh-Console -computerName APP-15 -justLocalRefresh
 
-    Skip update of MGM server repository and DFS repository and just download data from DFS to APP-15 client.
+    Skip update of MGM server repository and repository share and just download data from repository share to APP-15 client.
 
     .EXAMPLE
     Refresh-Console -synchronize module -moduleToSync Scripts -omitDeletion -omitConsoleRefresh
 
-    Update MGM server repository (just changed data), than DFS repository and in the end download just Powershell module 'Scripts' from DFS to this client.
+    Update MGM server repository (just changed data), than repository share and in the end download just Powershell module 'Scripts' from repository share to this client.
     Modules, profile, custom foldere or scheduled tasks that shouldn't be here anymore won't be deleted. New data won't be imported to this console either.
 
     .EXAMPLE
     Refresh-Console -moduleToSync Scripts
 
-    Update MGM server repository (just changed data), than DFS repository and in the end download data from DFS locally. According to synchronization of modules, just Powershell module 'Scripts' will be downloaded. New data will be imported to this console.
+    Update MGM server repository (just changed data), than repository share and in the end download data from repository share locally. According to synchronization of modules, just Powershell module 'Scripts' will be downloaded. New data will be imported to this console.
 
     .EXAMPLE
     Refresh-Console -synchronize module, custom -moduleToSync Scripts -customToSync FileServices -omitDeletion
 
-    Update MGM server repository (just changed data), than DFS repository and in the end download just Powershell module 'Scripts' and Custom folder 'FileServices' from DFS to this client.
+    Update MGM server repository (just changed data), than repository share and in the end download just Powershell module 'Scripts' and Custom folder 'FileServices' from repository share to this client.
     Modules, profile, custom foldere or scheduled tasks that shouldn't be here anymore won't be deleted. New data will be imported to this console.
     #>
 
@@ -119,6 +123,8 @@ function Refresh-Console {
     [Alias("ref")]
     param (
         [switch] $justLocalRefresh
+        ,
+        [switch] $justConsoleRefresh
         ,
         [string] $computerName
         ,
@@ -153,8 +159,15 @@ function Refresh-Console {
     )
 
     if ($computerName -and $omitConsoleRefresh) {
-        Write-Warning "Parameter omitConsoleRefresh will be ignored. On remote machine refresh of console never being done."
+        Write-Warning "Parameter omitConsoleRefresh will be ignored. On remote machine refresh of console is never being done."
     }
+    if ($computerName -and $justConsoleRefresh) {
+        Write-Warning "Parameter justConsoleRefresh will be ignored. On remote machine refresh of console is never being done."
+    }
+    if ($omitConsoleRefresh -and $justConsoleRefresh) {
+        throw "Doesn't make sense to use omitConsoleRefresh and justConsoleRefresh at the same time"
+    }
+
 
     # scriptblock for starting the scheduled task (original or custom one)
     $startScriptBlock = {
@@ -178,8 +191,8 @@ function Refresh-Console {
 
 
     #
-    #region update MGM hence DFS repository data
-    if (!$justLocalRefresh) {
+    #region update MGM hence repository share data
+    if (!$justLocalRefresh -and !$justConsoleRefresh) {
         #region create ScriptBlock defining sched. task to run
         if ($force) {
             # synchronize everything i.e. use default scheduled task
@@ -188,7 +201,7 @@ function Refresh-Console {
 '@
             $endScriptBlockTxt = ''
         } else {
-            # synchronize just changed content to DFS share i.e. create custom scheduled task, that will run without force switch
+            # synchronize just changed content to repository share i.e. create custom scheduled task, that will run without force switch
             Write-Verbose "Custom scheduled task for MGM sync, will be created"
 
             $params = ""
@@ -208,7 +221,7 @@ function Refresh-Console {
             $endScriptBlockTxt = 'Unregister-ScheduledTask -TaskName $taskName -Confirm:$false'
         }
 
-        $startScriptBlockTxt = "Write-Host 'Waiting for end of DFS repository data sync'" + $startScriptBlock.ToString()
+        $startScriptBlockTxt = "Write-Host 'Waiting for end of repository share data sync'" + $startScriptBlock.ToString()
 
         # merge scriptblocks together
         $scriptBlock = [ScriptBlock]::Create($prepareScriptBlockTxt + "`n" + $startScriptBlockTxt + "`n" + $endScriptBlockTxt)
@@ -220,7 +233,7 @@ function Refresh-Console {
             Invoke-Command -ComputerName $repoSyncServer -ScriptBlock $scriptBlock -ErrorAction stop
         } catch {
             if ($_.exception.gettype().fullname -match "System.Management.Automation.Remoting.PSRemotingTransportException" -and $_.exception.message -match "access is denied") {
-                throw "Access denied when connecting to $repoSyncServer"
+                Write-Warning "Access denied when connecting to MGM server ($repoSyncServer), so repository share data won't be updated"
             } else {
                 Write-Error $_
                 throw "`nCheck the log 'C:\Windows\Temp\Repo_sync.ps1.log' on $repoSyncServer for details."
@@ -228,9 +241,9 @@ function Refresh-Console {
         }
         #endregion run sched. task i.e.  repo_sync.ps1
     } else {
-        Write-Warning "You skipped sync of DFS repository data"
+        Write-Warning "Skipping sync of repository share data"
     }
-    #endregion update MGM hence DFS repository data
+    #endregion update MGM hence repository share data
 
 
     #
@@ -274,7 +287,7 @@ function Refresh-Console {
             $endScriptBlockTxt = ''
         }
 
-        $startScriptBlockTxt = 'Write-Host "Waiting for end of local data sync on $env:COMPUTERNAME"' + $startScriptBlock.ToString()
+        $startScriptBlockTxt = 'Write-Host "Waiting for end of local client data sync on $env:COMPUTERNAME"' + $startScriptBlock.ToString()
 
         # merge scriptblocks together
         $scriptBlock = [ScriptBlock]::Create($prepareScriptBlockTxt + "`n" + $startScriptBlockTxt + "`n" + $endScriptBlockTxt)
@@ -283,34 +296,39 @@ function Refresh-Console {
 
         #region run PS_env_set_up.ps1
         if (!$computerName) {
-            # updating localhost
-            $bytes = [System.Text.Encoding]::Unicode.GetBytes($scriptBlock)
-            $encodedCommand = [Convert]::ToBase64String($bytes)
-            $pParams = @{
-                filePath     = "powershell.exe"
-                ArgumentList = "-noprofile -encodedCommand $encodedCommand"
-                Wait         = $true
-                ErrorAction  = "Stop"
-            }
-
-            if (-not (([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))) {
-                # non-admin console ie I need to invoke new admin console to have enough permission to start PS_env_set_up sched. task
-                $pParams.Verb = "runas"
-                $pParams.Wait = $true
-            } else {
-                # admin console ie I have enough permission to start PS_env_set_up sched. task here
-                $pParams.NoNewWindow = $true
-            }
-
-            try {
-                Start-Process @pParams
-            } catch {
-                if ($_ -match "The operation was canceled by the user") {
-                    Write-Warning "You have skipped sync of local client data"
-                } else {
-                    Write-Error $_
-                    Write-Error "`nCheck the log 'C:\Windows\Temp\PS_env_set_up.ps1.log' for details."
+            if (!$justConsoleRefresh) {
+                # updating local client data
+                Write-Verbose "Importing data to this console"
+                $bytes = [System.Text.Encoding]::Unicode.GetBytes($scriptBlock)
+                $encodedCommand = [Convert]::ToBase64String($bytes)
+                $pParams = @{
+                    filePath     = "powershell.exe"
+                    ArgumentList = "-noprofile -encodedCommand $encodedCommand"
+                    Wait         = $true
+                    ErrorAction  = "Stop"
                 }
+
+                if (-not (([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))) {
+                    # non-admin console ie I need to invoke new admin console to have enough permission to start PS_env_set_up sched. task
+                    $pParams.Verb = "runas"
+                    $pParams.Wait = $true
+                } else {
+                    # admin console ie I have enough permission to start PS_env_set_up sched. task here
+                    $pParams.NoNewWindow = $true
+                }
+
+                try {
+                    Start-Process @pParams
+                } catch {
+                    if ($_ -match "The operation was canceled by the user") {
+                        Write-Warning "Skipping sync of local client data"
+                    } else {
+                        Write-Error $_
+                        Write-Error "`nCheck the log 'C:\Windows\Temp\PS_env_set_up.ps1.log' for details."
+                    }
+                }
+            } else {
+                Write-Verbose "Skipping sync of local client data"
             }
 
 
@@ -332,8 +350,8 @@ function Refresh-Console {
                     [Environment]::GetEnvironmentVariable($Name, $Scope)
                 }
 
-                # update registry entry, that store commit identifier which was actual when this console started/was updated
-                # to be able later compare it with actual system commit state and show number of commits behind in console Title (more about this in profile.ps1)
+                # update registry entry, that store commit identifier which was relevant when this console started/was updated
+                # to be able later compare it with recent system commit state and show number of commits behind in console Title (more about this in profile.ps1)
                 $commitHistoryPath = "$env:SystemRoot\Scripts\commitHistory"
                 if ($consoleCommit = Get-Content $commitHistoryPath -First 1 -ErrorAction SilentlyContinue) {
                     $null = New-ItemProperty HKCU:\Software -Name "consoleCommit_$PID" -PropertyType string -Value $consoleCommit -Force
