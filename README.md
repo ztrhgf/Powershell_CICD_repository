@@ -9,11 +9,14 @@ Repository contains necessary files and instructions to create your own company 
 
 
 # Main features:
+- **based on GIT**
 - **unified Powershell environment across whole Active Directory**
-  - same modules, functions and variables everywhere
-  - one global Powershell profile to unify repository administrators experience
+  - same PowerShell modules, functions and variables everywhere
+    - can be customized using modulesConfig.ps1
+  - (optional) global Powershell profile to unify repository administrators experience
 - **fully automated code validation, formatting and content distribution**
-  - using GIT hooks, Powershell scripts, GPO and VSC editor
+  - using: GIT hooks, PowerShell scripts, GPO and VSC editor
+- adheres to the principles of **configuration as code**
 - written by Windows administrator for Windows administrators i.e. 
   - **easy to use**
     - fully managed from Visual Studio Code editor
@@ -22,12 +25,17 @@ Repository contains necessary files and instructions to create your own company 
   - **customizable**
     - everything is written in Powershell
   - **idiot-proof :)**
-    - warn about modification of functions and variables used elsewhere in repository, so chance that you break your environment is less than ever :)
-    - ...
-- can be used also to 
-  - **distribute any kind of content** (ps1, exe, ini, whatever) to any local/remote location
+    - warns against commiting changes, that could break your environment (changed thing is used elsewhere) 
+      - modification of functions parameters
+      - modification of variable value (applies just for variables in Variables PS module)
+      - deletion of function, variable
+      - script with syntax errors
+      - etc
+- last but not least
+  - **distribute any kind of content** (ps1, exe, ini, whatever) **to any local/remote location**
+    - driven by customConfig.ps1
+  - automatic scheduled task creation (from XML definition), so ps1 script (modules that it depend on) and sched. task, that should run it, can be distributed together
   - automatic script signing (if enabled)
-  - automatic scheduled task creation (from XML definition), so ps1 script and sched. task that should run it can be distributed together
 - **no paid tools needed**
 
 - check [examples](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md) or [watch video](https://youtu.be/R3wjRT0zuOk?t=612) for getting better insight
@@ -35,6 +43,7 @@ Repository contains necessary files and instructions to create your own company 
 # How code validation works
 - after you commit your changes, pre-commit git hook initiate checks defined in pre-commit.ps1
 - only if all checks are passed, commit will be created and content distributed
+  - checks can stop creation of commit completely, or warn you about possible problems and let you decide, whether to continue
 
 ## What is validated before commit is created
 - that you are not trying to delete important repository files
