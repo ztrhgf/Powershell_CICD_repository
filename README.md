@@ -1,5 +1,5 @@
 # CI/CD solution for (not just) PowerShell content management in your Active Directory environment
-Repository contains necessary files and instructions to create your own company fully automated CI/CD-like repository for managing whole lifecycle of (primarly) Powershell content. So the only thing you will have to worry about is code writing :)
+Repository contains necessary files and instructions to create your own company fully automated CI/CD-like repository for managing whole lifecycle of (primarly) PowerShell content. So the only thing you will have to worry about is code writing :)
 
 - To see some of the features this solution offers, watch this [short introduction video](https://youtu.be/-xSJXbmOgyk). For more examples and explanation of how this works watch [quite long but detailed video](https://youtu.be/R3wjRT0zuOk) (examples starts at 10:12). Případně [českou verzi videa](https://youtu.be/Jylfq7lYzG4).
 
@@ -14,8 +14,11 @@ Repository contains necessary files and instructions to create your own company 
   - same PowerShell modules, functions and variables everywhere
     - can be customized using modulesConfig.ps1
   - (optional) global Powershell profile to unify repository administrators experience
-- **fully automated code validation, formatting and content distribution**
-  - using: GIT hooks, PowerShell scripts, GPO and VSC editor
+- **extremely simplifies PowerShell content management by automating**
+  - **code validation**
+  - **code formatting**
+  - **content distribution**
+      - using: GIT hooks, PowerShell scripts, GPO and VSC editor workspace settings
 - adheres to the principles of **configuration as code**
 - written by Windows administrator for Windows administrators i.e. 
   - **easy to use**
@@ -25,23 +28,23 @@ Repository contains necessary files and instructions to create your own company 
   - **customizable**
     - everything is written in Powershell
   - **idiot-proof :)**
-    - warns against commiting changes, that could break your environment (changed thing is used elsewhere) 
+    - warns against commiting changes, that could break your environment (if changed thing is used elsewhere) 
+      - script contain syntax errors
       - modification of functions parameters
       - modification of variable value (applies just for variables in Variables PS module)
-      - deletion of function, variable
-      - script with syntax errors
+      - deletion of function or variable
       - etc
+- **no paid tools needed**
 - last but not least
   - **distribute any kind of content** (ps1, exe, ini, whatever) **to any local/remote location**
     - driven by customConfig.ps1
-  - automatic scheduled task creation (from XML definition), so ps1 script (modules that it depend on) and sched. task, that should run it, can be distributed together
-  - automatic script signing (if enabled)
-- **no paid tools needed**
+  - automatic **scheduled task creation** (from XML definition), so ps1 script (modules that it depend on) and sched. task, that should run it, can be distributed together
+  - automatic **script signing** (if enabled)
 
-- check [examples](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md) or [watch video](https://youtu.be/R3wjRT0zuOk?t=612) for getting better insight
+- check [examples](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md) or [watch short introduction video](https://youtu.be/-xSJXbmOgyk) for getting better insight
   
 # How code validation works
-- after you commit your changes, pre-commit git hook initiate checks defined in pre-commit.ps1
+- after you commit your changes, pre-commit git hook automatically initiate checks defined in pre-commit.ps1
 - only if all checks are passed, commit will be created and content distributed
   - checks can stop creation of commit completely, or warn you about possible problems and let you decide, whether to continue
 
@@ -65,9 +68,9 @@ Repository contains necessary files and instructions to create your own company 
 - after successful commit, content is automatically:
   - pushed to GIT repository
     - by post-commit GIT hook (post-commit.ps1)
-  - pulled to local server, processed and distributed to DFS share
+  - pulled to local server, processed and (clients part) distributed to shared folder
     - by repo_sync.ps1 which is regularly run every 15 minutes by scheduled task
-  - from DFS share the content is being downloaded by clients in your Active Directory
+  - from shared folder the content is being downloaded by clients in your Active Directory
     - by PS_env_set_up.ps1 which is regularly run on client every 30 minutes by automatically created scheduled task (created via GPO PS_env_set_up)
   
 
