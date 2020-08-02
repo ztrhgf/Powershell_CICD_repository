@@ -10,10 +10,12 @@ Repository contains necessary files and instructions to create your own company 
 
 # Main features:
 - **based on GIT**
-- **unified Powershell environment across whole Active Directory**
+- **unifies PowerShell environment across whole Active Directory**
   - same PowerShell modules, functions and variables everywhere
     - can be customized using modulesConfig.ps1
   - (optional) global Powershell profile to unify repository administrators experience
+- literally **all scripting content from whole Active Directory can be stored and managed from one place**
+  - thanks to possibility to distribute any content to any location
 - **extremely simplifies PowerShell content management by automating**
   - **code validation**
   - **code formatting**
@@ -25,19 +27,19 @@ Repository contains necessary files and instructions to create your own company 
     - fully managed from Visual Studio Code editor
     - GIT knowledge not needed
     - Refresh-Console function for forcing synchronization of repository data on any client and importing such data to running Powershell console
+  - **boost PowerShell adoption between admins**, because of easy know-how/functions sharing
   - **customizable**
-    - everything is written in Powershell
+    - everything is written in Powershell so you can easily add/remove features
   - **idiot-proof :)**
-    - warns against commiting changes, that could break your environment (if changed thing is used elsewhere) 
+    - won't let you commit change, that would break your environment 
       - script contain syntax errors
-      - modification of functions parameters
+    - warns against commiting change, that could break your environment (if changed object is used elsewhere)
+      - modification of parameters of the function (applies just for functions in scripts2module folder)
       - modification of variable value (applies just for variables in Variables PS module)
       - deletion of function or variable
-      - etc
+     - etc
 - **no paid tools needed**
 - last but not least
-  - **distribute any kind of content** (ps1, exe, ini, whatever) **to any local/remote location**
-    - driven by customConfig.ps1
   - automatic **scheduled task creation** (from XML definition), so ps1 script (modules that it depend on) and sched. task, that should run it, can be distributed together
   - automatic **script signing** (if enabled)
 
