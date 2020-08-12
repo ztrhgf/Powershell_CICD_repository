@@ -400,10 +400,10 @@
                 Invoke-Command -ComputerName $computerName -ScriptBlock $scriptBlock -ErrorAction stop
             } catch {
                 if ($_ -match "The system cannot find the file specified") {
-                    Write-Error "Unable to finish the sync on $env:COMPUTERNAME, because sched. task $taskName wasn't found.`nIs GPO PS_env_set_up linked to this computer?"
+                    Write-Error "Unable to finish the sync on $computerName, because synchronization sched. task wasn't found.`nIs GPO PS_env_set_up linked to this computer?"
                 } else {
                     Write-Error $_
-                    Write-Error "`nCheck the log 'C:\Windows\Temp\PS_env_set_up.ps1.log' on $env:COMPUTERNAME for details."
+                    Write-Error "`nCheck the log 'C:\Windows\Temp\PS_env_set_up.ps1.log' on $computerName for details."
                 }
             }
         }
