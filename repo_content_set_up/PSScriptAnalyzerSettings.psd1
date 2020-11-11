@@ -1,7 +1,7 @@
 # Settings for PSScriptAnalyzer invocation.
 # https://devblogs.microsoft.com/powershell/using-psscriptanalyzer-to-check-powershell-version-compatibility/
 @{
-    # __TODO__ uncomment if you wish to make compatibility checks (Powershell 5.1 (for another version change TargetProfiles and TargetVersions accordingly))
+    # __CHECKME__ uncomment if you wish to make compatibility checks (Powershell 5.1 (for another version change TargetProfiles and TargetVersions accordingly))
     # BUT BEWARE, THAT PRECOMMIT CHECKS WILL TAKE A LOT LONGER!
     # (compatibility checks https://devblogs.microsoft.com/powershell/using-psscriptanalyzer-to-check-powershell-version-compatibility/)
     # Rules = @{

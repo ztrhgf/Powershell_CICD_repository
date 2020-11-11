@@ -590,7 +590,7 @@ notify user about:
             try {
                 $null = Get-Command Invoke-ScriptAnalyzer
             } catch {
-                _ErrorAndExit "Module PSScriptAnalyzer isn't available (respective command Invoke-ScriptAnalyzer). It's not possible to check syntax of ps1 scripts."
+                _WarningAndExit "Module PSScriptAnalyzer isn't available (respective command Invoke-ScriptAnalyzer). It's not possible to check syntax of ps1 scripts."
             }
     
             $ps1Error = @()

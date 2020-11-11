@@ -51,6 +51,9 @@ param (
     [switch] $omitDeletion
 )
 
+# just in case auto-loading of modules doesn't work
+Import-Module Microsoft.PowerShell.Host
+Import-Module Microsoft.PowerShell.Security
 
 # for debugging purposes
 Start-Transcript (Join-Path "$env:SystemRoot\temp" ((Split-Path $PSCommandPath -Leaf) + ".log"))
@@ -66,7 +69,7 @@ if ($customToSync -and $synchronize -notcontains "custom") {
 }
 
 # UNC path to (DFS) share, where repository data for clients are stored
-$repository = "\\__TODO__"
+$repository = "__REPLACEME__1"
 
 # AD group that has READ right on DFS share
 # also used to identify data, that was copied through this script and therefore be able to delete them if needed

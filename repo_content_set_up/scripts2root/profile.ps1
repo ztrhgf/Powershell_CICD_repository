@@ -61,7 +61,7 @@ $PSDefaultParameterValues = @{
 #
 # dynamic TAB completion of parameter values
 #
-#__TODO__ replace used LDAP:// paths according to your organization or you can delete this section completely :)
+#__CHECKME__ replace used LDAP:// paths according to your organization or you can delete this section completely :)
 
 $_computerSB = {
     param ($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
@@ -74,7 +74,7 @@ $_computerSB = {
 # given string (on which TAB was used) is searched in name and description of AD computer accounts
 Register-ArgumentCompleter -CommandName ((Get-Command -Module Scripts).name) -ParameterName computerName -ScriptBlock $_computerSB
 # TAB completion of AD computer names in identity parameter of commands with "computer" in their name from module ActiveDirectory
-#__TODO__ uncomment only in case you have RSAT installed on your admin computers 
+#__CHECKME__ uncomment only in case you have RSAT installed on your admin computers 
 #Register-ArgumentCompleter -CommandName ((Get-Command -Module ActiveDirectory -Noun *computer*).name) -ParameterName identity -ScriptBlock $_computerSB
 
 

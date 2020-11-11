@@ -28,6 +28,10 @@ param (
     [switch] $omitDeletion
 )
 
+# just in case auto-loading of modules doesn't work
+Import-Module Microsoft.PowerShell.Host
+Import-Module Microsoft.PowerShell.Security
+
 # for debugging purposes
 Start-Transcript (Join-Path "$env:SystemRoot\temp" ((Split-Path $PSCommandPath -Leaf) + ".log"))
 
@@ -43,7 +47,7 @@ $lastSendEmail = Join-Path $logFolder "lastSendEmail"
 $treshold = 30
 
 # UNC path to (DFS) share, where repository data for clients are stored and therefore processed content will be copied
-$repository = "__TODO__" # UNC path to DFS repository (ie.: \\myDomain\dfs\repository)
+$repository = "__REPLACEME__1" # UNC path to DFS repository (ie.: \\myDomain\dfs\repository)
 
 $clonedRepository = Join-Path $logFolder "PS_repo"
 
@@ -70,7 +74,7 @@ $processedCommit = Get-Content $processedCommitPath -ErrorAction SilentlyContinu
 # hash of last processed commit
 $lastProcessedCommit = $processedCommit | Select-Object -First 1
 
-#__TODO__ configure and uncomment one of the rows that initialize variable $signingCert, if you want automatic code signing to happen (using specified certificate)
+#__CHECKME__ configure and uncomment one of the rows that initialize variable $signingCert, if you want automatic code signing to happen (using specified certificate)
 # certificate which will be used to sign ps1, psm1, psd1 and ps1xml files
 # USE ONLY IF YOU KNOW, WHAT ARE YOU DOING
 # tutorial how to create self signed certificate http://woshub.com/how-to-sign-powershell-script-with-a-code-signing-certificate/
@@ -415,15 +419,19 @@ function _emailAndExit {
 
     $body
 
-    if ((Test-Path $lastSendEmail -ea SilentlyContinue) -and (Get-Item $lastSendEmail).LastWriteTime -gt [datetime]::Now.AddMinutes(-$treshold)) {
-        "last error email was sent less than $treshold minutes...just end"
-        throw 1
-    } else {
+    if (Get-Command Send-Email -ErrorAction SilentlyContinue){
+        ++$sendEmail
+    }
+
+    if ($sendEmail -and (Test-Path $lastSendEmail -ea SilentlyContinue) -and (Get-Item $lastSendEmail).LastWriteTime -gt [datetime]::Now.AddMinutes(-$treshold)) {
+        "Last error email was sent less than $treshold minutes...just end"
+    } elseif ($sendEmail) {
         $body = $body + "`n`n`nNext failure will be emailed at first after $treshold minutes"
         Send-Email -body $body
         New-Item $lastSendEmail -Force
-        throw 1
     }
+
+    throw 1
 } # end of _emailAndExit
 
 # helper function to be able to catch errors and all outputs
@@ -639,14 +647,14 @@ try {
         $rFile = Join-Path $repository Get-Random
         $null = New-Item -Path ($rFile) -ItemType File -Force -Confirm:$false
     } catch {
-        _emailAndExit -body "Hi,`nscript doesn't have right to write in $repository. Changes in GIT repository can't be propagated.`nIs computer account $env:COMPUTERNAME in group repo_writer?"
+        _emailAndExit -body "Hi,`nscript doesn't have write permission for $repository. Changes in GIT repository can't be propagated.`nIs computer account $env:COMPUTERNAME in group repo_writer?"
     }
     Remove-Item $rFile -Force -Confirm:$false
 
     #
     # check that GIT is installed
     try {
-        $null = git --version
+        $null = git.exe --version
     } catch {
         _emailAndExit -body "Hi,`nGIT isn't installed on $env:COMPUTERNAME. Changes in GIT repository can't be propagated to $repository.`nInstall it."
     }
@@ -694,8 +702,8 @@ try {
         # there isn't local copy of GIT repository yet
         # clone it
         # login.xml should contain repo_puller credentials
-        #__TODO__ to login.xml export GIT credentials (access token in case of Azure DevOps) of repo_puller account (read only account which is used to clone your repository) (what is access token https://docs.microsoft.com/cs-cz/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=preview-page)
-        #__TODO__ how to export credentials safely to xml file https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20-%20INITIAL%20CONFIGURATION.md#on-server-which-will-be-used-for-cloning-and-processing-cloud-repository-data-and-copying-result-to-dfs-ie-mgm-server
+        #__CHECKME__ to login.xml export GIT credentials (access token in case of Azure DevOps) of repo_puller account (read only account which is used to clone your repository) (what is access token https://docs.microsoft.com/cs-cz/azure/devops/organizations/accounts/use-personal-access-tokens-to-authenticate?view=azure-devops&tabs=preview-page)
+        # tutorial how to export credentials safely to xml file https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20-%20INITIAL%20CONFIGURATION.md#on-server-which-will-be-used-for-cloning-and-processing-cloud-repository-data-and-copying-result-to-dfs-ie-mgm-server
         # !credentials are valid for one year, so need to be renewed regularly!
         "$(Get-Date -Format HH:mm:ss) - Cloning repository data to $clonedRepository"
         $force = $true
@@ -703,8 +711,8 @@ try {
         $l = $acc.UserName
         $p = $acc.GetNetworkCredential().Password
         try {
-            # instead __TODO__ use URL of your company repository (ie somethink like: dev.azure.com/ztrhgf/WUG_show/_git/WUG_show). Final URL will than be something like this: https://altLogin:altPassword@dev.azure.com/ztrhgf/WUG_show/_git/WUG_show)
-            _startProcess git -argumentList "clone `"https://$l`:$p@__TODO__`" `"$clonedRepository`"" -outputErr2Std # git clone outputs progress to err stream
+            # instead __REPLACEME__ use URL of your company repository (i.e. something like: dev.azure.com/ztrhgf/WUG_show/_git/WUG_show). Final URL will than be something like this: https://altLogin:altPassword@dev.azure.com/ztrhgf/WUG_show/_git/WUG_show)
+            _startProcess git -argumentList "clone `"https://$l`:$p@__REPLACEME__2`" `"$clonedRepository`"" -outputErr2Std # git clone outputs progress to err stream
         } catch {
             Remove-Item $clonedRepository -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue
             _emailAndExit -body "Hi,`nthere was an error when cloning repository. Wasn't the password of service account changed? Try generate new credentials to login.xml."
@@ -1252,5 +1260,7 @@ try {
 
     "$(Get-Date -Format HH:mm:ss) - END"
 } catch {
-    _emailAndExit -body "Hi,`nthere was an error when synchronizing GIT repository to DFS repository share:`n$_"
+    _emailAndExit -body "Hi,`nthere was an error (line $($_.InvocationInfo.ScriptLineNumber)) when synchronizing GIT repository to DFS repository share:`n$($_.Exception)"
 }
+
+# TODO doresit ze po cerstve instalaci GITu se mi stalo ze nedetekoval GIT v path (az po restartu) tzn zkusit pouzit cestu do program files?

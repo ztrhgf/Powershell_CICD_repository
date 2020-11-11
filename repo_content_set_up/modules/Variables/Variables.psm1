@@ -5,19 +5,19 @@
 
 ## REPOSITORY
 # name of MGM server (used to pull and process GIT repository content and fill DFS with result)
-$_repoSyncServer = "__TODO__"
+$_repoSyncServer = "__REPLACEME__3"
 # UNC path to share, where repository is stored (used in Refresh-Console)
-$_repoShare = "__TODO__"
+$_repoShare = "__REPLACEME__1"
 # name of computers, which should contain global Powershell profile (i.e. scripts2root\profile.ps1) and module with admin functions (i.e. scripts2module\adminFunctions)
-$_computerWithProfile = "__TODO__"
+$_computerWithProfile = "__REPLACEME__4"
 
 ## SMTP
 # email address of your IT department, errors will be send to this address
-$_adminEmail = "__TODO__" # for example it@contoso.com
+$_adminEmail = "__REPLACEME__6" # for example it@contoso.com
 # company SMTP server, Send-Email function will use it for sending emails
-$_smtpServer = "__TODO__" # for example autodiscover.contoso.com
+$_smtpServer = "__REPLACEME__5" # for example autodiscover.contoso.com
 # address that will be used as sender in function Send-Email
-$_from = "__TODO__" # for example monitoring@contoso.com
+$_from = "__REPLACEME__7" # for example monitoring@contoso.com
 
 <# 
 for inspiration:
