@@ -1,5 +1,6 @@
-# CI/CD solution for (not just) PowerShell content management in your Active Directory environment
-Repository contains necessary files and instructions to create your own company fully automated CI/CD-like repository for managing whole lifecycle of (primarly) PowerShell content. So the only thing you will have to worry about is code writing :)
+# Fully automated CI/CD solution for (not just) PowerShell content management in your Active Directory environment
+Repository contains necessary files + installer that will create your own fully automated company CD/CD like repository, which can be used to manage the whole lifecycle of the (primarily) PowerShell content. So the only thing you will have to worry about now on, is code writing :-)
+Everything else, like code backups, validations, auditing, distribution etc will be automated.
 
 - To see some of the features this solution offers, watch this [short introduction video](https://youtu.be/-xSJXbmOgyk). For more examples and explanation of how this works watch [quite long but detailed video](https://youtu.be/R3wjRT0zuOk) (examples starts at 10:12). Případně [českou verzi videa](https://youtu.be/Jylfq7lYzG4).
 
@@ -9,19 +10,22 @@ Repository contains necessary files and instructions to create your own company 
 
 
 # Main features:
-- **based on GIT**
 - **unifies PowerShell environment across whole Active Directory**
-  - same PowerShell modules, functions and variables everywhere
-    - can be customized using modulesConfig.ps1
+  - same PowerShell modules, functions and variables everywhere (but can be customized by editing modulesConfig.ps1)
   - (optional) global Powershell profile to unify repository administrators experience
-- literally **all scripting content from whole Active Directory can be stored and managed from one place**
+    - shows how many commits is this console behind, simplifies prompt, omits commands with plaintext password from history etc
+- literally **all scripting content from whole Active Directory environment can be stored and managed from one place**
   - thanks to possibility to distribute any content to any location
+- **based on GIT**
+  - version control system
+  - auditing (who changed what and when)
+  - ...
 - **extremely simplifies PowerShell content management by automating**
   - **code validation**
   - **code formatting**
   - **content distribution**
-      - using: GIT hooks, PowerShell scripts, GPO and VSC editor workspace settings
-- adheres to the principles of **configuration as code**
+      - using: GIT hooks, PowerShell scripts, GPO and VSC editor Workspace settings
+- adheres to the principles of **configuration as a code**
 - written by Windows administrator for Windows administrators i.e. 
   - **easy to use**
     - fully managed from Visual Studio Code editor
