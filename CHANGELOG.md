@@ -1,5 +1,20 @@
 # Changelog
 
+## [3.0.2] - 10-11-2020
+### Changes
+- added installer ([setup.cmd](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/setup.cmd)) for simplification of fresh installation so as deployment of new version of this solution
+  - so there is no need to go through the [step by step tutorial](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20INSTALL.md) as was before
+- minor bugfixes
+
+
+## [3.0.1] - 07-30-2020
+### Changes
+- Refresh-Console function:
+  - don't exit if user doesn't have permissions to refresh data on MGM server
+  - new parameter JustConsoleRefresh
+  - changes in outputted text
+
+
 ## [3.0.0] - 2020-07-17
 ### BREAKING CHANGE
 - to significantly speed up import of new repository data to PS console (Refresh-Console) I have rewritten all synchronization scripts. As side effect, **you now have to call Repo_sync.ps1 in eponymous Scheduled Task on MGM server with -force switch**. If you are unsure how to do that, check [install instructions](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20INSTALL.md#on-server-which-will-be-used-for-cloning-and-processing-cloud-repository-data-and-copying-result-to-dfs-ie-mgm-server) but basically you have to call `powershell.exe` with arguments: `-ExecutionPolicy ByPass -NoProfile -Command "&{"C:\Windows\Scripts\Repo_Sync\Repo_Sync.ps1" -force}"`
