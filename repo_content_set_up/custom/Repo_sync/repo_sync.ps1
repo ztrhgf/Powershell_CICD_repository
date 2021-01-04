@@ -672,8 +672,8 @@ try {
         try {
             "$(Get-Date -Format HH:mm:ss) - Pulling newest repository data to $clonedRepository"
             # download the latest data from GIT repository without trying to merge or rebase anything
-            #TODO catch error message when credentials are wrong
-            $null = _startProcess git -argumentList "fetch --all" -outputErr2Std
+            $result = _startProcess git -argumentList "fetch --all" -outputErr2Std
+            if ($result -match "fatal: ") { throw $result }
             # resets the master branch to what you just fetched. The --hard option changes all the files in your working tree to match the files in origin/master
             "$(Get-Date -Format HH:mm:ss) - Discarding local changes"
             $null = _startProcess git -argumentList "reset --hard origin/master"
@@ -712,10 +712,11 @@ try {
         $p = $acc.GetNetworkCredential().Password
         try {
             # instead __REPLACEME__ use URL of your company repository (i.e. something like: dev.azure.com/ztrhgf/WUG_show/_git/WUG_show). Final URL will than be something like this: https://altLogin:altPassword@dev.azure.com/ztrhgf/WUG_show/_git/WUG_show)
-            _startProcess git -argumentList "clone `"https://$l`:$p@__REPLACEME__2`" `"$clonedRepository`"" -outputErr2Std # git clone outputs progress to err stream
+            $result = _startProcess git -argumentList "clone `"https://$l`:$p@__REPLACEME__2`" `"$clonedRepository`"" -outputErr2Std
+            if ($result -match "fatal: ") { throw $result }
         } catch {
             Remove-Item $clonedRepository -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue
-            _emailAndExit -body "Hi,`nthere was an error when cloning repository. Wasn't the password of service account changed? Try generate new credentials to login.xml."
+            _emailAndExit -body "Hi,`nthere was an error when cloning repository.`nError was: $_."
         }
     }
     #endregion PULL NEWEST CONTENT OF CLOUD GIT REPOSITORY LOCALLY
