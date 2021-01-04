@@ -1,5 +1,9 @@
 # Changelog
 
+## [3.0.3] - 01-04-2021
+### Bug fixes
+- fixed capturing of errors that can occur in repo_sync.ps1 during fetch & clone, when credentials are wrong etc
+
 ## [3.0.2] - 10-11-2020
 ### Changes
 - added installer ([setup.cmd](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/setup.cmd)) for simplification of fresh installation so as deployment of new version of this solution
