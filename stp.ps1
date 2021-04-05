@@ -727,9 +727,10 @@ try {
     _pressKeyToContinue
     Clear-Host
 
-    _SetVariable MGMServer "the name of the MGM server (will be used for pulling, processing and distribution of repository data to repository share). Use FQDN format (mgmserver.contoso.com)"
-    if ($MGMServer -notlike "*.*") {
-        throw "$MGMServer isn't in FQDN format (mgmserver.contoso.com)"
+    _SetVariable MGMServer "the name of the MGM server (will be used for pulling, processing and distributing of repository data to repository share)."
+    if ($MGMServer -like "*.*") {
+        $MGMServer = ($MGMServer -split "\.")[0]
+        Write-Warning "$MGMServer was in FQDN format. Just hostname was used"
     }
     if (!$noADmodule -and !(Get-ADComputer -Filter "name -eq '$MGMServer'")) {
         throw "$MGMServer doesn't exist in AD"
@@ -1099,8 +1100,8 @@ try {
     @"
    - copy Repo_sync folder to '$MGMRepoSync'
    - install newest version of 'GIT'
-   - create scheduled task '$taskName' from 'Repo_sync.xml'
-   - export 'repo_puller' account credentials to '$MGMRepoSync\login.xml' (only SYSTEM account on $MGMServer will be able to read them!)
+   - create scheduled task 'Repo_sync' from 'Repo_sync.xml'
+   - export 'repo_puller' account alternate credentials to '$MGMRepoSync\login.xml' (only SYSTEM account on $MGMServer will be able to read them!)
    - copy exported credentials from $MGMServer to $userRepoSync
    - commit&push exported credentials (so they won't be automatically deleted from $MGMServer, after this solution starts working)
 "@
@@ -1163,7 +1164,7 @@ try {
             "   - creating scheduled task '$taskName' from $Repo_syncXML"
             _createSchedTask $Repo_syncXML $taskName
 
-            "   - exporting repo_puller account credentials to '$MGMRepoSync\login.xml' (only SYSTEM account on $env:COMPUTERNAME will be able to read them!)"
+            "   - exporting repo_puller account alternate credentials to '$MGMRepoSync\login.xml' (only SYSTEM account on $env:COMPUTERNAME will be able to read them!)"
             _exportCred -credential (Get-Credential -Message 'Enter credentials (that can be used in unattended way) for GIT "repo_puller" account, you created earlier') -runAs "NT AUTHORITY\SYSTEM" -xmlPath "$MGMRepoSync\login.xml"
 
             "   - starting scheduled task '$taskName' to fill $repositoryShare immediately"
@@ -1276,6 +1277,8 @@ catch {
     break
 }
 finally {
+    Stop-Transcript -ErrorAction SilentlyContinue
+
     try {
         Remove-PSSession -Session $repositoryHostSession
         Remove-PSSession -Session $MGMServerSession
