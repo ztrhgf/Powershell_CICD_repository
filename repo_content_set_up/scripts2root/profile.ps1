@@ -83,9 +83,7 @@ Register-ArgumentCompleter -CommandName ((Get-Command -Module Scripts).name) -Pa
 #
 # import Variables module
 #
-if (!$_isLocalUser) {
-    Import-Module Variables
-}
+Import-Module Variables
 
 
 #
