@@ -679,18 +679,16 @@ elseif ($testInstallation) {
     "   - installing 'VSC'"
     _installVSC
 
-    if (!(Get-Module -ListAvailable PSScriptAnalyzer)) {
-        "   - installing 'PSScriptAnalyzer' PS module"
-        Install-PackageProvider -Name nuget -Force -ForceBootstrap -Scope allusers | Out-Null
-        Install-Module PSScriptAnalyzer -SkipPublisherCheck -Force
-    }
+    # if (!(Get-Module -ListAvailable PSScriptAnalyzer)) {
+    #     "   - installing 'PSScriptAnalyzer' PS module"
+    #     Install-PackageProvider -Name nuget -Force -ForceBootstrap -Scope allusers | Out-Null
+    #     Install-Module PSScriptAnalyzer -SkipPublisherCheck -Force
+    # }
 
-    if (!(Get-Module -ListAvailable PackageManagement)) {
-        "   - installing 'PackageManagement' PS module"
-        # solves issue https://github.com/PowerShell/vscode-powershell/issues/2824
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        Install-Module -Name PackageManagement -Force
-    }
+    "   - updating 'PackageManagement' PS module"
+    # solves issue https://github.com/PowerShell/vscode-powershell/issues/2824
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+    Install-Module -Name PackageManagement -Force
 
     "   - enabling running PS scripts"
     # because of PS global profile loading
