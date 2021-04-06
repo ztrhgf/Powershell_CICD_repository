@@ -574,8 +574,9 @@ function _setPermissions {
 
     # adding SYSTEM account
     # for case when data should be copied to server X (so NTFS will be limited to just his account) and that server at the same time hosts shared folder with this repository data. Therefore he uses SYSTEM account for accessing that (in fact locally stored) data, so granting access just for it's computer account wouldn't suffice and lead to access denied
-    if (!($readUser -match 'SYSTEM')) {
-        $readUser = @($readUser) + 'SYSTEM'
+    # write rights because of TEST installation type on Sandbox VM (cannot be restarted, so computer will never be member of repo_writer i.e. cannot update share content once it is copied)
+    if (!($writeUser -match 'SYSTEM')) {
+        $writeUser = @($writeUser) + 'SYSTEM'
     }
 
     $permissions = @()
@@ -707,12 +708,18 @@ try {
         # !credentials are valid for one year, so need to be renewed regularly!
         "$(Get-Date -Format HH:mm:ss) - Cloning repository data to $clonedRepository"
         $force = $true
-        $acc = Import-Clixml "$PSScriptRoot\login.xml"
-        $l = $acc.UserName
-        $p = $acc.GetNetworkCredential().Password
         try {
+            if (Test-Path "__REPLACEME__2" -IsValid) {
+                # its local path (hack because of TEST installation)
+                $result = _startProcess git -argumentList "clone --local `"__REPLACEME__2`" `"$clonedRepository`"" -outputErr2Std
+        } else {
+            # its URL
+            $acc = Import-Clixml "$PSScriptRoot\login.xml"
+            $l = $acc.UserName
+            $p = $acc.GetNetworkCredential().Password
             # instead __REPLACEME__ use URL of your company repository (i.e. something like: dev.azure.com/ztrhgf/WUG_show/_git/WUG_show). Final URL will than be something like this: https://altLogin:altPassword@dev.azure.com/ztrhgf/WUG_show/_git/WUG_show)
             $result = _startProcess git -argumentList "clone `"https://$l`:$p@__REPLACEME__2`" `"$clonedRepository`"" -outputErr2Std
+        }
             if ($result -match "fatal: ") { throw $result }
         } catch {
             Remove-Item $clonedRepository -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue
