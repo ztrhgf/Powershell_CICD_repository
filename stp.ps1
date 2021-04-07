@@ -679,9 +679,10 @@ elseif ($testInstallation) {
     "   - installing 'VSC'"
     _installVSC
 
+    Install-PackageProvider -Name nuget -Force -ForceBootstrap -Scope allusers | Out-Null
+    
     # if (!(Get-Module -ListAvailable PSScriptAnalyzer)) {
     #     "   - installing 'PSScriptAnalyzer' PS module"
-    #     Install-PackageProvider -Name nuget -Force -ForceBootstrap -Scope allusers | Out-Null
     #     Install-Module PSScriptAnalyzer -SkipPublisherCheck -Force
     # }
 
@@ -775,6 +776,14 @@ try {
     #     _continue
     # }
 
+    # is local administrator
+    if (! ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+        Write-Warning "Not running as administrator. Symlink for using repository PowerShell snippets file in VSC won't be created"
+        ++$notAdmin
+    
+        _pressKeyToContinue
+    }
+
     if (!$testInstallation) {
         # is domain admin
         if (!$noEnvModification -and !((whoami /all) -match "Domain Admins|Enterprise Admins")) {
@@ -844,14 +853,6 @@ try {
         if ($notADAdmin -or $noGPOmodule) {
             ++$skipGPO
         }
-    }
-
-    # is local administrator
-    if (! ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-        Write-Warning "Not running as administrator. Symlink for using repository PowerShell snippets file in VSC won't be created"
-        ++$notAdmin
-    
-        _pressKeyToContinue
     }
 
     if (!$testInstallation) {
@@ -1319,9 +1320,10 @@ try {
 
         "   - setting GIT user email to '$env:USERNAME@$userDomain'"
         git config user.email "$env:USERNAME@$userDomain"
-
+        
         $VSCprofile = Join-Path $env:APPDATA "Code\User"
         $profileSnippets = Join-Path $VSCprofile "snippets"
+        [Void][System.IO.Directory]::CreateDirectory($profileSnippets)
         $profilePSsnippet = Join-Path $profileSnippets "powershell.json"
         $repositoryPSsnippet = Join-Path $userRepository "powershell.json"
         "   - creating symlink '$profilePSsnippet' for '$repositoryPSsnippet', so VSC can offer these PowerShell snippets"
