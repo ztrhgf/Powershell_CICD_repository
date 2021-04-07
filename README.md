@@ -4,7 +4,9 @@ Everything else, like code backups, validations, auditing, signing, modules gene
 
 - To get some quick insight, watch this [short introduction video](https://youtu.be/-xSJXbmOgyk) or super short examples of [new function creation](https://youtu.be/XvTe6ppsHgI), [new 'global' variable creation](https://youtu.be/Cb981bQ5SV4), [script validations](https://youtu.be/myxzPZZ8gEk). For more examples and explanation of how this works watch [quite long but detailed video](https://youtu.be/R3wjRT0zuOk) (examples starts at 10:12). Případně [českou verzi videa](https://youtu.be/Jylfq7lYzG4).
 
-- **To test this solution in safe manner in under 5 minutes, [check this out](https://youtu.be/o_QlF5YCMGU)!**
+[<img src="https://media.giphy.com/media/hAfuEpFUrP2Nn79v7c/giphy.gif" width="30%">](https://youtu.be/037Ki_Hx0kY4)
+
+- **To test this solution in safe manner in under 5 minutes, check this out!** [<img src="https://media.giphy.com/media/27URm9VNtXQyaKqmvf/giphy.gif" width="30%">](https://youtu.be/o_QlF5YCMGU)
 
 - To set this up in your environment please follow these [installation instructions](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20INSTALL.md).
 
