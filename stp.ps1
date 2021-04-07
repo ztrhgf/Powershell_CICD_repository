@@ -1641,6 +1641,7 @@ try {
 
     Write-Host "GOOD TO KNOW" -ForegroundColor green
     @"
+- Do NOT place your GIT repository inside Dropbox, Onedrive or other similar synchronization tool, it would cause problems!
 - To understand, what is purpose of this repository content check https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/3.%20SIMPLIFIED%20EXPLANATION%20OF%20HOW%20IT%20WORKS.md
 - For immediate refresh of clients data (and console itself) use function Refresh-Console
     - NOTE: available only on computers defined in Variables module in variable `$computerWithProfile
@@ -1650,8 +1651,8 @@ try {
 - To master Custom section features check \custom\customConfig.ps1
 - To see what is happening in the background check logs
     - In VSC Output terminal (CTRL + SHIFT + U, there switch output to GIT) (pre-commit.ps1 checks)
-    - C:\Windows\Temp\Repo_sync.ps1.log (synchronization from GIT repository to share)
-    - C:\Windows\Temp\PS_env_set_up.ps1.log (synchronization from share to client)
+    - C:\Windows\Temp\Repo_sync.ps1.log on MGM server (synchronization from GIT repository to share)
+    - C:\Windows\Temp\PS_env_set_up.ps1.log on client (synchronization from share to client)
 
 ENJOY :)
 
