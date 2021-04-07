@@ -568,21 +568,23 @@ if (!$noEnvModification) {
 ####################################
 
 1) TEST installation
-    - suitable to test the features, this solution offers ASAP and safely
-        - run on test computer (preferably VM (Windows Sandbox, Virtualbox, Hyper-V, ...))
-        - no prerequisities like 
+    - suitable for fast and safe test of the features, this solution offers
+        - run this installer on test computer (preferably VM (Windows Sandbox, Virtualbox, Hyper-V, ...))
+        - no prerequisities needed like 
             - Active Directory
             - cloud repository
-    - as simple as possible so automatically
+    - goal was, to have this as simple as possible, so installer automatically:
         - install VSC, GIT
         - creates GIT repository in $remoteRepository
             - and clone it to $userRepository
         - creates folder $repositoryShareLocPath and share it as $repositoryShare
         - creates security group repo_reader, repo_writer
         - creates required scheduled tasks
-        - creates global PowerShell profile
+        - creates and set global PowerShell profile
+        - start VSC editor with your new repository, so you can start your testing immediately :)
+        
 2) Standard installation (Active Directory needed)
-    - this script will set up your own GIT repository so as your environment by:
+    - this script will set up your own GIT repository and your environment by:
         - creating repo_reader, repo_writer AD groups
         - create shared folder for serving repository data to clients
         - customize generic data from repo_content_set_up folder to match your environment
@@ -658,21 +660,6 @@ if (!$noEnvModification -and !$testInstallation) {
     _pressKeyToContinue
 }
 elseif ($testInstallation) {
-    @"
-####################################
-#   BEFORE YOU CONTINUE
-####################################
-
-- NOTE:
-    - it is highly recommended to use 'Visual Studio Code (VSC)' editor to work with the repository content because it provides:
-        - unified admin experience through repository VSC workspace settings
-        - integration & control of GIT
-        - auto-formatting of the code etc
-    - more details can be found at https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20INSTALL.md
-"@    
-    _pressKeyToContinue
-
-    ""
     "   - installing 'GIT'"
     _installGIT
 
@@ -689,9 +676,9 @@ elseif ($testInstallation) {
     "   - updating 'PackageManagement' PS module"
     # solves issue https://github.com/PowerShell/vscode-powershell/issues/2824
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-    Install-Module -Name PackageManagement -Force
+    Install-Module -Name PackageManagement -Force -ea SilentlyContinue
 
-    "   - enabling running PS scripts"
+    "   - enabling running of PS scripts"
     # because of PS global profile loading
     Set-ExecutionPolicy Bypass -Force
 }
@@ -875,7 +862,7 @@ try {
     else {
         # test installation
         $MGMServer = $env:COMPUTERNAME
-        "   - For testing purposes, this computer will be MGM server too"
+        "   - For testing purposes, this computer will host MGM server role too"
     }
 
     if (!$testInstallation) {
@@ -913,9 +900,10 @@ try {
     }
     else {
         Write-Host "- Creating repo_reader, repo_writer security groups" -ForegroundColor Green
+
         'repo_reader', 'repo_writer' | % {
             if (Get-LocalGroup $_ -ea SilentlyContinue) {
-                "   - $_ already exists"
+                # already exists
             }
             else {
                 if ($_ -match 'repo_reader') {
@@ -925,10 +913,8 @@ try {
                     $right = "modify"
                 }
                 $null = New-LocalGroup -Name $_ -Description "Members have $right right to repository share." # max 48 chars!
-                " - created $_"
             }
         }
-        
     }
     #endregion create repo_reader, repo_writer
 
@@ -998,7 +984,7 @@ try {
     if ($testInstallation -or (!$noEnvModification -and !(_skip))) {
         "   - Testing, whether '$repositoryShare' already exists"
         try {
-            Test-Path $repositoryShare | Out-Null
+            $repositoryShareExists = Test-Path $repositoryShare
         }
         catch {
             # in case this script already created that share but this user isn't yet in repo_writer, he will receive access denied error when accessing it
@@ -1006,8 +992,10 @@ try {
                 ++$accessDenied
             }
         }
-        if ((Test-Path $repositoryShare -ea SilentlyContinue) -or $accessDenied) {
-            Write-Warning "Share '$repositoryShare' already exists.`n`tMake sure, that ONLY following permissions are set:$permissions`n`nNOTE: it's content will be replaced by repository data eventually!"
+        if ($repositoryShareExists -or $accessDenied) {
+            if (!$testInstallation) {
+                Write-Warning "Share '$repositoryShare' already exists.`n`tMake sure, that ONLY following permissions are set:$permissions`n`nNOTE: it's content will be replaced by repository data eventually!"
+            }
         }
         else {
             # share or some part of its path doesn't exist
@@ -1218,7 +1206,12 @@ try {
         # remove quotation, replace string is already quoted in files
         $value = $value -replace "^\s*[`"']" -replace "[`"']\s*$"
 
-        "   - replacing: $name for: $value"
+        if (!$testInstallation) {
+            "   - replacing: $name for: $value"
+        } else {
+            Write-Verbose "   - replacing: $name for: $value"
+        }
+
         Get-ChildItem $repo_content_set_up, $_other -Include *.ps1, *.psm1, *.xml -Recurse | % {
             (Get-Content $_.fullname) -replace $name, $value | Set-Content $_.fullname
         }
@@ -1243,7 +1236,7 @@ try {
     $fileWithCheckMe = $fileWithCheckMe | ? { $_ -ne $PSCommandPath }
     if ($fileWithCheckMe) {
         Write-Warning "(OPTIONAL CUSTOMIZATIONS) Search for __CHECKME__ string in the following files and decide what to do according to information that follows there (save any changes before continue):"
-        $fileWithCheckMe | % { "   - $_`n" }
+        $fileWithCheckMe | % { "   - $_" }
     }
     #endregion warn about __CHECKME__
 
@@ -1263,15 +1256,15 @@ try {
         Write-Host " - Creating new GIT repository '$remoteRepository'. It will be used instead of your own cloud repository like GitHub or Azure DevOps. DON'T MAKE ANY CHANGES HERE." -ForegroundColor Green
         [Void][System.IO.Directory]::CreateDirectory($remoteRepository)
         Set-Location $remoteRepository
-        $result = git init #--bare
+        $result = _startProcess git init
         #FIXME https://stackoverflow.com/questions/3221859/cannot-push-into-git-repository
-        $result = git config receive.denyCurrentBranch updateInstead
+        $result = _startProcess git "config receive.denyCurrentBranch updateInstead"
 
         ""
 
         Write-Host " - Cloning '$remoteRepository' to '$userRepository'. So in '$userRepository' MAKE YOUR CHANGES." -ForegroundColor Green
         Set-Location (Split-Path $userRepository -Parent)
-        $result = git clone --local $remoteRepository (Split-Path $userRepository -Leaf)
+        $result = _startProcess git "clone --local $remoteRepository $(Split-Path $userRepository -Leaf)" -outputErr2Std
     }
 
     if ($testInstallation -or (!$noEnvModification -and !(_skip))) {
@@ -1320,7 +1313,7 @@ try {
 
         "   - setting GIT user email to '$env:USERNAME@$userDomain'"
         git config user.email "$env:USERNAME@$userDomain"
-        
+
         $VSCprofile = Join-Path $env:APPDATA "Code\User"
         $profileSnippets = Join-Path $VSCprofile "snippets"
         [Void][System.IO.Directory]::CreateDirectory($profileSnippets)
@@ -1553,7 +1546,7 @@ try {
     <Triggers>
     <TimeTrigger>
         <Repetition>
-        <Interval>PT30M</Interval>
+        <Interval>PT10M</Interval>
         <StopAtDurationEnd>false</StopAtDurationEnd>
         </Repetition>
         <StartBoundary>2019-04-10T14:31:23</StartBoundary>
@@ -1633,6 +1626,8 @@ try {
         - run on client command 'gpupdate /force' to create scheduled task $GPOname
         - run that sched. task and check the result in C:\Windows\Temp\$GPOname.ps1.log
 "@
+    } else {
+        "- check this console output, to get better idea what was done"
     }
     #endregion finalize installation
 
@@ -1646,13 +1641,17 @@ try {
 
     Write-Host "GOOD TO KNOW" -ForegroundColor green
     @"
+- To understand, what is purpose of this repository content check https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/3.%20SIMPLIFIED%20EXPLANATION%20OF%20HOW%20IT%20WORKS.md
 - For immediate refresh of clients data (and console itself) use function Refresh-Console
-    - NOTE: available only on computers defined in Variables module in `$computerWithProfile
-- For real world use cases check https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md
-- For brief video introduction check https://youtu.be/-xSJXbmOgyk
-- To understand various part of this solution check https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/3.%20SIMPLIFIED%20EXPLANATION%20OF%20HOW%20IT%20WORKS.md and https://youtu.be/R3wjRT0zuOk
+    - NOTE: available only on computers defined in Variables module in variable `$computerWithProfile
+- For examples check https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md
+- For brief video introduction check https://youtu.be/-xSJXbmOgyk and other videos at https://youtube.com/playlist?list=PLcNLAABGhY_GqrWfOZGjpgFv3fiaL0ciM
 - To master Modules deployment check \modules\modulesConfig.ps1
 - To master Custom section features check \custom\customConfig.ps1
+- To see what is happening in the background check logs
+    - In VSC Output terminal (CTRL + SHIFT + U, there switch output to GIT) (pre-commit.ps1 checks)
+    - C:\Windows\Temp\Repo_sync.ps1.log (synchronization from GIT repository to share)
+    - C:\Windows\Temp\PS_env_set_up.ps1.log (synchronization from share to client)
 
 ENJOY :)
 
