@@ -81,6 +81,8 @@ $lastProcessedCommit = $processedCommit | Select-Object -First 1
 # set correct path to signing certificate and uncomment to start signing
 # $signingCert = Get-PfxCertificate -FilePath C:\Test\Mysign.pfx # something like this, if you want to use locally stored pfx certificate
 # $signingCert = (Get-ChildItem cert:\LocalMachine\my –CodeSigningCert)[0] # something like this, if certificate is in store
+# certTimeStampServer - Specifies the trusted timestamp server that adds a timestamp to your script's digital signature. Adding a timestamp ensures that your code will not expire when the signing certificate expires.
+$certTimeStampServer = "http://timestamp.digicert.com"
 if ($signingCert -and $signingCert.EnhancedKeyUsageList.friendlyName -ne "Code Signing") {
     throw "Certificate $($signingCert.DnsNameList) is not valid Code Signing certificate"
 }
@@ -880,7 +882,14 @@ try {
                         $sign = Get-ChildItem $itemPath -Recurse -Include *.ps1, *.psm1, *.psd1, *.ps1xml -File | select -exp FullName
                     }
 
-                    $sign | % { Set-AuthenticodeSignature -Certificate $signingCert -FilePath $_ }
+                    $sign | % { 
+                        $notSigned = Get-AuthenticodeSignature $_ | ? {$_.status -eq "NotSigned"}
+                        if ($notSigned) {
+                            Set-AuthenticodeSignature -Certificate $signingCert -FilePath $_ -TimestampServer $certTimeStampServer
+                        } else {
+                            Write-Verbose "File $_ is already signed, skipping"
+                        }
+                    }
                 }
 
                 # copy content to DFS share
@@ -980,7 +989,12 @@ try {
                 try {
                     # signing the script if requested
                     if ($signingCert -and $itemName -match "ps1$|psd1$|psm1$|ps1xml$") {
-                        Set-AuthenticodeSignature -Certificate $signingCert -FilePath $itemPath
+                        $notSigned = Get-AuthenticodeSignature $itemPath | ? {$_.status -eq "NotSigned"}
+                        if ($notSigned) {
+                            Set-AuthenticodeSignature -Certificate $signingCert -FilePath $itemPath -TimestampServer $certTimeStampServer
+                        } else {
+                            Write-Verbose "File $itemPath is already signed, skipping"
+                        }
                     }
 
                     Copy-Item $itemPath $repository -Force -ErrorAction Stop
@@ -1068,7 +1082,14 @@ try {
                         $sign = Get-ChildItem $itemPath -Recurse -Include *.ps1, *.psm1, *.psd1, *.ps1xml -File | select -exp FullName
                     }
 
-                    $sign | % { Set-AuthenticodeSignature -Certificate $signingCert -FilePath $_ }
+                    $sign | % { 
+                        $notSigned = Get-AuthenticodeSignature $_ | ? {$_.status -eq "NotSigned"}
+                        if ($notSigned) {
+                            Set-AuthenticodeSignature -Certificate $signingCert -FilePath $_ -TimestampServer $certTimeStampServer
+                        } else {
+                            Write-Verbose "File $_ is already signed, skipping"
+                        }
+                    }
                 }
 
                 # copy content to DFS share
