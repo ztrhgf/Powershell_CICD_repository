@@ -1,3 +1,6 @@
+# [DEPRECATED] USE https://github.com/ztrhgf/Powershell_CICD_repository/releases instead
+
+
 # Changelog
 
 ## [3.0.3] - 01-04-2021
