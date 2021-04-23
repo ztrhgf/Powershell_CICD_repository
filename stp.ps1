@@ -1639,6 +1639,26 @@ try {
         ""
     }
 
+    if ($testInstallation) {
+        @"
+SUMMARY INFORMATION ABOUT THIS !TEST! INSTALLATION:
+ - central repository share is at $repositoryShareLocPath (locally at $repositoryShareLocPath) 
+    - it is used by clients to synchronize their repository data
+ - (cloud) repository is hosted locally at $remoteRepository
+    - simulates for example GitHub private repository
+ - (cloud) repository is locally cloned to $userRepository
+    - here you makes changes (creates new functions, modules, ...) and commit them to (cloud) repository
+ - scheduled tasks:
+    - Repo_sync - pulls data from (cloud) GIT repository, process them and synchronize result to $repositoryShare
+        - processing is done in C:\Windows\Scripts\Repo_sync
+        - log file in C:\Windows\Temp\Repo_sync.ps1.log
+    - PS_env_set_up - synchronizes local content from $repositoryShare i.e. it is used to get repository data to clients
+        - log file in C:\Windows\Temp\PS_env_set_up.ps1.log
+"@
+        _pressKeyToContinue
+        Clear-Host
+    }
+
     Write-Host "GOOD TO KNOW" -ForegroundColor green
     @"
 - Do NOT place your GIT repository inside Dropbox, Onedrive or other similar synchronization tool, it would cause problems!
