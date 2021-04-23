@@ -57,4 +57,4 @@ Everything else, like code backups, validations, auditing, signing, modules gene
 # [Examples](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md)
 # [Repository logic & content explanation](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/3.%20SIMPLIFIED%20EXPLANATION%20OF%20HOW%20IT%20WORKS.md)
 # [FAQ](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/FAQ.md)
-# [Changelog](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/CHANGELOG.md)
+# [Changelog](https://github.com/ztrhgf/Powershell_CICD_repository/releases)
