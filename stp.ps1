@@ -422,8 +422,7 @@ function _installGITCredManager {
 
 function _installVSC {
     $codeCmdPath = "$env:ProgramFiles\Microsoft VS Code\bin\code.cmd"
-    $codeExePath = "$env:ProgramFiles\Microsoft VS Code\Code.exe"
-    if (Test-Path $codeExePath) {
+    if ((Test-Path "$env:ProgramFiles\Microsoft VS Code\Code.exe") -or (Test-Path "$env:USERPROFILE\AppData\Local\Programs\Microsoft VS Code\Code.exe")) {
         "      - already installed"
         return
     }
