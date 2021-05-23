@@ -1,0 +1,180 @@
+// Place your settings in this file to overwrite default and user settings.
+{
+    //============================
+    // Misc
+    //============================
+    "breadcrumbs.enabled": true,
+    "telemetry.enableCrashReporter": false,
+    //============================
+    // Files config
+    //============================
+    "files.defaultLanguage": "powershell",
+    "files.trimTrailingWhitespace": true,
+    "files.trimFinalNewlines": true,
+    "files.associations": {
+        "*.ps1": "powershell",
+        "*.wsb": "xml"
+    },
+    "files.autoGuessEncoding": true,
+    "files.encoding": "utf8bom",
+    // for PS script UTF8 with BOM is best option (en dash and similar problematic chars don't make problems) more at https://docs.microsoft.com/cs-cz/powershell/scripting/components/vscode/understanding-file-encoding?view=powershell-6
+    "[powershell]": {
+        "files.encoding": "utf8bom",
+    },
+    //============================
+    // GIT
+    //============================
+    "git.promptToSaveFilesBeforeCommit": "staged",
+    "git.autofetch": true,
+    "git.fetchOnPull": true,
+    // in case commit fails, it can be necessary to get data back from stash by commynd: git stash pop
+    "git.autoStash": true,
+    //============================
+    // Addons Settings
+    //============================
+    // Todo Tree
+    "todo-tree.general.tags": [
+        "BUG",
+        "HACK",
+        "FIXME",
+        "TODO",
+        "XXX",
+        "DEBUG"
+    ],
+    "todo-tree.highlights.customHighlight": {
+        "TODO": {
+            "icon": "check",
+            "background": "yellow",
+            "type": "whole-line",
+            "opacity": 20
+        },
+        "FIXME": {
+            "foreground": "yellow",
+            "background": "red",
+            "type": "whole-line",
+            "opacity": 70,
+            "iconColour": "red"
+        }
+    },
+    // Error Lens
+    "errorLens.exclude": [
+        "unknown word",
+        "has positional parameter",
+        "line has trailing whitespace",
+        "returns an object of type"
+    ],
+    // Code Spell Checker
+    "cSpell.enableFiletypes": [
+        "powershell"
+    ],
+    "cSpell.ignoreWords": [
+        "cmdletbinding",
+        "endregion",
+        "env",
+        "isnot",
+        "notin",
+        "userdomain",
+        "hashtable",
+        "notmatch"
+    ],
+    // Gitlens
+    "gitlens.advanced.similarityThreshold": 90,
+    //============================
+    // Workbench
+    //============================
+    "workbench.editor.scrollToSwitchTabs": true,
+    "workbench.tree.indent": 10,
+    "workbench.tree.renderIndentGuides": "always",
+    "workbench.colorCustomizations": {
+        "errorLens.errorBackground": "#e4545410",
+        "errorLens.errorForeground": "#ff646440",
+        "errorLens.errorMessageBackground": "#e4545405",
+        "errorLens.warningBackground": "#ff942f10",
+        "errorLens.warningForeground": "#fa973a70",
+        "errorLens.warningMessageBackground": "#fff00005",
+        "terminal.ansiBlack": "#000000",
+        "terminal.ansiBlue": "#2472c8",
+        "terminal.ansiBrightBlack": "#666666",
+        "terminal.ansiBrightBlue": "#569cd6",
+        "terminal.ansiBrightCyan": "#9cdcfe",
+        "terminal.ansiBrightGreen": "#b5cea8",
+        "terminal.ansiBrightMagenta": "#daadd6",
+        "terminal.ansiBrightRed": "#f14c4c",
+        "terminal.ansiBrightWhite": "#e5e5e5",
+        "terminal.ansiBrightYellow": "#DCDCAA",
+        "terminal.ansiCyan": "#11a8cd",
+        "terminal.ansiGreen": "#6a9955",
+        "terminal.ansiMagenta": "#C586C0",
+        "terminal.ansiRed": "#cd3131",
+        "terminal.ansiWhite": "#e5e5e5",
+        "terminal.ansiYellow": "#CE9178",
+        "terminal.background": "#1E1E1E",
+        "terminal.foreground": "#D4D4D4"
+    },
+    //============================
+    // Editor
+    //============================
+    // BUGFIX nez fixnou syntax colouring
+    "editor.semanticHighlighting.enabled": false,
+    "editor.wordSeparators": "`~!@#%^&*()-=+[{]}\\|;:'\",.<>/?",
+    "editor.tabSize": 4,
+    //"editor.minimap.enabled": false,
+    "editor.renderControlCharacters": true,
+    "editor.formatOnType": true,
+    "editor.formatOnPaste": true,
+    "editor.formatOnSave": true,
+    "editor.wordWrap": "on",
+    "editor.tabCompletion": "on",
+    "editor.mouseWheelZoom": true,
+    //I want Powershell Intellisense first
+    "editor.snippetSuggestions": "bottom",
+    "editor.suggest.snippetsPreventQuickSuggestions": false,
+    //============================
+    //Terminal
+    //============================
+    "terminal.integrated.fontFamily": "Consolas",
+    "terminal.integrated.fontSize": 14,
+    "terminal.integrated.lineHeight": 1,
+    "terminal.integrated.shell.windows": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+    "terminal.integrated.shellArgs.windows": [
+        "-noprofile",
+        "-nologo"
+    ],
+    "terminal.integrated.cursorBlinking": true,
+    "terminal.integrated.cursorStyle": "line",
+    "terminal.integrated.experimentalUseTitleEvent": true,
+    "terminal.integrated.scrollback": 9999,
+    //============================
+    // PowerShell
+    //============================
+    "powershell.enableProfileLoading": false,
+    "powershell.scriptAnalysis.enable": true,
+    // configure settings file for script analysis (compatibility checks etc), this file is in root of this repository
+    "powershell.scriptAnalysis.settingsPath": "PSScriptAnalyzerSettings.psd1",
+    "powershell.startAutomatically": true,
+    "powershell.codeFormatting.preset": "OTBS",
+    "powershell.codeFormatting.useCorrectCasing": true,
+    "powershell.codeFormatting.alignPropertyValuePairs": true,
+    "powershell.codeFormatting.ignoreOneLineBlock": true,
+    "powershell.codeFormatting.newLineAfterCloseBrace": true,
+    "powershell.codeFormatting.newLineAfterOpenBrace": true,
+    "powershell.codeFormatting.openBraceOnSameLine": true,
+    "powershell.codeFormatting.whitespaceAroundOperator": true,
+    "powershell.codeFormatting.whitespaceBeforeOpenBrace": true,
+    "powershell.codeFormatting.whitespaceBeforeOpenParen": true,
+    // "powershell.codeFormatting.autoCorrectAliases": true,
+    "powershell.codeFormatting.pipelineIndentationStyle": "IncreaseIndentationForFirstPipeline",
+    "powershell.codeFormatting.trimWhitespaceAroundPipe": true,
+    // BUG, pokud se povoli, tak zacne nahodne mazat kusy textu!
+    // "powershell.codeFormatting.whitespaceBetweenParameters": true,
+    "powershell.integratedConsole.focusConsoleOnExecute": true,
+    "powershell.integratedConsole.showOnStartup": false,
+    "powershell.integratedConsole.suppressStartupBanner": true,
+    "powershell.powerShellDefaultVersion": "Windows PowerShell (x64)",
+    "powershell.promptToUpdatePowerShell": false,
+    "powershell.sideBar.CommandExplorerVisibility": false,
+    "powershell.startAsLoginShell.linux": true,
+    //============================
+    // Global Launch Configurations
+    //============================
+}
