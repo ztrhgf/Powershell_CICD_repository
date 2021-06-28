@@ -1,5 +1,6 @@
 #Requires -Version 5.1
 
+#FIXME predelat na auth pomoci PAT
 <#
 .SYNOPSIS
 Installation script for PowerShell managing solution hosted at https://github.com/ztrhgf/Powershell_CICD_repository
@@ -30,7 +31,7 @@ param (
 )
 
 Begin {
-    $Host.UI.RawUI.Windowtitle = "Installer of PowerShell CI/CD solution"
+    $Host.UI.RawUI.WindowTitle = "Installer of PowerShell CI/CD solution"
 
     $transcript = Join-Path $env:USERPROFILE ((Split-Path $PSCommandPath -Leaf) + ".log")
     Start-Transcript $transcript -Force
@@ -48,10 +49,7 @@ Begin {
     $GPOname = 'PS_env_set_up'
 
     # hardcoded PATHs for TEST installation
-    $repositoryShare = "\\$env:COMPUTERNAME\repositoryShare"
-    $repositoryShareLocPath = Join-Path $env:SystemDrive "repositoryShare"
-    $remoteRepository = Join-Path $env:SystemDrive "myCompanyRepository_remote"
-    $userRepository = Join-Path $env:SystemDrive "myCompanyRepository"
+    $remoteRepository = "$env:SystemDrive\myCompanyRepository_remote"
     #endregion Variables
 
     # Detect if Server
@@ -166,16 +164,23 @@ Begin {
     }
 
     function _setVariable {
-        # function defines variable and fills it with value find in ini file or entered by user
-        param ([string] $variable, [string] $readHost, [switch] $optional, [switch] $passThru)
+        # function defines variable and fills it with value find in ini file or entered by the user
+        param ([string] $variable, [string] $readHost, [switch] $YNQuestion, [switch] $optional, [switch] $passThru)
 
         $value = $setupVariable.GetEnumerator() | ? { $_.name -eq $variable -and $_.value } | select -ExpandProperty value
         if (!$value) {
-            if ($optional) {
-                $value = Read-Host "    - (OPTIONAL) Enter $readHost"
+            if ($YNQuestion) {
+                $value = ""
+                while ($value -notmatch "^[Y|N]$") {
+                    $value = Read-Host "    - $readHost (Y|N)"
+                }
             } else {
-                while (!$value) {
-                    $value = Read-Host "    - Enter $readHost"
+                if ($optional) {
+                    $value = Read-Host "    - (OPTIONAL) Enter $readHost"
+                } else {
+                    while (!$value) {
+                        $value = Read-Host "    - Enter $readHost"
+                    }
                 }
             }
         } else {
@@ -197,8 +202,26 @@ Begin {
         }
     }
 
+
+    function _setVariableValue {
+        # function defines variable and fills it with given value
+        param ([string] $variable, $value, [switch] $passThru)
+
+        if (!$value) { throw "Undefined value" }
+
+        # replace whitespaces so as quotes
+        $value = $value -replace "^\s*|\s*$" -replace "^[`"']*|[`"']*$"
+        $setupVariable.$variable = $value
+        New-Variable $variable $value -Scope script -Force -Confirm:$false
+
+        if ($passThru) {
+            return $value
+        }
+    }
+
+
     function _saveInput {
-        # call after each successfuly ended section, so just correct inputs will be stored
+        # call after each successfully ended section, so just correct inputs will be stored
         if (Test-Path $iniFile -ErrorAction SilentlyContinue) {
             Remove-Item $iniFile -Force -Confirm:$false
         }
@@ -505,7 +528,6 @@ Tasks=desktopicon,addcontextmenufiles,addcontextmenufolders,addtopath
             # encode as base64
             $bytes = [System.Text.Encoding]::Unicode.GetBytes($command)
             $encodedString = [Convert]::ToBase64String($bytes)
-            #TODO idealne pomoci schtasks aby bylo univerzalnejsi
             $A = New-ScheduledTaskAction -Argument "-executionpolicy bypass -noprofile -encodedcommand $encodedString" -Execute "$PSHome\powershell.exe"
             if ($runAs -match "\$") {
                 # under gMSA account
@@ -514,7 +536,7 @@ Tasks=desktopicon,addcontextmenufiles,addcontextmenufolders,addtopath
                 # under system account
                 $P = New-ScheduledTaskPrincipal -UserId $runAs -LogonType ServiceAccount
             }
-            $S = New-ScheduledTaskSettingsSet
+            $S = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
             $taskName = "cred_export"
             try {
                 $null = New-ScheduledTask -Action $A -Principal $P -Settings $S -ErrorAction Stop | Register-ScheduledTask -Force -TaskName $taskName -ErrorAction Stop
@@ -569,31 +591,40 @@ Process {
 ####################################
 
 1) TEST installation
-    - PURPOSE: Fast and safe test of the features, this solution offers.
-        - Run this installer on a test computer (preferably VM [Windows Sandbox, Virtualbox, Hyper-V, etc.])
-        - No prerequisities needed like:
-            - Active Directory
-            - Cloud Repository
-    - GOAL: To have this as simple as possible - Installer automatically:
+    - PURPOSE:
+        - Choose this option, if you want to make fast and safe (completely local) test of the features, this solution offers.
+    - REQUIREMENTS:
+        - Local Admin rights
+        - (HIGHLY RECOMMENDED) Run this installer on (freshly installed) VM with internet connectivity. Like Windows Sandbox, VirtualBox, Hyper-V, etc.
+    - WHAT IT DOES:
+        To have this as simple as possible - Installer automatically:
         - Installs VSC, GIT.
-        - Creates GIT repository in $remoteRepository.
-            - and clone it to $userRepository.
-        - Creates folder $repositoryShareLocPath and shares it as $repositoryShare.
-        - Creates security group repo_reader, repo_writer.
+        - Creates GIT repository in "$remoteRepository".
+            - and clone it to "$env:SystemDrive\myCompanyRepository".
+        - Creates folder "$env:SystemDrive\repositoryShare" and shares it as "\\$env:COMPUTERNAME\repositoryShare".
+        - Creates local security groups repo_reader, repo_writer.
         - Creates required scheduled tasks.
         - Creates and sets global PowerShell profile.
         - Starts VSC editor with your new repository, so you can start your testing immediately. :)
 
-2) Standard installation (Active Directory needed)
+2) ACTIVE DIRECTORY installation
+    - PURPOSE:
+        - Choose this option, if you want to create fully featured CI/CD central GIT repository for your Active Directory environment.
+    - REQUIREMENTS:
+        - Active Directory
+            - Domain Admin rights
+            - Enabled PSRemoting
+        - Existing GIT Repository
+    - WHAT IT DOES:
     - This script will set up your own GIT repository and your environment by:
         - Creating repo_reader, repo_writer AD groups.
-        - Creates shared folder for serving repository data to clients.
+        - Creates shared folder for serving repository data to the clients.
         - Customizes generic data from repo_content_set_up folder to match your environment.
-        - Copies customized data to your repository.
+            - Copies customized data to your repository.
         - Sets up your repository:
             - Activate custom git hooks.
             - Set git user name and email.
-        - Commit & Push new content of your repository.
+        - Commit & Push new content to your repository.
         - Sets up MGM server:
             - Copies the Repo_sync folder.
             - Creates Repo_sync scheduled task.
@@ -603,19 +634,48 @@ Process {
             - NOTE: Linking GPO has to be done manually.
     - NOTE: Every step has to be explicitly confirmed.
 
-3) Update of existing installation
-    - NO MODIFICATION OF YOUR ENVIRONMENT WILL BE MADE.
-        - Just customization of generic data in repo_content_set_up folder to match your environment.
-            - Merging with your own repository etc has to be done manually.
+3) Personal installation
+    - PURPOSE:
+        - Choose this option, if you want to leverage benefits of CI/CD for your personal PowerShell content.
+        - TIP: Can also be used to share one GIT repository across multiple colleagues even without Active Directory.
+    - REQUIREMENTS:
+        - Local Admin rights
+        - Existing GIT repository
+    - WHAT IT DOES:
+        Installer automatically:
+        - Installs VSC, GIT (if necessary).
+        - Creates local security groups repo_reader, repo_writer.
+        - Let you decide what you want to synchronize from GIT:
+            - Global PowerShell profile
+            - Modules
+            - Custom section
+        - Creates required scheduled tasks.
+            - Repo_sync
+                - Pulls data from your GIT repository and process them
+            - PS_env_set_up
+                - Synchronizes client with already processed repository data
+        - Starts VSC editor with your new repository, so you can start your testing immediately. :)
 "@
+
+        # TODO
+        #     4) UPDATE of existing installation
+        # ! NO MODIFICATION OF YOUR ENVIRONMENT WILL BE MADE !
+
+        # - PURPOSE:
+        #     - Choose this option if you want to deploy new version of this solution.
+        #     - This option will just make customization of generic data in downloaded repo_content_set_up folder using data in your existing '$iniFile'.
+        #         - Merging with your own repository etc has to be done manually.
+
+        # - REQUIREMENTS:
+        #     - This solution is already deployed
 
         $choice = ""
         while ($choice -notmatch "^[1|2|3]$") {
             $choice = Read-Host "Choose install option (1|2|3)"
         }
-        if ($choice -eq 1) {
-            $testInstallation = 1
 
+        # run again with admin rights if necessary
+        if ($choice -in 1, 3) {
             if (!(_isAdministrator)) {
                 # not running "as Administrator" - so relaunch as administrator
 
@@ -628,10 +688,29 @@ Process {
                 exit
             }
         }
-        if ($choice -in 1, 2) {
-            $noEnvModification = $false
-        } else {
-            $noEnvModification = $true
+
+        switch ($choice) {
+            1 {
+                $testInstallation = 1
+                $noEnvModification = $false
+            }
+
+            2 {
+                $ADInstallation = 1
+                $noEnvModification = $false
+            }
+
+            3 {
+                $personalInstallation = 1
+                $noEnvModification = $false
+            }
+
+            4 {
+                $updateRootData = 1
+                $noEnvModification = $true
+            }
+
+            default { throw "Undefined choice" }
         }
     }
 
@@ -645,20 +724,23 @@ Process {
 
 - Create cloud or locally hosted GIT !private! repository (tested with Azure DevOps but probably will work also with GitHub etc).
    - Create READ only account in that repository (repo_puller).
-       - Create credentials for this account, that can be used in unnatended way (i.e. alternate credentials in Azure DevOps).
-   - Install the newest version of 'Git' and 'Git Credential Manager for Windows' and clone your repository locally.
-        - Using 'git clone' command under account, that has write permission to the repository i.e. yours.
+       - Create credentials for this account, that can be used in unattended way (i.e. alternate credentials in Azure DevOps).
+   - Clone this repository locally (git clone command).
 
    - NOTE:
-        - It is highly recommended to use 'Visual Studio Code (VSC)' editor to work with the repository content because it provides:
-            - Uunified admin experience through repository VSC workspace settings.
-            - Integration & control of GIT.
-            - Auto-Formatting of the code, etc..
         - More details can be found at https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20INSTALL.md
 "@
 
         _pressKeyToContinue
-    } elseif ($testInstallation) {
+    }
+
+    if (!$testInstallation) {
+        Clear-Host
+    } else {
+        ""
+    }
+
+    if ($personalInstallation -or $testInstallation) {
         "   - installing 'GIT'"
         _installGIT
 
@@ -677,14 +759,19 @@ Process {
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
         Install-Module -Name PackageManagement -Force -ErrorAction SilentlyContinue
 
-        "   - enabling running of PS scripts"
-        # because of PS global profile loading
-        Set-ExecutionPolicy Bypass -Force
+        if ((Get-ExecutionPolicy -Scope LocalMachine) -notmatch "Bypass|RemoteSigned") {
+            # because of PS Global Profile loading
+            "   - enabling running of PS scripts (because of PS Profile loading)"
+            Try {
+                Set-ExecutionPolicy RemoteSigned -Force -ErrorAction Stop
+            } Catch {
+                # this script being run with Bypass, so it is ok, that this command ends with error "Windows PowerShell updated your execution policy successfully, but the setting is overridden by a policy defined at a more specific scope"
+            }
+        }
     }
 
-    # TODO nekam napsat ze je potreba psremoting
-
     if (!$testInstallation) {
+        _pressKeyToContinue
         Clear-Host
     } else {
         ""
@@ -697,7 +784,7 @@ Process {
 So:
     - just approved users should have write access to GIT repository
     - for accessing cloud GIT repository, use MFA if possible
-    - MGM server (processes repository data and uploads them to share) has to be protected so as the server that hosts that repository share
+    $(if ($ADInstallation) {"- MGM server (processes repository data and uploads them to share) has to be protected so as the server that hosts that repository share"})
 ############################
 "@
 
@@ -725,7 +812,7 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
         #region import variables
         # import variables from ini file
         # '#' can be used for comments, so skip such lines
-        if (Test-Path $iniFile) {
+        if ((Test-Path $iniFile) -and !$testInstallation) {
             Write-Host "- Importing variables from $iniFile" -ForegroundColor Green
             Get-Content $iniFile -ErrorAction SilentlyContinue | ? { $_ -and $_ -notmatch "^\s*#" } | % {
                 $line = $_
@@ -749,110 +836,115 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
         }
 
         #region checks
-        Write-Host "- Checking permissions etc" -ForegroundColor Green
+        if (!$updateRootData) {
+            Write-Host "- Checking permissions etc" -ForegroundColor Green
 
-        # # computer isn't in domain
-        # if (!$noEnvModification -and !(Get-WmiObject -Class win32_computersystem).partOfDomain) {
-        #     Write-Warning "This PC isn't joined to domain. AD related steps will have to be done manually."
+            # # computer isn't in domain
+            # if (!$noEnvModification -and !(Get-WmiObject -Class win32_computersystem).partOfDomain) {
+            #     Write-Warning "This PC isn't joined to domain. AD related steps will have to be done manually."
 
-        #     ++$skipAD
+            #     ++$skipAD
 
-        #     _continue
-        # }
+            #     _continue
+            # }
 
-        # is local administrator
-        if (!(_isAdministrator)) {
-            Write-Warning "Not running as administrator. Symlink for using repository PowerShell snippets file in VSC won't be created"
-            ++$notAdmin
+            # is local administrator
+            if (!(_isAdministrator)) {
+                Write-Warning "Not running as administrator. Symlink for using repository PowerShell snippets file in VSC won't be created"
+                ++$notAdmin
 
-            _pressKeyToContinue
-        }
-
-        if (!$testInstallation) {
-            # is domain admin
-            if (!$noEnvModification -and !((& "$env:windir\system32\whoami.exe" /all) -match "Domain Admins|Enterprise Admins")) {
-                Write-Warning "You are not member of Domain nor Enterprise Admin group. AD related steps will have to be done manually."
-
-                ++$notADAdmin
-
-                _continue
+                _pressKeyToContinue
             }
 
-            # ActiveDirectory PS module is available
-            if (!$noEnvModification -and !(Get-Module ActiveDirectory -ListAvailable)) {
-                Write-Warning "ActiveDirectory PowerShell module isn't installed (part of RSAT)."
+            if ($ADInstallation) {
+                # is domain admin
+                if (!$noEnvModification -and !((& "$env:windir\system32\whoami.exe" /all) -match "Domain Admins|Enterprise Admins")) {
+                    Write-Warning "You are not member of Domain nor Enterprise Admin group. AD related steps will have to be done manually."
 
-                if (!$notAdmin -and ((_continue "Proceed with installation" -passthru) -eq "Y")) {
-                    if ($isServer) {
-                        $null = Install-WindowsFeature -Name RSAT-AD-PowerShell -IncludeManagementTools
-                    } else {
-                        try {
-                            $null = Get-WindowsCapability -Name "*activedirectory*" -Online -ErrorAction Stop | Add-WindowsCapability -Online -ErrorAction Stop
-                        } catch {
-                            Write-Warning "Unable to install RSAT AD tools.`nAD related steps will be skipped, so make them manually."
-                            ++$noADmodule
-                            _pressKeyToContinue
+                    ++$notADAdmin
+
+                    _continue
+                }
+
+                # ActiveDirectory PS module is available
+                if (!$noEnvModification -and !(Get-Module ActiveDirectory -ListAvailable)) {
+                    Write-Warning "ActiveDirectory PowerShell module isn't installed (part of RSAT)."
+
+                    if (!$notAdmin -and ((_continue "Proceed with installation" -passthru) -eq "Y")) {
+                        if ($isServer) {
+                            $null = Install-WindowsFeature -Name RSAT-AD-PowerShell -IncludeManagementTools
+                        } else {
+                            try {
+                                $null = Get-WindowsCapability -Name "*activedirectory*" -Online -ErrorAction Stop | Add-WindowsCapability -Online -ErrorAction Stop
+                            } catch {
+                                Write-Warning "Unable to install RSAT AD tools.`nAD related steps will be skipped, so make them manually."
+                                ++$noADmodule
+                                _pressKeyToContinue
+                            }
                         }
+                    } else {
+                        Write-Warning "AD related steps will be skipped, so make them manually."
+                        ++$noADmodule
+                        _pressKeyToContinue
                     }
-                } else {
-                    Write-Warning "AD related steps will be skipped, so make them manually."
-                    ++$noADmodule
-                    _pressKeyToContinue
+                }
+
+                # GroupPolicy PS module is available
+                if (!$noEnvModification -and !(Get-Module GroupPolicy -ListAvailable)) {
+                    Write-Warning "GroupPolicy PowerShell module isn't installed (part of RSAT)."
+
+                    if (!$notAdmin -and ((_continue "Proceed with installation" -passthru) -eq "Y")) {
+                        if ($isServer) {
+                            $null = Add-WindowsFeature -Name GPMC -IncludeManagementTools
+                        } else {
+                            try {
+                                $null = Get-WindowsCapability -Name "*grouppolicy*" -Online -ErrorAction Stop | Add-WindowsCapability -Online -ErrorAction Stop
+                            } catch {
+                                Write-Warning "Unable to install RSAT GroupPolicy tools.`nGPO related steps will be skipped, so make them manually."
+                                ++$noGPOmodule
+                                _pressKeyToContinue
+                            }
+                        }
+                    } else {
+                        Write-Warning "GPO related steps will be skipped, so make them manually."
+                        ++$noGPOmodule
+                        _pressKeyToContinue
+                    }
+                }
+
+                if ($notADAdmin -or $noADmodule) {
+                    ++$skipAD
+                }
+
+                if ($notADAdmin -or $noGPOmodule) {
+                    ++$skipGPO
                 }
             }
 
-            # GroupPolicy PS module is available
-            if (!$noEnvModification -and !(Get-Module GroupPolicy -ListAvailable)) {
-                Write-Warning "GroupPolicy PowerShell module isn't installed (part of RSAT)."
-
-                if (!$notAdmin -and ((_continue "Proceed with installation" -passthru) -eq "Y")) {
-                    if ($isServer) {
-                        $null = Add-WindowsFeature -Name GPMC -IncludeManagementTools
-                    } else {
-                        try {
-                            $null = Get-WindowsCapability -Name "*grouppolicy*" -Online -ErrorAction Stop | Add-WindowsCapability -Online -ErrorAction Stop
-                        } catch {
-                            Write-Warning "Unable to install RSAT GroupPolicy tools.`nGPO related steps will be skipped, so make them manually."
-                            ++$noGPOmodule
-                            _pressKeyToContinue
-                        }
-                    }
-                } else {
-                    Write-Warning "GPO related steps will be skipped, so make them manually."
-                    ++$noGPOmodule
-                    _pressKeyToContinue
-                }
+            if (!$testInstallation) {
+                _pressKeyToContinue
+                Clear-Host
             }
-
-            if ($notADAdmin -or $noADmodule) {
-                ++$skipAD
-            }
-
-            if ($notADAdmin -or $noGPOmodule) {
-                ++$skipGPO
-            }
-        }
-
-        if (!$testInstallation) {
-            _pressKeyToContinue
-            Clear-Host
         }
         #endregion checks
 
-
-        if (!$testInstallation) {
-            _SetVariable MGMServer "the name of the MGM server (will be used for pulling, processing and distributing of repository data to repository share)."
+        if ($ADInstallation -or $updateRootData) {
+            _setVariable MGMServer "the name of the MGM server (will be used for pulling, processing and distributing of repository data to repository share)."
             if ($MGMServer -like "*.*") {
                 $MGMServer = ($MGMServer -split "\.")[0]
                 Write-Warning "$MGMServer was in FQDN format. Just hostname was used"
             }
-            if (!$noADmodule -and !(Get-ADComputer -Filter "name -eq '$MGMServer'")) {
+            if ($ADInstallation -and !$noADmodule -and !(Get-ADComputer -Filter "name -eq '$MGMServer'")) {
                 throw "$MGMServer doesn't exist in AD"
             }
         } else {
-            # test installation
-            $MGMServer = $env:COMPUTERNAME
-            "   - For testing purposes, this computer will host MGM server role too"
+            if ($testInstallation) {
+                "   - For testing purposes, this computer will host MGM server role too"
+            } elseif ($personalInstallation) {
+                "   - For local installation, this computer will host MGM server role too"
+            }
+
+            _setVariableValue -variable MGMServer -value $env:COMPUTERNAME
         }
 
         if (!$testInstallation) {
@@ -863,7 +955,7 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
         }
 
         #region create repo_reader, repo_writer
-        if (!$testInstallation) {
+        if ($ADInstallation) {
             Write-Host "- Creating repo_reader, repo_writer AD security groups" -ForegroundColor Green
 
             if (!$noEnvModification -and !$skipAD -and !(_skip)) {
@@ -883,7 +975,7 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
             } else {
                 Write-Warning "Skipped!`n`nCreate them manually"
             }
-        } else {
+        } elseif ($personalInstallation -or $testInstallation) {
             Write-Host "- Creating repo_reader, repo_writer security groups" -ForegroundColor Green
 
             'repo_reader', 'repo_writer' | % {
@@ -895,7 +987,8 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
                     } else {
                         $right = "modify"
                     }
-                    $null = New-LocalGroup -Name $_ -Description "Members have $right right to repository share." # max 48 chars!
+
+                    $null = New-LocalGroup -Name $_ -Description "Members have $right right to repository data." # max 48 chars!
                 }
             }
         }
@@ -909,7 +1002,7 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
         }
 
         #region adding members to repo_reader, repo_writer
-        if (!$testInstallation) {
+        if ($ADInstallation) {
             Write-Host "- Adding members to repo_reader, repo_writer AD groups" -ForegroundColor Green
             "   - add 'Domain Computers' to repo_reader group"
             "   - add 'Domain Admins' and $MGMServer to repo_writer group"
@@ -925,7 +1018,7 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
 
             ""
             Write-Warning "RESTART $MGMServer (and rest of the computers) to apply new membership NOW!"
-        } else {
+        } elseif ($personalInstallation -or $testInstallation) {
             Write-Host "- Adding members to repo_reader, repo_writer groups" -ForegroundColor Green
             # "   - adding SYSTEM to repo_reader group"
             # Add-LocalGroupMember -Name 'repo_reader' -Member "SYSTEM"
@@ -947,161 +1040,171 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
         }
 
         #region set up shared folder for repository data
-        Write-Host "- Creating shared folder for hosting repository data" -ForegroundColor Green
-        if (!$testInstallation) {
-            _SetVariable repositoryShare "UNC path to folder, where the repository data should be stored (i.e. \\mydomain\dfs\repository)"
+        if ($personalInstallation) {
+            # for personal installation, no share is created, because there are no other clients to synchronize such data
+            #TODO zrejme zbytecna duplicita, ale to bych musel ohackovat repo_sync.ps1 aby v podstate jen nageneroval moduly a done a taky ps_env_set_up
+            $repositoryShare = "$env:windir\Scripts\Repo_sync\Log\PS_repo_Processed"
         } else {
-            "   - For testing purposes $repositoryShare will be used"
-        }
-        if ($repositoryShare -notmatch "^\\\\[^\\]+\\[^\\]+") {
-            throw "$repositoryShare isn't valid UNC path"
-        }
-
-        $permissions = "`n`t`t- SHARE`n`t`t`t- Everyone - FULL CONTROL`n`t`t- NTFS`n`t`t`t- SYSTEM, repo_writer - FULL CONTROL`n`t`t`t- repo_reader - READ"
-
-        if ($testInstallation -or (!$noEnvModification -and !(_skip))) {
-            "   - Testing, whether '$repositoryShare' already exists"
-            try {
-                $repositoryShareExists = Test-Path $repositoryShare
-            } catch {
-                # in case this script already created that share but this user isn't yet in repo_writer, he will receive access denied error when accessing it
-                if ($_ -match "access denied") {
-                    ++$accessDenied
-                }
+            Write-Host "- Creating shared folder for hosting repository data" -ForegroundColor Green
+            if ($ADInstallation -or $updateRootData) {
+                _setVariable repositoryShare "UNC path to folder, where the repository data should be stored (i.e. \\mydomain\dfs\repository)"
+            } elseif ($testInstallation) {
+                $repositoryShare = "\\$env:COMPUTERNAME\repositoryShare"
+                "   - For testing purposes $repositoryShare will be used"
             }
-            if ($repositoryShareExists -or $accessDenied) {
-                if (!$testInstallation) {
-                    Write-Warning "Share '$repositoryShare' already exists.`n`tMake sure, that ONLY following permissions are set:$permissions`n`nNOTE: it's content will be replaced by repository data eventually!"
-                }
-            } else {
-                # share or some part of its path doesn't exist
-                $isDFS = ""
-                if (!$testInstallation) {
-                    # for testing installation I will use common UNC share
-                    while ($isDFS -notmatch "^[Y|N]$") {
-                        ""
-                        $isDFS = Read-Host "   - Is '$repositoryShare' DFS share? (Y|N)"
+            if ($repositoryShare -notmatch "^\\\\[^\\]+\\[^\\]+") {
+                throw "$repositoryShare isn't valid UNC path"
+            }
+
+            $permissions = "`n`t`t- SHARE`n`t`t`t- Everyone - FULL CONTROL`n`t`t- NTFS`n`t`t`t- SYSTEM, repo_writer - FULL CONTROL`n`t`t`t- repo_reader - READ"
+            if ($testInstallation -or $ADInstallation -or (!$noEnvModification -and !(_skip))) {
+                "   - Testing, whether '$repositoryShare' already exists"
+                try {
+                    $repositoryShareExists = Test-Path $repositoryShare
+                } catch {
+                    # in case this script already created that share but this user isn't yet in repo_writer, he will receive access denied error when accessing it
+                    if ($_ -match "access denied") {
+                        ++$accessDenied
                     }
                 }
-                if ($isDFS -eq "Y") {
-                    #TODO pridat podporu pro tvorbu DFS share
-                    Write-Warning "Skipped! Currently this installer doesn't support creation of DFS share.`nMake share manually with ONLY following permissions:$permissions"
-                } else {
-                    # creation of non-DFS shared folder
-                    $repositoryHost = ($repositoryShare -split "\\")[2]
-                    if (!$testInstallation -and !$noADmodule -and !(Get-ADComputer -Filter "name -eq '$repositoryHost'")) {
-                        throw "$repositoryHost doesn't exist in AD"
-                    }
-
-                    $parentPath = "\\" + [string]::join("\", $repositoryShare.Split("\")[2..3])
-
-                    if (($parentPath -eq $repositoryShare) -or ($parentPath -ne $repositoryShare -and !(Test-Path $parentPath -ErrorAction SilentlyContinue))) {
-                        # shared folder doesn't exist, can't deduce local path from it, so get it from the user
-                        ""
-                        if (!$testInstallation) {
-                            _SetVariable repositoryShareLocPath "local path to folder, which will be than shared as '$parentPath' (on $repositoryHost)"
-                        } else {
-                            "   - For testing purposes, repository share will be stored locally in '$repositoryShareLocPath'"
-                        }
-                    } else {
-                        ""
-                        "   - Share $parentPath already exists. Folder for repository data will be created (if necessary) and JUST NTFS permissions will be set."
-                        Write-Warning "So make sure, that SHARE permissions are set to: Everyone - FULL CONTROL!"
-
-                        _pressKeyToContinue
-                    }
-
-                    $invokeParam = @{}
+                if ($repositoryShareExists -or $accessDenied) {
                     if (!$testInstallation) {
-                        if ($notADAdmin) {
-                            while (!$repositoryHostSession) {
-                                $repositoryHostSession = New-PSSession -ComputerName $repositoryHost -Credential (Get-Credential -Message "Enter admin credentials for connecting to $repositoryHost through psremoting") -ErrorAction SilentlyContinue
+                        Write-Warning "Share '$repositoryShare' already exists.`n`tMake sure, that ONLY following permissions are set:$permissions`n`nNOTE: it's content will be replaced by repository data eventually!"
+                    }
+                } else {
+                    # share or some part of its path doesn't exist
+                    $isDFS = ""
+                    if (!$testInstallation) {
+                        # for testing installation I will use common UNC share
+                        while ($isDFS -notmatch "^[Y|N]$") {
+                            ""
+                            $isDFS = Read-Host "   - Is '$repositoryShare' DFS share? (Y|N)"
+                        }
+                    }
+                    if ($isDFS -eq "Y") {
+                        #TODO pridat podporu pro tvorbu DFS share
+                        Write-Warning "Skipped! Currently this installer doesn't support creation of DFS share.`nMake share manually with ONLY following permissions:$permissions"
+                    } else {
+                        # creation of non-DFS shared folder
+                        $repositoryHost = ($repositoryShare -split "\\")[2]
+                        if (!$testInstallation -and !$noADmodule -and !(Get-ADComputer -Filter "name -eq '$repositoryHost'")) {
+                            throw "$repositoryHost doesn't exist in AD"
+                        }
+
+                        $parentPath = "\\" + [string]::join("\", $repositoryShare.Split("\")[2..3])
+
+                        if (($parentPath -eq $repositoryShare) -or ($parentPath -ne $repositoryShare -and !(Test-Path $parentPath -ErrorAction SilentlyContinue))) {
+                            # shared folder doesn't exist, can't deduce local path from it, so get it from the user
+                            ""
+                            if (!$testInstallation) {
+                                _setVariable repositoryShareLocPath "local path to folder, which will be than shared as '$parentPath' (on $repositoryHost)"
+                            } else {
+                                $repositoryShareLocPath = "$env:SystemDrive\repositoryShare"
+                                "   - For testing purposes, repository share will be stored locally in '$repositoryShareLocPath'"
                             }
                         } else {
-                            $repositoryHostSession = New-PSSession -ComputerName $repositoryHost
-                        }
-                        $invokeParam.Session = $repositoryHostSession
-                    } else {
-                        # testing installation i.e. locally
-                    }
+                            ""
+                            "   - Share $parentPath already exists. Folder for repository data will be created (if necessary) and JUST NTFS permissions will be set."
+                            Write-Warning "So make sure, that SHARE permissions are set to: Everyone - FULL CONTROL!"
 
-                    $invokeParam.argumentList = $repositoryShareLocPath, $repositoryShare, $allFunctionDefs
-                    $invokeParam.ScriptBlock = {
-                        param ($repositoryShareLocPath, $repositoryShare, $allFunctionDefs)
-
-                        # recreate function from it's definition
-                        foreach ($functionDef in $allFunctionDefs) {
-                            . ([ScriptBlock]::Create($functionDef))
+                            _pressKeyToContinue
                         }
 
-                        $shareName = ($repositoryShare -split "\\")[3]
-
-                        if ($repositoryShareLocPath) {
-                            # share doesn't exist yet
-                            # create folder (and subfolders) and share it
-                            if (Test-Path $repositoryShareLocPath) {
-                                Write-Warning "$repositoryShareLocPath already exists on $env:COMPUTERNAME!"
-                                _continue "Content will be eventually overwritten"
+                        $invokeParam = @{}
+                        if (!$testInstallation) {
+                            if ($notADAdmin) {
+                                while (!$repositoryHostSession) {
+                                    $repositoryHostSession = New-PSSession -ComputerName $repositoryHost -Credential (Get-Credential -Message "Enter admin credentials for connecting to $repositoryHost through psremoting") -ErrorAction SilentlyContinue
+                                }
                             } else {
-                                [Void][System.IO.Directory]::CreateDirectory($repositoryShareLocPath)
+                                $repositoryHostSession = New-PSSession -ComputerName $repositoryHost
+                            }
+                            $invokeParam.Session = $repositoryHostSession
+                        } else {
+                            # testing installation i.e. locally
+                        }
+
+                        $invokeParam.argumentList = $repositoryShareLocPath, $repositoryShare, $allFunctionDefs
+                        $invokeParam.ScriptBlock = {
+                            param ($repositoryShareLocPath, $repositoryShare, $allFunctionDefs)
+
+                            # recreate function from it's definition
+                            foreach ($functionDef in $allFunctionDefs) {
+                                . ([ScriptBlock]::Create($functionDef))
+                            }
+
+                            $shareName = ($repositoryShare -split "\\")[3]
+
+                            if ($repositoryShareLocPath) {
+                                # share doesn't exist yet
+                                # create folder (and subfolders) and share it
+                                if (Test-Path $repositoryShareLocPath) {
+                                    Write-Warning "$repositoryShareLocPath already exists on $env:COMPUTERNAME!"
+                                    _continue "Content will be eventually overwritten"
+                                } else {
+                                    [Void][System.IO.Directory]::CreateDirectory($repositoryShareLocPath)
+
+                                    # create subfolder structure if UNC path contains them as well
+                                    $subfolder = [string]::join("\", $repositoryShare.split("\")[4..1000])
+                                    $subfolder = Join-Path $repositoryShareLocPath $subfolder
+                                    [Void][System.IO.Directory]::CreateDirectory($subfolder)
+
+                                    # share the folder
+                                    "       - share $repositoryShareLocPath as $shareName"
+                                    $null = Remove-SmbShare -Name $shareName -Force -Confirm:$false -ErrorAction SilentlyContinue
+                                    $null = New-SmbShare -Name $shareName -Path $repositoryShareLocPath -FullAccess Everyone
+
+                                    # set NTFS permission
+                                    "       - setting NTFS permissions on $repositoryShareLocPath"
+                                    _setPermissions -path $repositoryShareLocPath -writeUser SYSTEM, repo_writer -readUser repo_reader
+                                }
+                            } else {
+                                # share already exists
+                                # create folder for storing repository, set NTFS permissions and check SHARE permissions
+                                $share = Get-SmbShare $shareName
+                                $repositoryShareLocPath = $share.path
 
                                 # create subfolder structure if UNC path contains them as well
                                 $subfolder = [string]::join("\", $repositoryShare.split("\")[4..1000])
                                 $subfolder = Join-Path $repositoryShareLocPath $subfolder
                                 [Void][System.IO.Directory]::CreateDirectory($subfolder)
 
-                                # share the folder
-                                "       - share $repositoryShareLocPath as $shareName"
-                                $null = Remove-SmbShare -Name $shareName -Force -Confirm:$false -ErrorAction SilentlyContinue
-                                $null = New-SmbShare -Name $shareName -Path $repositoryShareLocPath -FullAccess Everyone
-
                                 # set NTFS permission
-                                "       - setting NTFS permissions on $repositoryShareLocPath"
+                                "`n   - setting NTFS permissions on $repositoryShareLocPath"
                                 _setPermissions -path $repositoryShareLocPath -writeUser SYSTEM, repo_writer -readUser repo_reader
-                            }
-                        } else {
-                            # share already exists
-                            # create folder for storing repository, set NTFS permissions and check SHARE permissions
-                            $share = Get-SmbShare $shareName
-                            $repositoryShareLocPath = $share.path
 
-                            # create subfolder structure if UNC path contains them as well
-                            $subfolder = [string]::join("\", $repositoryShare.split("\")[4..1000])
-                            $subfolder = Join-Path $repositoryShareLocPath $subfolder
-                            [Void][System.IO.Directory]::CreateDirectory($subfolder)
+                                # check/set SHARE permission
+                                $sharePermission = Get-SmbShareAccess $shareName
+                                if (!($sharePermission | ? { $_.accountName -eq "Everyone" -and $_.AccessControlType -eq "Allow" -and $_.AccessRight -eq "Full" })) {
+                                    "      - share $shareName doesn't contain valid SHARE permissions, EVERYONE should have FULL CONTROL access (access to repository data is driven by NTFS permissions)."
 
-                            # set NTFS permission
-                            "`n   - setting NTFS permissions on $repositoryShareLocPath"
-                            _setPermissions -path $repositoryShareLocPath -writeUser SYSTEM, repo_writer -readUser repo_reader
+                                    _pressKeyToContinue "Current share $repositoryShare will be un-shared and re-shared with correct SHARE permissions"
 
-                            # check/set SHARE permission
-                            $sharePermission = Get-SmbShareAccess $shareName
-                            if (!($sharePermission | ? { $_.accountName -eq "Everyone" -and $_.AccessControlType -eq "Allow" -and $_.AccessRight -eq "Full" })) {
-                                "      - share $shareName doesn't contain valid SHARE permissions, EVERYONE should have FULL CONTROL access (access to repository data is driven by NTFS permissions)."
-
-                                _pressKeyToContinue "Current share $repositoryShare will be un-shared and re-shared with correct SHARE permissions"
-
-                                Remove-SmbShare -Name $shareName -Force -Confirm:$false
-                                New-SmbShare -Name $shareName -Path $repositoryShareLocPath -FullAccess EVERYONE
-                            } else {
-                                "      - share $shareName already has correct SHARE permission, no action needed"
+                                    Remove-SmbShare -Name $shareName -Force -Confirm:$false
+                                    New-SmbShare -Name $shareName -Path $repositoryShareLocPath -FullAccess EVERYONE
+                                } else {
+                                    "      - share $shareName already has correct SHARE permission, no action needed"
+                                }
                             }
                         }
-                    }
 
-                    Invoke-Command @invokeParam
+                        Invoke-Command @invokeParam
 
-                    if ($repositoryHostSession) {
-                        Remove-PSSession $repositoryHostSession -ErrorAction SilentlyContinue
+                        if ($repositoryHostSession) {
+                            Remove-PSSession $repositoryHostSession -ErrorAction SilentlyContinue
+                        }
                     }
                 }
+            } else {
+                Write-Warning "Skipped!`n`n - Create shared folder '$repositoryShare' manually and set there following permissions:$permissions"
             }
-        } else {
-            Write-Warning "Skipped!`n`n - Create shared folder '$repositoryShare' manually and set there following permissions:$permissions"
         }
         #endregion set up shared folder for repository data
 
-        if (!$testInstallation) {
+        if ($personalInstallation) {
+            _saveInput
+            Clear-Host
+        } elseif (!$testInstallation) {
             _saveInput
             _pressKeyToContinue
             Clear-Host
@@ -1109,10 +1212,10 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
             ""
         }
 
-        #region customize cloned data
+        #region customize generalized cloned data
         $repo_content_set_up = Join-Path $PSScriptRoot "repo_content_set_up"
         $_other = Join-Path $PSScriptRoot "_other"
-        Write-Host "- Customizing generic data to match your environment by replacing '__REPLACEME__<number>' in content of '$repo_content_set_up' and '$_other'" -ForegroundColor Green
+        Write-Host "- Customizing generic data to match your environment by replacing '__REPLACEME__<number>'" -ForegroundColor Green
         if (!(Test-Path $repo_content_set_up -ErrorAction SilentlyContinue)) {
             throw "Unable to find '$repo_content_set_up'. Clone repository https://github.com/ztrhgf/Powershell_CICD_repository again"
         }
@@ -1120,9 +1223,36 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
             throw "Unable to find '$_other'. Clone repository https://github.com/ztrhgf/Powershell_CICD_repository again"
         }
 
-        if (!$testInstallation) {
+        #region create copy of generalized data
+        "       - create copy of the folders with generalized data`n"
+
+        $date = Get-Date -Format ddMMHHmmss
+
+        # create copy of the repo_content_set_up folder
+        $repo_content_set_up_Customized = "$repo_content_set_up`_$date"
+        $result = _copyFolder $repo_content_set_up $repo_content_set_up_Customized
+        if ($err = $result.errMsg) {
+            throw "Copy failed:`n$err"
+        }
+        # customize copy instead of original
+        "           - '$repo_content_set_up_Customized' will be used instead of '$repo_content_set_up'`n"
+        $repo_content_set_up = $repo_content_set_up_Customized
+
+        # create copy of the _other folder
+        $_other_Customized = "$_other`_$date"
+        $result = _copyFolder $_other $_other_Customized
+        if ($err = $result.errMsg) {
+            throw "Copy failed:`n$err"
+        }
+        "           - '$_other_Customized' will be used instead of '$_other'`n"
+        $_other = $_other_Customized
+        # customize copy instead of original
+        #endregion create copy of generalized data
+
+        if ($ADInstallation) {
             Write-Host "`n   - Gathering values for replacing __REPLACEME__<number> string:" -ForegroundColor DarkGreen
             "       - in case, you will need to update some of these values in future, clone again this repository, edit content of $iniFile and run this wizard again`n"
+
             $replacemeVariable = @{
                 1 = $repositoryShare
                 2 = _setVariable repositoryURL "Cloning URL of your own GIT repository. Will be used on MGM server" -passThru
@@ -1132,7 +1262,23 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
                 6 = _setVariable adminEmail "recipient(s) email address (divided by comma), that should receive error notifications. Use format it@contoso.com" -optional -passThru
                 7 = _setVariable 'from' "sender email address, that should be used for sending error notifications. Use format robot@contoso.com" -optional -passThru
             }
-        } else {
+        } elseif ($personalInstallation) {
+            Write-Host "`n   - Gathering values for replacing __REPLACEME__<number> string:" -ForegroundColor DarkGreen
+            "       - in case, you will need to update some of these values in future, clone again this repository, edit content of $iniFile and run this wizard again`n"
+
+            $replacemeVariable = @{
+                1 = $repositoryShare
+                2 = _setVariable repositoryURL "Cloning URL of your own GIT repository." -passThru
+                3 = $MGMServer
+                4 = "####" # will be replaced with real computer name, if user decides to have synchronized PS profile
+            }
+
+            _setVariable syncPSProfile "Do you want to synchronize Global PowerShell Profile (shows number of commits this console is behind in Title etc) and adminFunctions module (contains Refresh-Console function etc) to this computer?" -YNQuestion
+
+            if ($syncPSProfile -eq "Y") {
+                $replacemeVariable.4 = $env:COMPUTERNAME
+            }
+        } elseif ($testInstallation) {
             # there will be created GIT repository for test installation
 
             $repositoryURL = $remoteRepository
@@ -1145,10 +1291,12 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
                 3 = $MGMServer
                 4 = $computerWithProfile
             }
+        } elseif ($updateRootData) {
+            #TODO problem je ze to zalezi na typu instalace..
         }
 
         # replace __REPLACEME__<number> for entered values in cloned files
-        $replacemeVariable.GetEnumerator() | % {
+        $replacemeVariable.GetEnumerator() | Sort-Object | % {
             # in files, __REPLACEME__<number> format is used where user input should be placed
             $name = "__REPLACEME__" + $_.name
             $value = $_.value
@@ -1183,7 +1331,7 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
 
             #TODO zkontrolovat/upozornit na soubory kde jsou replaceme (exclude takovych kde nezadal uzivatel zadnou hodnotu)
         }
-        #endregion customize cloned data
+        #endregion customize generalized cloned data
 
         if (!$testInstallation) {
             _saveInput
@@ -1211,10 +1359,16 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
             ""
         }
 
-        #region copy customized repository data to user own repository
+        #region copy customized repository data to the users own repository
         if (!$testInstallation) {
-            _SetVariable userRepository "path to ROOT of your locally cloned company repository '$repositoryURL'"
+            _setVariable userRepository "path to ROOT of your locally cloned repository '$repositoryURL'"
+
+            if (!(Test-Path (Join-Path $userRepository ".git") -ErrorAction SilentlyContinue)) {
+                throw "$userRepository isn't cloned GIT repository (.git folder is missing)"
+            }
         } else {
+            $userRepository = "$env:SystemDrive\myCompanyRepository"
+
             Write-Host " - Creating new GIT repository '$remoteRepository'. It will be used instead of your own cloud repository like GitHub or Azure DevOps. DON'T MAKE ANY CHANGES HERE." -ForegroundColor Green
             [Void][System.IO.Directory]::CreateDirectory($remoteRepository)
             Set-Location $remoteRepository
@@ -1229,20 +1383,18 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
             $result = _startProcess git "clone --local $remoteRepository $(Split-Path $userRepository -Leaf)" -outputErr2Std
         }
 
-        if ($testInstallation -or (!$noEnvModification -and !(_skip))) {
-            if (!(Test-Path (Join-Path $userRepository ".git") -ErrorAction SilentlyContinue)) {
-                throw "$userRepository isn't cloned GIT repository (.git folder is missing)"
-            }
+        Write-Host "- Copying customized repository data ($repo_content_set_up) to your own repository ($userRepository)" -ForegroundColor Green
 
-            Write-Host "- Copying customized repository data ($repo_content_set_up) to your own company repository ($userRepository)" -ForegroundColor Green
+        if ($testInstallation -or (!$noEnvModification -and !(_skip))) {
+
             $result = _copyFolder $repo_content_set_up $userRepository
             if ($err = $result.errMsg) {
                 throw "Copy failed:`n$err"
             }
         } else {
-            Write-Warning "Skipped!`n`n - Copy CONTENT of $repo_content_set_up to ROOT of your locally cloned company repository. Review the changes to prevent loss of any of your customization (preferably merge content of customConfig.ps1 and Variables.psm1 instead of replacing them completely) and COMMIT them"
+            Write-Warning "Skipped!`n`n - Copy CONTENT of $repo_content_set_up to ROOT of your locally cloned repository. Review the changes to prevent loss of any of your customization (preferably merge content of customConfig.ps1 and Variables.psm1 instead of replacing them completely) and COMMIT them"
         }
-        #endregion copy customized repository data to user own repository
+        #endregion copy customized repository data to the users own repository
 
         if (!$testInstallation) {
             _pressKeyToContinue
@@ -1259,6 +1411,7 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
             $userDomain = "$env:COMPUTERNAME.com"
         }
         Write-Host "- Configuring repository '$userRepository'" -ForegroundColor Green
+        "   - activating GIT Hooks, creating symlink for PowerShell snippets, commiting&pushing changes, etc"
 
         if ($testInstallation -or (!$noEnvModification -and !(_skip))) {
             $currPath = Get-Location
@@ -1315,7 +1468,11 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
         }
 
         #region preparation of MGM server
-        $MGMRepoSync = "\\$MGMServer\C$\Windows\Scripts\Repo_sync"
+        if ($personalInstallation -or $testInstallation) {
+            $MGMRepoSync = "$env:windir\Scripts\Repo_sync"
+        } else {
+            $MGMRepoSync = "\\$MGMServer\C$\Windows\Scripts\Repo_sync"
+        }
         $userRepoSync = Join-Path $userRepository "custom\Repo_sync"
         Write-Host "- Setting MGM server ($MGMServer)" -ForegroundColor Green
         if (!$testInstallation) {
@@ -1331,8 +1488,9 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
         }
 
         if ($testInstallation -or (!$noEnvModification -and !(_skip))) {
+            #region copy Repo_sync folder to MGM server
             "   - copying Repo_sync folder to '$MGMRepoSync'"
-            if (!$testInstallation) {
+            if ($ADInstallation) {
                 if ($notADAdmin) {
                     while (!$MGMServerSession) {
                         $MGMServerSession = New-PSSession -ComputerName $MGMServer -Credential (Get-Credential -Message "Enter admin credentials for connecting to $MGMServer through psremoting") -ErrorAction SilentlyContinue
@@ -1360,23 +1518,24 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
                         throw "Copy failed:`n$err"
                     }
                 }
-            } else {
+            } elseif ($personalInstallation -or $testInstallation) {
                 # local copy
-                $destination = "C:\Windows\Scripts\Repo_sync"
-                $result = _copyFolder $userRepoSync $destination
+                $result = _copyFolder $userRepoSync $MGMRepoSync
                 if ($err = $result.errMsg) {
                     throw "Copy failed:`n$err"
                 }
             }
+            #endregion copy Repo_sync folder to MGM server
 
+            #region configure MGM server
             $invokeParam = @{
-                ArgumentList = $repositoryShare, $allFunctionDefs, $testInstallation
+                ArgumentList = $repositoryShare, $allFunctionDefs, $testInstallation, $personalInstallation, $ADInstallation
             }
             if ($MGMServerSession) {
                 $invokeParam.session = $MGMServerSession
             }
             $invokeParam.ScriptBlock = {
-                param ($repositoryShare, $allFunctionDefs, $testInstallation)
+                param ($repositoryShare, $allFunctionDefs, $testInstallation, $personalInstallation, $ADInstallation)
 
                 # recreate function from it's definition
                 foreach ($functionDef in $allFunctionDefs) {
@@ -1386,7 +1545,7 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
                 $MGMRepoSync = "C:\Windows\Scripts\Repo_sync"
                 $taskName = 'Repo_sync'
 
-                if (!$testInstallation) {
+                if ($ADInstallation) {
                     "   - checking that $env:COMPUTERNAME is in AD group repo_writer"
                     if (!(_getComputerMembership -match "repo_writer")) {
                         throw "Check failed. Make sure, that $env:COMPUTERNAME is in repo_writer group and restart it to apply new membership. Than run this script again"
@@ -1401,9 +1560,10 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
 
                 $Repo_syncXML = "$MGMRepoSync\Repo_sync.xml"
                 "   - creating scheduled task '$taskName' from $Repo_syncXML"
-                _createSchedTask $Repo_syncXML $taskName
 
-                if (!$testInstallation) {
+                _createSchedTask -xmlDefinition $Repo_syncXML -taskName $taskName
+
+                if ($ADInstallation -or $personalInstallation) {
                     "   - exporting repo_puller account alternate credentials to '$MGMRepoSync\login.xml' (only SYSTEM account on $env:COMPUTERNAME will be able to read them!)"
                     _exportCred -credential (Get-Credential -Message 'Enter credentials (that can be used in unattended way) for GIT "repo_puller" account, you created earlier') -runAs "NT AUTHORITY\SYSTEM" -xmlPath "$MGMRepoSync\login.xml"
                 }
@@ -1422,10 +1582,16 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
             }
 
             Invoke-Command @invokeParam
+            #endregion configure MGM server
 
+            #region copy exported GIT credentials from MGM server to cloned GIT repo & commit them
             if (!$testInstallation) {
                 "   - copying exported credentials from $MGMServer to $userRepoSync"
-                if ($notADAdmin) {
+                if ($personalInstallation) {
+                    # copy locally
+                    Copy-Item "$MGMRepoSync\login.xml" "$userRepoSync\login.xml" -Force
+                } elseif ($ADInstallation -and $notADAdmin) {
+                    # copy using previously created PSSession
                     Copy-Item -FromSession $MGMServerSession "C:\Windows\Scripts\Repo_sync\login.xml" -Destination "$userRepoSync\login.xml" -Force
                 } else {
                     # copy using admin share
@@ -1445,6 +1611,7 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
                 # git push # push should be done automatically thanks to git hooks
                 Set-Location $currPath
             }
+            #endregion copy exported GIT credentials from MGM server to cloned GIT repo & commit them
         } else {
             Write-Warning "Skipped!`n`nFollow instruction in configuring MGM server section https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20INSTALL.md#on-server-which-will-be-used-for-cloning-and-processing-cloud-repository-data-and-copying-result-to-dfs-ie-mgm-server"
         }
@@ -1457,8 +1624,8 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
             ""
         }
 
-        #region create GPO (PS_env_set_up scheduled task)
-        if (!$testInstallation) {
+        #region create GPO that creates PS_env_set_up scheduled task or just the sched. task
+        if ($ADInstallation) {
             $GPObackup = Join-Path $_other "PS_env_set_up GPO"
             Write-Host "- Creating GPO $GPOname for creating sched. task, that will synchronize repository data from share to clients" -ForegroundColor Green
             if (!$noEnvModification -and !$skipGPO -and !(_skip)) {
@@ -1478,10 +1645,98 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
             } else {
                 Write-Warning "Skipped!`n`nCreate GPO by following https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20INSTALL.md#in-active-directory-1 or using 'Import settings...' wizard in GPMC. GPO backup is stored in '$GPObackup'"
             }
-        } else {
-            # testing installation i.e. sched. task has to be created manually (instead of GPO)
-            Write-Host "- Creating PS_env_set_up scheduled task, that will synchronize repository data from share to this client" -ForegroundColor Green
+        } elseif ($personalInstallation -or $testInstallation) {
+            # sched. task has to be created manually (instead of GPO)
+            $taskName = "PS_env_set_up"
 
+            Write-Host "- Creating $taskName scheduled task, that will synchronize repository data from $repositoryShare to this client" -ForegroundColor Green
+
+            #region PS_env_set_up scheduled task properties preparation
+            #region customize parameters of PS_env_set_up.ps1 script that is being run in PS_env_set_up scheduled task
+            if ($personalInstallation) {
+                "1 - All"
+                "2 - PowerShell modules"
+                "3 - Custom content"
+                ""
+
+                $whatToSync = ""
+                while (!($whatToSync -match "^(1|2|3)$")) {
+                    [string[]] $whatToSync = Read-Host "Choose what do you want to have synchronyzing from your GIT repository to this computer"
+                }
+
+                if ($whatToSync -ne 1) {
+                    # not all data from repository will be synchronized
+
+                    "   - you have chosen to synchronize just subset of repository data"
+
+                    $PS_env_set_up_Param = " -synchronize "
+                    $PS_env_set_up_ParamArg = ""
+
+                    if ($syncPSProfile -eq "Y") {
+                        # 4 stands for synchronyzing PS Profile
+                        $whatToSync = @($whatToSync) + 4
+                    }
+
+                    switch ($whatToSync) {
+                        2 {
+                            if ($PS_env_set_up_ParamArg) {
+                                $PS_env_set_up_ParamArg += ", "
+                            }
+                            $PS_env_set_up_ParamArg += "module"
+                        }
+
+                        3 {
+                            if ($PS_env_set_up_ParamArg) {
+                                $PS_env_set_up_ParamArg += ", "
+                            }
+                            $PS_env_set_up_ParamArg += "custom"
+                        }
+
+                        4 {
+                            if ($PS_env_set_up_ParamArg) {
+                                $PS_env_set_up_ParamArg += ", "
+                            }
+                            $PS_env_set_up_ParamArg += "profile"
+                        }
+
+                        default {
+                            throw "Undefined synchronize option"
+                        }
+                    }
+
+                    if ($PS_env_set_up_Param) {
+                        # Repo_sync from Custom section has to be synchronized in any way, because this computer is also MGM server
+                        if ($whatToSync -notcontains 3 -and $whatToSync -notcontains 4) {
+                            if ($PS_env_set_up_ParamArg) {
+                                $PS_env_set_up_ParamArg += ", "
+                            }
+                            $PS_env_set_up_Param = "-customToSync Repo_sync $PS_env_set_up_Param"
+                            $PS_env_set_up_ParamArg += "custom"
+                        }
+
+                        $PS_env_set_up_Param = "$PS_env_set_up_Param $PS_env_set_up_ParamArg"
+
+                        "   - synchronization PS_env_set_up.ps1 script called in same named scheduled task, will be run with following parameters: $PS_env_set_up_Param"
+
+                        Write-Warning "Be very careful when using Refresh-Console function with 'synchronize' parameter. So you don't accidentaly synchronize more than you wanted."
+                    }
+                } else {
+                    # option 1 was selected, i.e. synchronize all, i.e. default behaviour
+                }
+            }
+            #endregion customize parameters of PS_env_set_up.ps1 script that is being run in PS_env_set_up scheduled task
+
+            # define how often should synchronization occur
+            if ($testInstallation) {
+                # for test installation synchronization will be made once per 10 minutes
+                $startInterval = "10M"
+            } else {
+                # for personal installation, synchronization will be made once per hour
+                # all modules will be regenerated, so its not desirable to make this too often
+                $startInterval = "1H"
+            }
+
+            # XML definition of the PS_env_set_up scheduled task
             $PS_env_set_up_schedTaskDefinition = @"
 <?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.3" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
@@ -1492,7 +1747,7 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
     <Triggers>
     <TimeTrigger>
         <Repetition>
-        <Interval>PT10M</Interval>
+        <Interval>PT$startInterval</Interval>
         <StopAtDurationEnd>false</StopAtDurationEnd>
         </Repetition>
         <StartBoundary>2019-04-10T14:31:23</StartBoundary>
@@ -1535,19 +1790,29 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
     <Actions Context="Author">
     <Exec>
         <Command>powershell.exe</Command>
-        <Arguments>-ExecutionPolicy ByPass -NoProfile `"$repositoryShare\PS_env_set_up.ps1`"</Arguments>
+        <Arguments>-ExecutionPolicy ByPass -NoProfile `"$repositoryShare\PS_env_set_up.ps1 $PS_env_set_up_Param`"</Arguments>
     </Exec>
     </Actions>
 </Task>
 "@
+            #endregion PS_env_set_up scheduled task properties preparation
 
             $PS_env_set_up_schedTaskDefinitionFile = "$env:TEMP\432432432.xml"
             $PS_env_set_up_schedTaskDefinition | Out-File $PS_env_set_up_schedTaskDefinitionFile -Encoding ascii -Force
-            _createSchedTask $PS_env_set_up_schedTaskDefinitionFile "PS_env_set_up"
-            "   - starting scheduled task 'PS_env_set_up' to synchronize repository data from share to this client"
-            _startSchedTask "PS_env_set_up"
+            _createSchedTask $PS_env_set_up_schedTaskDefinitionFile $taskName
+            "   - starting scheduled task '$taskName' to synchronize repository data from '$repositoryShare' to this client"
+            _startSchedTask $taskName
+
+            "      - checking, that the task ends up succesfully"
+            while (($result = ((schtasks /query /tn "$taskName" /v /fo csv /nh) -split ",")[6]) -eq '"267009"') {
+                # task is running
+                Start-Sleep 1
+            }
+            if ($result -ne '"0"') {
+                Write-Error "Task '$taskName' ends up with error ($($result -replace '"')). Check C:\Windows\Temp\PS_env_set_up.ps1.log on $env:COMPUTERNAME for more information"
+            }
         }
-        #endregion create GPO (PS_env_set_up scheduled task)
+        #endregion create GPO that creates PS_env_set_up scheduled task or just the sched. task
 
         if (!$testInstallation) {
             _pressKeyToContinue
@@ -1558,19 +1823,21 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
 
         #region finalize installation
         Write-Host "FINALIZING INSTALLATION" -ForegroundColor Green
-        if (!$noEnvModification -and !$skipAD -and !$skipGPO -and !$notAdmin) {
+
+        if ($personalInstallation -or $testInstallation -or ($ADInstallation -and !$skipAD -and !$skipGPO -and !$notAdmin)) {
             # enought rights to process all steps
         } else {
             "- DO NOT FORGET TO DO ALL SKIPPED TASKS MANUALLY"
         }
-        if (!$testInstallation) {
+
+        if ($ADInstallation) {
             Write-Warning "- Link GPO $GPOname to OU(s) with computers, that should be driven by this tool.`n    - don't forget, that also $MGMServer server has to be in such OU!"
             @"
     - for ASAP test that synchronization is working:
         - run on client command 'gpupdate /force' to create scheduled task $GPOname
         - run that sched. task and check the result in C:\Windows\Temp\$GPOname.ps1.log
 "@
-        } else {
+        } elseif ($testInstallation) {
             "- check this console output, to get better idea what was done"
         }
         #endregion finalize installation
@@ -1584,18 +1851,22 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
 
         if ($testInstallation) {
             @"
-SUMMARY INFORMATION ABOUT THIS !TEST! INSTALLATION:
- - Central Repository share is at $repositoryShareLocPath (locally at $repositoryShareLocPath).
-    - It is used by clients to synchronize their repository data.
- - (Cloud) Repository is hosted locally at $remoteRepository
-    - Simulates for example GitHub private repository.
- - (Cloud) Repository is locally cloned to $userRepository
-    - Here you make changes (creates new functions, modules, ...) and commit them to (Cloud) Repository.
+SUMMARY ABOUT THIS !TEST! INSTALLATION:
+ - Simulated Central Repository Share $repositoryShareLocPath is locally saved in $repositoryShareLocPath.
+    - It would be used by clients as a source for synchronyzing repository data to them.
+ - Simulated (Cloud) GIT Repository is hosted locally at $remoteRepository
+    - In reality, this would be hosted in Azure DevOps, GitHub, etc private repository.
+ - $userRepository is git clone of the (Cloud) Repository
+    - This is the only part of this solution, that would be stored on your computer
+    - Here you should make changes to repository data (creates new functions, modules, ...) and commit them to (Cloud) Repository.
  - Scheduled Tasks:
-    - Repo_sync - Pulls data from (Cloud) GIT repository, Process them, and Synchronize result to $repositoryShare.
+    - Repo_sync
+        - Pulls data from (Cloud) GIT repository, processes them, and synchronizes the results to $repositoryShare.
+            - In reality, this is being run on separated so called MGM Server
         - Processing is done in C:\Windows\Scripts\Repo_sync
         - Log file in C:\Windows\Temp\Repo_sync.ps1.log
-    - PS_env_set_up - Synchronizes local content from $repositoryShare (i.e. it is used to get repository data to clients).
+    - PS_env_set_up
+        - Synchronizes content from $repositoryShare to the client.
         - Log file in C:\Windows\Temp\PS_env_set_up.ps1.log
 "@
             _pressKeyToContinue
@@ -1604,8 +1875,12 @@ SUMMARY INFORMATION ABOUT THIS !TEST! INSTALLATION:
 
         Write-Host "GOOD TO KNOW" -ForegroundColor green
         @"
+- It is highly recommended to use 'Visual Studio Code (VSC)' editor to work with the repository content because it provides:
+    - Unified admin experience through repository thanks to included VSC workspace settings
+        - Auto-Formatting of the code, encoding, addons, etc..
+    - Integration & control of GIT
 - Do NOT place your GIT repository inside Dropbox, Onedrive or other similar synchronization tool, it would cause problems!
-- To understand, what is purpose of this repository content check https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/3.%20SIMPLIFIED%20EXPLANATION%20OF%20HOW%20IT%20WORKS.md
+- To understand, what is purpose of this repository content, check https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/3.%20SIMPLIFIED%20EXPLANATION%20OF%20HOW%20IT%20WORKS.md
 - For immediate refresh of clients data (and console itself) use function Refresh-Console
     - NOTE: Available only on computers defined in Variables module in variable `$computerWithProfile
 - For examples check https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md
@@ -1613,7 +1888,7 @@ SUMMARY INFORMATION ABOUT THIS !TEST! INSTALLATION:
 - For mastering Modules deployment check \modules\modulesConfig.ps1
 - For mastering Custom section features check \custom\customConfig.ps1
 - To see what is happening in the background check logs
-    - In VSC Output terminal (CTRL + SHIFT + U, there switch output to GIT) (pre-commit.ps1 checks)
+    - In VSC Output terminal (CTRL + SHIFT + U, there switch output to GIT) (pre-commit.ps1 checks etc)
     - C:\Windows\Temp\Repo_sync.ps1.log on MGM server (synchronization from GIT repository to share)
     - C:\Windows\Temp\PS_env_set_up.ps1.log on client (synchronization from share to client)
 
@@ -1628,12 +1903,18 @@ ENJOY :)
             "- Opening your repository in VSC"
             & $codeCmdPath "$userRepository"
         }
+
+        # open examples web page
+        Start-Sleep 3
+        Start-Process "https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md"
     } catch {
         $e = $_.Exception
         $line = $_.InvocationInfo.ScriptLineNumber
         Write-Host "$e (file: $PSCommandPath line: $line)" -ForegroundColor Red
         break
     } finally {
+        Set-Location $PSScriptRoot
+
         Stop-Transcript -ErrorAction SilentlyContinue
 
         try {
