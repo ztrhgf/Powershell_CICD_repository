@@ -1706,7 +1706,7 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
 
                     if ($PS_env_set_up_Param) {
                         # Repo_sync from Custom section has to be synchronized in any way, because this computer is also MGM server
-                        if ($whatToSync -notcontains 3 -and $whatToSync -notcontains 4) {
+                        if ($whatToSync -notcontains 3) {
                             if ($PS_env_set_up_ParamArg) {
                                 $PS_env_set_up_ParamArg += ", "
                             }
