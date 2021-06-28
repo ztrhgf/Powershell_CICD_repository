@@ -17,7 +17,7 @@
     .PARAMETER omitDeletion
     Switch for omitting deletion of needless files.
     Usable for making synchronization as fast as possible.
-    
+
     .NOTES
     Author: Ondřej Šebela - ztrhgf@seznam.cz
 #>
@@ -421,7 +421,7 @@ function _emailAndExit {
 
     $body
 
-    if (Get-Command Send-Email -ErrorAction SilentlyContinue){
+    if (Get-Command Send-Email -ErrorAction SilentlyContinue) {
         ++$sendEmail
     }
 
@@ -711,17 +711,17 @@ try {
         "$(Get-Date -Format HH:mm:ss) - Cloning repository data to $clonedRepository"
         $force = $true
         try {
-            if (Test-Path "__REPLACEME__2" -IsValid) {
+            if ("__REPLACEME__2" -match "^[a-z]{1}:") {
                 # its local path (hack because of TEST installation)
                 $result = _startProcess git -argumentList "clone --local `"__REPLACEME__2`" `"$clonedRepository`"" -outputErr2Std
-        } else {
-            # its URL
-            $acc = Import-Clixml "$PSScriptRoot\login.xml"
-            $l = $acc.UserName
-            $p = $acc.GetNetworkCredential().Password
-            # instead __REPLACEME__ use URL of your company repository (i.e. something like: dev.azure.com/ztrhgf/WUG_show/_git/WUG_show). Final URL will than be something like this: https://altLogin:altPassword@dev.azure.com/ztrhgf/WUG_show/_git/WUG_show)
-            $result = _startProcess git -argumentList "clone `"https://$l`:$p@__REPLACEME__2`" `"$clonedRepository`"" -outputErr2Std
-        }
+            } else {
+                # its URL
+                $acc = Import-Clixml "$PSScriptRoot\login.xml"
+                $l = $acc.UserName
+                $p = $acc.GetNetworkCredential().Password
+                # instead __REPLACEME__ use URL of your company repository (i.e. something like: dev.azure.com/ztrhgf/WUG_show/_git/WUG_show). Final URL will than be something like this: https://altLogin:altPassword@dev.azure.com/ztrhgf/WUG_show/_git/WUG_show)
+                $result = _startProcess git -argumentList "clone `"https://$l`:$p@__REPLACEME__2`" `"$clonedRepository`"" -outputErr2Std
+            }
             if ($result -match "fatal: ") { throw $result }
         } catch {
             Remove-Item $clonedRepository -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue
@@ -882,8 +882,8 @@ try {
                         $sign = Get-ChildItem $itemPath -Recurse -Include *.ps1, *.psm1, *.psd1, *.ps1xml -File | select -exp FullName
                     }
 
-                    $sign | % { 
-                        $notSigned = Get-AuthenticodeSignature $_ | ? {$_.status -eq "NotSigned"}
+                    $sign | % {
+                        $notSigned = Get-AuthenticodeSignature $_ | ? { $_.status -eq "NotSigned" }
                         if ($notSigned) {
                             Set-AuthenticodeSignature -Certificate $signingCert -FilePath $_ -TimestampServer $certTimeStampServer
                         } else {
@@ -989,7 +989,7 @@ try {
                 try {
                     # signing the script if requested
                     if ($signingCert -and $itemName -match "ps1$|psd1$|psm1$|ps1xml$") {
-                        $notSigned = Get-AuthenticodeSignature $itemPath | ? {$_.status -eq "NotSigned"}
+                        $notSigned = Get-AuthenticodeSignature $itemPath | ? { $_.status -eq "NotSigned" }
                         if ($notSigned) {
                             Set-AuthenticodeSignature -Certificate $signingCert -FilePath $itemPath -TimestampServer $certTimeStampServer
                         } else {
@@ -1082,8 +1082,8 @@ try {
                         $sign = Get-ChildItem $itemPath -Recurse -Include *.ps1, *.psm1, *.psd1, *.ps1xml -File | select -exp FullName
                     }
 
-                    $sign | % { 
-                        $notSigned = Get-AuthenticodeSignature $_ | ? {$_.status -eq "NotSigned"}
+                    $sign | % {
+                        $notSigned = Get-AuthenticodeSignature $_ | ? { $_.status -eq "NotSigned" }
                         if ($notSigned) {
                             Set-AuthenticodeSignature -Certificate $signingCert -FilePath $_ -TimestampServer $certTimeStampServer
                         } else {
