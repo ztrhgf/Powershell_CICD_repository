@@ -52,9 +52,10 @@ Everything else, like code backups, validations, auditing, signing, modules gene
   - automatic **script signing** (if enabled)
 
 - check [examples](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md) or [watch short introduction video](https://youtu.be/-xSJXbmOgyk) for getting better insight
-  
-# [Installation](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20INSTALL.md)
-# [Examples](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md)
-# [Repository logic & content explanation](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/3.%20SIMPLIFIED%20EXPLANATION%20OF%20HOW%20IT%20WORKS.md)
-# [FAQ](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/FAQ.md)
-# [Changelog](https://github.com/ztrhgf/Powershell_CICD_repository/releases)
+
+# Table of contents
+## [Installation](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20INSTALL.md)
+## [Examples](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/2.%20HOW%20TO%20USE%20-%20EXAMPLES.md)
+## [Repository logic & content explanation](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/3.%20SIMPLIFIED%20EXPLANATION%20OF%20HOW%20IT%20WORKS.md)
+## [FAQ](https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/FAQ.md)
+## [Changelog](https://github.com/ztrhgf/Powershell_CICD_repository/releases)
