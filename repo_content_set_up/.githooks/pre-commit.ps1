@@ -793,7 +793,7 @@ try {
 
 
     #
-    # warn about deleted ps1 script (that defines function for module generation), in case it is used somewhere in repository
+    # warn about deleted function & alias in case it is used somewhere in repository
     if ($commitedDeletedPs1) {
         $commitedDeletedPs1 = $commitedDeletedPs1 -replace "/", "\"
         $commitedDeletedPs1 | Where-Object { $_ -match "scripts2module\\" } | ForEach-Object {
@@ -807,6 +807,35 @@ try {
                 $fileFuncUsed = $fileFuncUsed -replace "/", "\"
 
                 _WarningAndExit "Deleted function $funcName is mentioned in following scripts:`n$($fileFuncUsed -join "`n")"
+            }
+
+            # get all aliases defined in last function version
+            $functionScriptUnixPath = $_ -replace "\\", "/"
+            $lastCommitContent = _startProcess git "show HEAD:$functionScriptUnixPath"
+            if (!$lastCommitContent -or $lastCommitContent -match "^fatal: ") {
+                Write-Warning "Previous version of function $funcName cannot be found (to check deleted aliases)."
+            } else {
+                $gitAST = [System.Management.Automation.Language.Parser]::ParseInput(($lastCommitContent -join "`n"), [ref]$null, [ref]$null)
+
+                $deletedAlias = _getAliasAST $gitAST $funcName
+            }
+
+            if ($deletedAlias) {
+                $deletedAlias | % {
+                    $alias = $_
+                    $escFuncName = [regex]::Escape($funcName)
+                    $escAlias = [regex]::Escape($alias)
+                    # get all files where changed function is mentioned (even in comments)
+                    $fileUsed = git.exe grep --ignore-case -l "\b$escAlias\b"
+                    # exclude scripts where this alias is defined
+                    $fileUsed = $fileUsed | Where-Object { $_ -notmatch "/$escFuncName\.ps1" }
+
+                    if ($fileUsed) {
+                        $fileUsed = $fileUsed -replace "/", "\"
+
+                        _WarningAndExit "Alias '$alias' of function $funcName was deleted, but is still used in following scripts:`n$($fileUsed -join "`n")"
+                    }
+                }
             }
         }
         #TODO kontrola funkci v profile.ps1? viz AST sekce https://devblogs.microsoft.com/scripting/learn-how-it-pros-can-use-the-powershell-ast/
