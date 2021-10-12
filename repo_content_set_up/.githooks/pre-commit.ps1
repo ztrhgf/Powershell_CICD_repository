@@ -67,6 +67,8 @@ function _WarningAndExit {
 }
 
 function _GetFileEncoding {
+    # returns UTF-8 for UTF-8 with Bom and ASCII for UTF-8 encoded files!
+
     [CmdletBinding()]
     param (
         [Parameter(Mandatory = $True, ValueFromPipelineByPropertyName = $True)]
@@ -158,13 +160,9 @@ function _getAliasAST {
     }
 
     # aliases defined by [Alias("Some-Alias")]
-    $AST.FindAll( {
-            param([System.Management.Automation.Language.Ast] $AST)
+    $AST.FindAll( { $args[0] -is [System.Management.Automation.Language.AttributeAst] }, $true) | ? { $_.parent.parent.parent.name -eq $functionName -and $_.parent.extent.text -match '^param' } | Select-Object -ExpandProperty PositionalArguments | Select-Object -ExpandProperty Value -ErrorAction SilentlyContinue | % { $alias += $_ }
 
-            $AST -is [System.Management.Automation.Language.AttributeAst]
-        }, $true) | ? { $_.parent.extent.text -match '^param' } | Select-Object -ExpandProperty PositionalArguments | Select-Object -ExpandProperty Value -ErrorAction SilentlyContinue | % { $alias += $_ }
-
-    return $alias
+    return ($alias | Select-Object -Unique)
 }
 
 function _getParameterAST {
@@ -595,6 +593,7 @@ try {
     }
 
 
+
     #
     # check that commit doesn't contain any files in root of scripts2module folder
     # such files won't be processed anyway
@@ -603,6 +602,7 @@ try {
     if ($scripts2moduleRootFile) {
         _ErrorAndExit "File(s) $($scripts2moduleRootFile -join ', ') can't be in root of 'scripts2module' folder. To generate module, save the ps1 file containing the same named function as scripts2module\<moduleName>\<function-name>.ps1."
     }
+
 
 
     #
@@ -614,13 +614,13 @@ try {
         $textFilesToCommit | ForEach-Object {
             $fileEnc = (_GetFileEncoding $_).bodyName
             if ($fileEnc -notin "US-ASCII", "ASCII", "UTF-8" ) {
-                _WarningAndExit "File $_ is encoded in '$fileEnc', so git diff wont work.`nIdeal is to save it using UTF-8 with BOM, or UTF-8."
+                _WarningAndExit "File $_ is encoded as '$fileEnc', so git diff wont work.`nIdeal is to save it using UTF-8 with BOM, or UTF-8."
             }
         }
     }
 
 
-    
+
     #
     # various checks of ps1 and psm1 files
     "- check syntax, problematic characters, FIXME, best practices, format, name , changes in function parameters,..."
@@ -761,6 +761,12 @@ try {
                             _WarningAndExit "Alias '$alias' of function $functionName was deleted, but is still used in following scripts:`n$($fileUsed -join "`n")"
                         }
                     }
+                }
+
+                #
+                # error if function defines same named alias
+                if ($actAlias -and ($actAlias | ? { $_ -eq $functionName })) {
+                    _ErrorAndExit "Function $functionName defines same named alias which is nonsense"
                 }
             }
         }
