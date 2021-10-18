@@ -24,7 +24,7 @@
     Default is module, custom and profile i.e. full synchronization should occur.
 
     .PARAMETER moduleToSync
-    Can be used to limit synchronization of Powershell modules, so just subset of them will be synced.
+    Can be used to limit synchronization of PowerShell modules, so just subset of them will be synced.
     Accept list of modules names.
 
     .PARAMETER customToSync
@@ -32,9 +32,9 @@
     Accept list of Custom folder names.
 
     .PARAMETER omitDeletion
-    Switch to omit deletion of unused modules, scheduled tasks, powershell profile or custom folders.
+    Switch to omit deletion of unused modules, scheduled tasks, PowerShell profile or custom folders.
     Use when you want sync cycle to end as fast as possible.
-    
+
     .NOTES
     Author: Ondřej Šebela - ztrhgf@seznam.cz
 #>
@@ -220,7 +220,7 @@ function _setPermissions {
     #     $SubFolders = Get-ChildItem $Path -Directory
     #     If ($SubFolders) {
     #         Foreach ($SubFolder in $SubFolders) {
-    #             # Start a process rather than a job, icacls should take way less memory than Powershell+icacls
+    #             # Start a process rather than a job, icacls should take way less memory than PowerShell+icacls
     #             Start-Process icacls -WindowStyle Hidden -ArgumentList """$($SubFolder.FullName)"" /Reset /T /C" -PassThru
     #         }
     #     }
@@ -313,8 +313,7 @@ function _sendEmailAndContinue {
 
     Send-Email -subject $subject -body $body
 }
-#endregion
-
+#endregion helper functions
 
 
 
@@ -339,12 +338,12 @@ if (("profile" -in $synchronize) -or ("module" -in $synchronize -and !$moduleToS
 
 
 #
-# SYNCHRONIZATION OF POWERSHELL MODULES
+# SYNCHRONIZATION OF PowerShell MODULES
 #
 
-#region sync of powershell modules
+#region sync of PowerShell modules
 if ($synchronize -contains "module") {
-    "$(Get-Date -Format HH:mm:ss) - Synchronization of Powershell Modules"
+    "$(Get-Date -Format HH:mm:ss) - Synchronization of PowerShell Modules"
     $moduleSrcFolder = Join-Path $repository "modules"
     $moduleDstFolder = Join-Path $env:systemroot "System32\WindowsPowerShell\v1.0\Modules\"
 
@@ -354,26 +353,24 @@ if ($synchronize -contains "module") {
 
     $customModulesScript = Join-Path $moduleSrcFolder "modulesConfig.ps1"
 
-    if (!$moduleToSync) {
-        try {
-            " - dot sourcing of modulesConfig.ps1"
-            . $customModulesScript
-        } catch {
-            "   - there was an error when dot sourcing $customModulesScript"
-            "   - error was $_"
-        }
+    try {
+        " - dot sourcing of modulesConfig.ps1"
+        . $customModulesScript
+    } catch {
+        "   - there was an error when dot sourcing $customModulesScript"
+        "   - error was $_"
+    }
 
-        # names of modules, that should be copied just to selected computers
-        $customModules = @()
-        # names of modules, that should be copied just to this computer
-        $thisPCModules = @()
+    # names of modules, that should be copied just to subset of computers
+    $customModules = @()
+    # names of modules, that should be copied just to this computer
+    $thisPCModules = @()
 
-        $modulesConfig | ForEach-Object {
-            $customModules += $_.folderName
+    $modulesConfig | ForEach-Object {
+        $customModules += $_.folderName
 
-            if ($hostname -in (_flattenArray $_.computerName)) {
-                $thisPCModules += $_.folderName
-            }
+        if ($hostname -in (_flattenArray $_.computerName)) {
+            $thisPCModules += $_.folderName
         }
     }
 
@@ -387,7 +384,7 @@ if ($synchronize -contains "module") {
             continue
         }
 
-        if ($moduleName -notin $customModules -or ($moduleName -in $customModules -and $moduleName -in $thisPCModules)) {
+        if ($moduleName -notin $customModules -or $moduleName -in $thisPCModules) {
             # module should be on this computer
             $moduleDstPath = Join-Path $moduleDstFolder $moduleName
             try {
@@ -409,12 +406,11 @@ if ($synchronize -contains "module") {
             }
         } else {
             # module shouldn't be on this computer
-            "   - skipping module $moduleName (shouldn't be here)"
+            "   - skipping module $moduleName (not for this computer)"
         }
     }
 }
-#endregion
-
+#endregion sync of PowerShell modules
 
 
 
@@ -432,15 +428,13 @@ if ((Test-Path $commitHistorySrc -ea SilentlyContinue) -and ($env:COMPUTERNAME -
 
 
 
-
-
 #
 # SYNCHRONIZATION OF POWERSHELL GLOBAL PROFILE
 #
 
 #region sync of global PS profile
 if ($synchronize -contains "profile") {
-    "$(Get-Date -Format HH:mm:ss) - Synchronization of Powershell Profile"
+    "$(Get-Date -Format HH:mm:ss) - Synchronization of PowerShell Profile"
     $profileSrc = Join-Path $repository "profile.ps1"
     $profileDst = Join-Path $env:systemroot "System32\WindowsPowerShell\v1.0\profile.ps1"
     $profileDstFolder = Split-Path $profileDst -Parent
@@ -486,7 +480,7 @@ if ($synchronize -contains "profile") {
         }
     }
 }
-#endregion
+#endregion sync of global PS profile
 
 
 
@@ -548,8 +542,8 @@ if ($synchronize -contains "custom") {
 
     #
     # delete Custom folders, that shouldn't be on this computer
-    if (!($omitDeletion -or $customToSync)) {
-        # skip if defined $customToSync, because it modifies content of $thisPCCustFolder
+    if (!$omitDeletion -and !$customToSync -and $synchronize -contains "custom") {
+        # skip if $customToSync is defined, because it modifies $thisPCCustFolder i.e. it would contain just subset of computers Custom folders (not all of them)
         Get-ChildItem $customDstFolder -Directory -ErrorAction SilentlyContinue | ForEach-Object {
             $folder = $_
             if ($folder.name -notin $thisPCCustFolder) {
@@ -761,7 +755,7 @@ if ($synchronize -contains "custom") {
     # delete scheduled tasks that shouldn't be on this computer
     # and was created earlier by this script
     # check just tasks in root, because this script creates them in root
-    if (!$omitDeletion) {
+    if (!$omitDeletion -and $synchronize -contains "custom") {
         $taskInRoot = schtasks /QUERY /FO list | ? { $_ -match "^TaskName:\s+\\[^\\]+$" } | % { $_ -replace "^TaskName:\s+\\" }
         foreach ($taskName in $taskInRoot) {
             if ($taskName -notin $thisPCCustSchedTask) {
@@ -779,23 +773,26 @@ if ($synchronize -contains "custom") {
         } # end of deleting scheduled task section
     }
 }
-#endregion
+#endregion sync of custom content
 
 
 #
-# delete Powershell modules that are no more in DFS share, so shouldn't be on client neither
-# this section is after Custom, so I don't have to dot source customConfig.ps1 twice
-if (!($omitDeletion -or $moduleToSync -or !$synchronize -notcontains "module" -or $customToSync)) {
-    "$(Get-Date -Format HH:mm:ss) - Delete unnecessary Powershell Modules"
-    # skip if some necessary data are missing because of customization of refresh
+# delete PowerShell modules that shouldn't be on the client
+# this section is after Custom, so I don't have to dot source customConfig.ps1 twice and to have $thisPCCustToModules prepared
+if (!$omitDeletion -and $synchronize -contains "module" -and ($synchronize -contains "custom" -and !$customToSync)) {
+    # Custom section has to be processed, because of getting $thisPCCustToModules and at the same time $customToSync cannot be defined, because it could modify it
+
+    "$(Get-Date -Format HH:mm:ss) - Delete unnecessary PowerShell modules"
+
     if (Test-Path $moduleDstFolder -ea SilentlyContinue) {
-        # save system modules that was copied by this script
+        # get modules that was previously copied by this script
         $repoModuleInDestination = Get-ChildItem $moduleDstFolder -Directory | Get-Acl | Where-Object { $_.accessToString -like "*$readUser*" } | Select-Object -ExpandProperty PSChildName
+
         if ($repoModuleInDestination) {
             $sourceModuleName = @((Get-ChildItem $moduleSrcFolder -Directory).Name)
 
             $repoModuleInDestination | ForEach-Object {
-                if (($sourceModuleName -notcontains $_ -and $thisPCCustToModules -notcontains $_) -or ($customModules -contains $_ -and $thisPCModules -notcontains $_)) {
+                if ((($sourceModuleName -notcontains $_ -and $thisPCCustToModules -notcontains $_) -or ($customModules -contains $_ -and $thisPCModules -notcontains $_))) {
                     " - $_"
                     Remove-Item (Join-Path $moduleDstFolder $_) -Force -Confirm:$false -Recurse
                 }
