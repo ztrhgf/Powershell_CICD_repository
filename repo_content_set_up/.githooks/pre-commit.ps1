@@ -739,6 +739,8 @@ try {
                         _WarningAndExit "Function $functionName which parameters has changed ($($changedParam -join ', ')) is mentioned in following scripts:`n$($fileUsed -join "`n")"
                     }
                 }
+
+                # deleted alias check
                 if ($prevAlias -and !$actAlias) {
                     $deletedAlias = $prevAlias
                 }
@@ -750,7 +752,7 @@ try {
                         $alias = $_
                         $escFuncName = [regex]::Escape($functionName)
                         $escAlias = [regex]::Escape($alias)
-                        # get all files where changed function is mentioned (even in comments)
+                        # get all files where deleted alias is mentioned (even in comments)
                         $fileUsed = git.exe grep --ignore-case -l "\b$escAlias\b"
                         # exclude scripts where this alias is defined
                         $fileUsed = $fileUsed | Where-Object { $_ -notmatch "/$escFuncName\.ps1" }
@@ -758,7 +760,32 @@ try {
                         if ($fileUsed) {
                             $fileUsed = $fileUsed -replace "/", "\"
 
-                            _WarningAndExit "Alias '$alias' of function $functionName was deleted, but is still used in following scripts:`n$($fileUsed -join "`n")"
+                            _WarningAndExit "Deleted alias '$alias' of the function $functionName is still used in following scripts:`n$($fileUsed -join "`n")"
+                        }
+                    }
+                }
+
+                # added alias check
+                if ($actAlias -and !$prevAlias) {
+                    $addedAlias = $actAlias
+                }
+                if ($actAlias -and $prevAlias) {
+                    $addedAlias = Compare-Object $actAlias $prevAlias | ? { $_.sideIndicator -eq "<=" } | select -exp inputObject
+                }
+                if ($addedAlias) {
+                    $addedAlias | % {
+                        $alias = $_
+                        $escFuncName = [regex]::Escape($functionName)
+                        $escAlias = [regex]::Escape($alias)
+                        # get all files where added alias is mentioned (even in comments)
+                        $fileUsed = git.exe grep --ignore-case -l "\b$escAlias\b"
+                        # exclude scripts where this alias is defined
+                        $fileUsed = $fileUsed | Where-Object { $_ -notmatch "/$escFuncName\.ps1" }
+
+                        if ($fileUsed) {
+                            $fileUsed = $fileUsed -replace "/", "\"
+
+                            _WarningAndExit "Added alias '$alias' of the function $functionName is already used in following scripts:`n$($fileUsed -join "`n")"
                         }
                     }
                 }
