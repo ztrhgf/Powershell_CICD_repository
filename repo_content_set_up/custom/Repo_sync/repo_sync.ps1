@@ -166,7 +166,8 @@ function _exportScripts2Module {
             throw "Path $scriptFolder is not accessible"
         }
 
-        $modulePath = Join-Path $moduleFolder ((Split-Path $moduleFolder -Leaf) + ".psm1")
+        $moduleName = Split-Path $moduleFolder -Leaf
+        $modulePath = Join-Path $moduleFolder "$moduleName.psm1"
         $function2Export = @()
         $alias2Export = @()
         $lastCommitFileContent = @{ }
@@ -385,6 +386,45 @@ function _exportScripts2Module {
 
             "Export-ModuleMember -alias $($alias2Export -join ', ')" | Out-File $modulePath -Append $enc
         }
+
+        #region process module manifest (psd1) file
+        $manifestFile = (Get-ChildItem (Join-Path $scriptFolder "*.psd1") -File).FullName
+
+        if ($manifestFile) {
+            if ($manifestFile.count -eq 1) {
+                try {
+                    Write-Verbose "Processing '$manifestFile' manifest file"
+                    $manifestDataHash = Import-PowerShellDataFile $manifestFile -ErrorAction Stop
+                } catch {
+                    Write-Error "Unable to process manifest file '$manifestFile'.`n`n$_"
+                }
+
+                if ($manifestDataHash) {
+                    # customize manifest data
+                    Write-Verbose "Set manifest RootModule key"
+                    $manifestDataHash.RootModule = "$moduleName.psm1"
+                    Write-Verbose "Set manifest FunctionsToExport key"
+                    $manifestDataHash.FunctionsToExport = $function2Export
+                    Write-Verbose "Set manifest AliasesToExport key"
+                    if ($alias2Export) {
+                        $manifestDataHash.AliasesToExport = $alias2Export
+                    } else {
+                        $manifestDataHash.AliasesToExport = @()
+                    }
+
+                    # create final manifest file
+                    Write-Verbose "Generating module manifest file"
+                    # create empty one and than update it because of the bug https://github.com/PowerShell/PowerShell/issues/5922
+                    New-ModuleManifest -Path (Join-Path $moduleFolder "$moduleName.psd1")
+                    Update-ModuleManifest -Path (Join-Path $moduleFolder "$moduleName.psd1") @manifestDataHash
+                }
+            } else {
+                Write-Warning "Module manifest file won't be processed because more then one were found."
+            }
+        } else {
+            Write-Verbose "No module manifest file found"
+        }
+        #endregion process module manifest (psd1) file
     } # end of _generatePSModule
 
     $scripts2ModuleConfig.GetEnumerator() | % {
