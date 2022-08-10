@@ -266,8 +266,7 @@ function _exportScripts2Module {
 
                         $ast -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
                         # Class methods have a FunctionDefinitionAst under them as well, but we don't want them.
-                        ($PSVersionTable.PSVersion.Major -lt 5 -or
-                            $ast.Parent -isnot [System.Management.Automation.Language.FunctionMemberAst])
+                        ($PSVersionTable.PSVersion.Major -lt 5 -or ($ast.Parent -isnot [System.Management.Automation.Language.FunctionMemberAst]))
                     }, $false)
 
                 if ($functionDefinition.count -ne 1) {
@@ -1040,7 +1039,7 @@ try {
                     Copy-Item $itemPath $repository -Force -ErrorAction Stop
 
                     # in case of profile.ps1 limit NTFS permissions just to computers which should download it
-                    if ($itemName -match "\\profile\.ps1$") {
+                    if ($itemName -match "^profile\.ps1$") {
                         $destProfile = (Join-Path $repository "profile.ps1")
                         if ($_computerWithProfile) {
                             # computer AD accounts end with $
