@@ -46,6 +46,10 @@ Import-Module Scripts -Function Send-Email -ErrorAction SilentlyContinue
 $lastSendEmail = Join-Path $logFolder "lastSendEmail"
 $treshold = 30
 
+# if runs as SYSTEM, it is being run on separate MGM server
+# if runs as user, MGM server == computer where repository is managed == PERSONAL INSTALLATION TYPE
+$runningAsSYSTEM = [Security.Principal.WindowsIdentity]::GetCurrent().IsSystem
+
 # UNC path to (DFS) share, where repository data for clients are stored and therefore processed content will be copied
 $repository = "__REPLACEME__1" # UNC path to DFS repository (ie.: \\myDomain\dfs\repository)
 
@@ -620,6 +624,13 @@ function _setPermissions {
         $writeUser = @($writeUser) + 'SYSTEM'
     }
 
+    # adding account which runs this script
+    # it is personal repo installation a.k.a. MGM server is the same as repository admin pc
+    # to avoid problems with this solution installer where user is added to repo_writer group, but his token doesn't have this permission yet. Therefore Repo_sync sched. task will fail and so the installation
+    if (!$runningAsSYSTEM) {
+        $writeUser = @($writeUser) + (whoami.exe)
+    }
+
     $permissions = @()
 
     if (Test-Path $path -PathType Container) {
@@ -718,7 +729,7 @@ try {
             if ($result -match "fatal: ") { throw $result }
             # resets the master branch to what you just fetched. The --hard option changes all the files in your working tree to match the files in origin/master
             "$(Get-Date -Format HH:mm:ss) - Discarding local changes"
-            $null = _startProcess git -argumentList "reset --hard origin/master"
+            $null = _startProcess git -argumentList "reset --hard"
             # delete untracked files and folders (generated modules etc)
             _startProcess git -argumentList "clean -fd"
 
@@ -755,12 +766,20 @@ try {
                 $result = _startProcess git -argumentList "clone --local `"__REPLACEME__2`" `"$clonedRepository`"" -outputErr2Std
             } else {
                 # its URL
-                $acc = Import-Clixml "$PSScriptRoot\login.xml"
-                $l = $acc.UserName
-                $p = $acc.GetNetworkCredential().Password
-                # instead __REPLACEME__ use URL of your company repository (i.e. something like: dev.azure.com/ztrhgf/WUG_show/_git/WUG_show). Final URL will than be something like this: https://altLogin:altPassword@dev.azure.com/ztrhgf/WUG_show/_git/WUG_show)
-                $result = _startProcess git -argumentList "clone `"https://fakeAccount`:$p@__REPLACEME__2`" `"$clonedRepository`"" -outputErr2Std
+                if ($runningAsSYSTEM) {
+                    $acc = Import-Clixml "$PSScriptRoot\login.xml"
+                    $l = $acc.UserName
+                    $p = $acc.GetNetworkCredential().Password
+                    # instead __REPLACEME__ use URL of your company repository (i.e. something like: dev.azure.com/ztrhgf/WUG_show/_git/WUG_show). Final URL will than be something like this: https://altLogin:altPassword@dev.azure.com/ztrhgf/WUG_show/_git/WUG_show)
+                    $result = _startProcess git -argumentList "clone `"https://fakeAccount`:$p@__REPLACEME__2`" `"$clonedRepository`"" -outputErr2Std
+                } else {
+                    # running as USER
+                    # this means that separate MGM server doesn't exist and repository processing is made on the same computer where repository is managed (admin computer)
+                    # user credentials will be used instead of repo_puller
+                    $result = _startProcess git -argumentList "clone `"https://__REPLACEME__2`" `"$clonedRepository`"" -outputErr2Std
+                }
             }
+
             if ($result -match "fatal: ") { throw $result }
         } catch {
             Remove-Item $clonedRepository -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue

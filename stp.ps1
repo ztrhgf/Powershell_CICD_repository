@@ -652,6 +652,7 @@ Process {
         - Creates required scheduled tasks.
             - Repo_sync
                 - Pulls data from your GIT repository and process them
+                - will be run under your account therefore use your credentials to access GIT repository
             - PS_env_set_up
                 - Synchronizes client with already processed repository data
         - Starts VSC editor with your new repository, so you can start your testing immediately. :)
@@ -717,7 +718,20 @@ Process {
     Clear-Host
 
     if (!$noEnvModification -and !$testInstallation) {
-        @"
+        if ($personalInstallation) {
+            @"
+####################################
+#   BEFORE YOU CONTINUE
+####################################
+
+- Create cloud or locally hosted GIT !private! repository (tested with Azure DevOps but probably will work also with GitHub etc).
+   - Clone this repository locally (git clone command).
+
+   - NOTE:
+        - More details can be found at https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20INSTALL.md
+"@
+        } else {
+            @"
 ####################################
 #   BEFORE YOU CONTINUE
 ####################################
@@ -730,6 +744,7 @@ Process {
    - NOTE:
         - More details can be found at https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20INSTALL.md
 "@
+        }
 
         _pressKeyToContinue
     }
@@ -1409,7 +1424,7 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
         } else {
             $userDomain = "$env:COMPUTERNAME.com"
         }
-        Write-Host "- Configuring repository '$userRepository'" -ForegroundColor Green
+        Write-Host "- Configuring repository '$userRepository' & commit and push the changes" -ForegroundColor Green
         "   - activating GIT Hooks, creating symlink for PowerShell snippets, commiting&pushing changes, etc"
 
         if ($testInstallation -or (!$noEnvModification -and !(_skip))) {
@@ -1475,15 +1490,24 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
         $userRepoSync = Join-Path $userRepository "custom\Repo_sync"
         Write-Host "- Setting MGM server ($MGMServer)" -ForegroundColor Green
         if (!$testInstallation) {
-            @"
+            if ($personalInstallation) {
+                @"
    - copy Repo_sync folder to '$MGMRepoSync'
-   - install newest version of 'GIT'
+   - install 'GIT'
+   - create scheduled task 'Repo_sync' from 'Repo_sync.xml'
+
+"@
+            } else {
+                @"
+   - copy Repo_sync folder to '$MGMRepoSync'
+   - install 'GIT'
    - create scheduled task 'Repo_sync' from 'Repo_sync.xml'
    - export 'repo_puller' account alternate credentials to '$MGMRepoSync\login.xml' (only SYSTEM account on $MGMServer will be able to read them!)
    - copy exported credentials from $MGMServer to $userRepoSync
    - commit&push exported credentials (so they won't be automatically deleted from $MGMServer, after this solution starts working)
 
 "@
+            }
         }
 
         if ($testInstallation -or (!$noEnvModification -and !(_skip))) {
@@ -1560,9 +1584,25 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
                 $Repo_syncXML = "$MGMRepoSync\Repo_sync.xml"
                 "   - creating scheduled task '$taskName' from $Repo_syncXML"
 
+                if ($personalInstallation) {
+                    [xml]$Repo_syncXMLContent = Get-Content $Repo_syncXML
+                    # replace SID for the current user ones a.k.a. the sched. task will be run as current user a.k.a. his credentials will be used to clone GIT repository instead of separate repo_puller account
+                    $Repo_syncXMLContent.Task.Principals.Principal.UserId = ([System.Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
+                    $LogonTypeChild = $Repo_syncXMLContent.CreateElement('LogonType', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
+                    $null = $Repo_syncXMLContent.Task.Principals.Principal.AppendChild($LogonTypeChild)
+                    $Repo_syncXMLContent.Task.Principals.Principal.LogonType = 'S4U'
+                    $Repo_syncXMLContent.save($Repo_syncXML)
+                }
+
                 _createSchedTask -xmlDefinition $Repo_syncXML -taskName $taskName
 
-                if ($ADInstallation -or $personalInstallation) {
+                if ($personalInstallation) {
+                    # this task definition is customized for every repository user, therefore it doesn't make sense to save it into the repository, because no one else can use it
+                    "   - removing scheduled task '$taskName' definition $Repo_syncXML"
+                    Remove-Item $Repo_syncXML -Force
+                }
+
+                if ($ADInstallation) {
                     "   - exporting repo_puller account alternate credentials to '$MGMRepoSync\login.xml' (only SYSTEM account on $env:COMPUTERNAME will be able to read them!)"
                     _exportCred -credential (Get-Credential -Message 'Enter credentials (that can be used in unattended way) for GIT "repo_puller" account, you created earlier') -runAs "NT AUTHORITY\SYSTEM" -xmlPath "$MGMRepoSync\login.xml"
                 }
@@ -1584,12 +1624,9 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
             #endregion configure MGM server
 
             #region copy exported GIT credentials from MGM server to cloned GIT repo & commit them
-            if (!$testInstallation) {
+            if ($ADInstallation) {
                 "   - copying exported credentials from $MGMServer to $userRepoSync"
-                if ($personalInstallation) {
-                    # copy locally
-                    Copy-Item "$MGMRepoSync\login.xml" "$userRepoSync\login.xml" -Force
-                } elseif ($ADInstallation -and $notADAdmin) {
+                if ($notADAdmin) {
                     # copy using previously created PSSession
                     Copy-Item -FromSession $MGMServerSession "C:\Windows\Scripts\Repo_sync\login.xml" -Destination "$userRepoSync\login.xml" -Force
                 } else {
