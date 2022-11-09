@@ -378,7 +378,7 @@ Begin {
     }
 
     function _installGIT {
-        $installedGITVersion = ( (Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*) + (Get-ItemProperty HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*) | ? { $_.DisplayName -and $_.Displayname.Contains('Git version') }) | select -ExpandProperty DisplayVersion
+        $installedGITVersion = ( (Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*) + (Get-ItemProperty HKLM:\Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*) | ? { $_.DisplayName -and $_.Displayname -match '^Git' }) | select -ExpandProperty DisplayVersion
 
         if (!$installedGITVersion -or $installedGITVersion -as [version] -lt "2.27.0") {
             # get latest download url for git-for-windows 64-bit exe
