@@ -749,15 +749,14 @@ Process {
 
         Install-PackageProvider -Name nuget -Force -ForceBootstrap -Scope allusers | Out-Null
 
-        # if (!(Get-Module -ListAvailable PSScriptAnalyzer)) {
-        #     "   - installing 'PSScriptAnalyzer' PS module"
-        #     Install-Module PSScriptAnalyzer -SkipPublisherCheck -Force
-        # }
-
-        "   - updating 'PackageManagement' PS module"
         # solves issue https://github.com/PowerShell/vscode-powershell/issues/2824
-        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-        Install-Module -Name PackageManagement -Force -ErrorAction SilentlyContinue
+        "   - updating 'PackageManagement' PS module"
+        if (Get-Module PackageManagement -ListAvailable | ? version -GT ([version]'1.4.8')) {
+            "      - already installed"
+        } else {
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+            Install-Module -Name PackageManagement -Force -ErrorAction SilentlyContinue
+        }
 
         if ((Get-ExecutionPolicy -Scope LocalMachine) -notmatch "Bypass|RemoteSigned") {
             # because of PS Global Profile loading
