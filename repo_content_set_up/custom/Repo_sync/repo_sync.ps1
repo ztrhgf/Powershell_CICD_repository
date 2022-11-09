@@ -759,12 +759,12 @@ try {
                 $l = $acc.UserName
                 $p = $acc.GetNetworkCredential().Password
                 # instead __REPLACEME__ use URL of your company repository (i.e. something like: dev.azure.com/ztrhgf/WUG_show/_git/WUG_show). Final URL will than be something like this: https://altLogin:altPassword@dev.azure.com/ztrhgf/WUG_show/_git/WUG_show)
-                $result = _startProcess git -argumentList "clone `"https://$l`:$p@__REPLACEME__2`" `"$clonedRepository`"" -outputErr2Std
+                $result = _startProcess git -argumentList "clone `"https://fakeAccount`:$p@__REPLACEME__2`" `"$clonedRepository`"" -outputErr2Std
             }
             if ($result -match "fatal: ") { throw $result }
         } catch {
             Remove-Item $clonedRepository -Recurse -Force -Confirm:$false -ErrorAction SilentlyContinue
-            _emailAndExit -body "Hi,`nthere was an error when cloning repository.`nError was: $_."
+            _emailAndExit -body "Hi,`nthere was an error when cloning repository.`nError was: $_.`n`nIs password of $l account still valid?"
         }
     }
     #endregion PULL NEWEST CONTENT OF CLOUD GIT REPOSITORY LOCALLY
