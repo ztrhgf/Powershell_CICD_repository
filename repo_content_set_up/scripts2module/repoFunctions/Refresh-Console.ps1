@@ -168,6 +168,13 @@
         throw "Doesn't make sense to use omitConsoleRefresh and justConsoleRefresh at the same time"
     }
 
+    # if PERSONAL installation was used to set up this CICD solution, separate MGM server doesn't exist
+    # instead processing of repository data is made on the localhost
+    # Repo_sync sched. task isn't running under SYSTEM, but user itself so his credentials can be used to pull repository data instead of separate repo_puller account
+    $personalInstallation = $false
+    if ($repoSyncServer -eq $env:COMPUTERNAME -and ((Get-ScheduledTask 'Repo_sync' -ErrorAction SilentlyContinue).principal.UserId -in $env:USERNAME, (([System.Security.Principal.WindowsIdentity]::GetCurrent()).User.Value))) {
+        $personalInstallation = $true
+    }
 
     # scriptblock for starting the scheduled task (original or custom one)
     $startScriptBlock = {
@@ -191,7 +198,7 @@
 
 
     #
-    #region update MGM hence repository share data
+    #region update MGM hence repository source data
     if (!$justLocalRefresh -and !$justConsoleRefresh) {
         #region create ScriptBlock defining sched. task to run
         if ($force) {
@@ -212,35 +219,67 @@
             # scriptblock for creation of custom scheduled task
             $prepareScriptBlockTxt = @'
         $taskName = "Repo_sync_custom" + (Get-Random)
-        $Action = New-ScheduledTaskAction -Execute "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument "-ExecutionPolicy ByPass -NoProfile -Command `"&{`"$repo_Sync`"$params}`""
-        $Task = New-ScheduledTask -Action $Action -Settings (New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries)
-        $null = $Task | Register-ScheduledTask -TaskName $taskName -User "SYSTEM" -Force
+        $action = New-ScheduledTaskAction -Execute "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument "-ExecutionPolicy ByPass -NoProfile -Command `"&{`"$repo_Sync`"$params}`""
+        if ((whoami.exe) -like "azuread\*") {
+            # AAD user
+            $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Highest
+        } else {
+            $principal = New-ScheduledTaskPrincipal -UserId SYSTEM -LogonType S4U -RunLevel Highest
+        }
+        $task = New-ScheduledTask -Action $action -Settings (New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries) -Principal $principal
+        $null = Register-ScheduledTask -InputObject $task -TaskName $taskName -Force
 '@
             $prepareScriptBlockTxt = $prepareScriptBlockTxt -replace '\$params', $params -replace '\$repo_Sync', $repo_Sync
 
             $endScriptBlockTxt = 'Unregister-ScheduledTask -TaskName $taskName -Confirm:$false'
         }
 
-        $startScriptBlockTxt = "Write-Host 'Waiting for end of repository share data sync'" + $startScriptBlock.ToString()
+        $startScriptBlockTxt = "Write-Host 'Waiting for end of repository source data sync'" + $startScriptBlock.ToString()
+
+        $makeConsoleSmaller = ""
+        if (!$computerName -and !(([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))) {
+            # not an admin i.e. new console will be launched, so make it small
+            $makeConsoleSmaller = "[console]::WindowWidth = 80; [console]::WindowHeight = 10; [console]::BufferWidth = [console]::WindowWidth"
+        }
 
         # merge scriptblocks together
-        $scriptBlock = [ScriptBlock]::Create($prepareScriptBlockTxt + "`n" + $startScriptBlockTxt + "`n" + $endScriptBlockTxt)
+        $scriptBlock = [ScriptBlock]::Create($makeConsoleSmaller + "`n" + $prepareScriptBlockTxt + "`n" + $startScriptBlockTxt + "`n" + $endScriptBlockTxt)
         Write-Verbose ("`n" + $scriptBlock.ToString())
         #endregion create ScriptBlock defining sched. task to run
 
         #region run sched. task i.e. repo_sync.ps1
         try {
             if ($repoSyncServer -eq $env:COMPUTERNAME) {
-                if ($force) {
-                    # default sched. task will be used i.e. no admin rights needed
-                } else {
-                    # custom sched. task has to be created i.e. admin rights will be needed
-                    if (! ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-                        throw "Run as Administrator or use -force switch"
-                    }
+                # MGM server is this computer
+                $bytes = [System.Text.Encoding]::Unicode.GetBytes($scriptBlock)
+                $encodedCommand = [Convert]::ToBase64String($bytes)
+                $pParams = @{
+                    filePath     = "powershell.exe"
+                    ArgumentList = "-noprofile -encodedCommand $encodedCommand"
+                    Wait         = $true
+                    #ErrorAction  = "Stop"
                 }
 
-                Invoke-Command -ScriptBlock $scriptBlock -ErrorAction stop
+                if (!$force -and !(([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))) {
+                    # when force switch is used, default sched. task will be used i.e. no admin rights needed
+                    # if not, custom Repo_sync sched. task will be created, therefore I need admin rights
+                    $pParams.Verb = "runas"
+                    $pParams.Wait = $true
+                } else {
+                    # admin console ie I have enough permission to start PS_env_set_up sched. task here
+                    $pParams.NoNewWindow = $true
+                }
+
+                try {
+                    Start-Process @pParams
+                } catch {
+                    if ($_ -match "The operation was canceled by the user") {
+                        Write-Warning "Skipping sync of MGM"
+                    } else {
+                        Write-Error $_
+                        Write-Error "`nCheck the log 'C:\Windows\Temp\Repo_sync.ps1.log' for details."
+                    }
+                }
             } else {
                 # MGM server is remote computer
                 Invoke-Command -ComputerName $repoSyncServer -ScriptBlock $scriptBlock -ErrorAction stop
@@ -250,14 +289,18 @@
                 Write-Warning "Access denied when connecting to MGM server ($repoSyncServer), so repository share data won't be updated"
             } else {
                 Write-Error $_
-                throw "`nCheck the log 'C:\Windows\Temp\Repo_sync.ps1.log' on $repoSyncServer for details."
+                throw "`nCheck the log 'C:\Windows\Temp\Repo_sync.ps1.log' on $repoSyncServer for more details."
             }
         }
         #endregion run sched. task i.e.  repo_sync.ps1
     } else {
-        Write-Warning "Skipping sync of repository share data"
+        if ($force) {
+            Write-Warning "Force parameter is ignored, because sync of repository share data is skipped"
+        } else {
+            Write-Warning "Sync of repository share data is skipped"
+        }
     }
-    #endregion update MGM hence repository share data
+    #endregion update MGM hence repository source data
 
 
     #
@@ -303,12 +346,13 @@
 
         $startScriptBlockTxt = 'Write-Host "Waiting for end of local client data sync on $env:COMPUTERNAME"' + $startScriptBlock.ToString()
 
-        # merge scriptblocks together
         $makeConsoleSmaller = ""
         if (!$computerName -and !(([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))) {
             # not an admin i.e. new console will be launched, so make it small
             $makeConsoleSmaller = "[console]::WindowWidth = 80; [console]::WindowHeight = 10; [console]::BufferWidth = [console]::WindowWidth"
         }
+
+        # merge scriptblocks together
         $scriptBlock = [ScriptBlock]::Create($makeConsoleSmaller + "`n" + $prepareScriptBlockTxt + "`n" + $startScriptBlockTxt + "`n" + $endScriptBlockTxt)
         Write-Verbose ("`n" + $scriptBlock.ToString())
         #endregion create ScriptBlock defining sched. task to run
@@ -332,7 +376,7 @@
                     $pParams.Verb = "runas"
                     $pParams.Wait = $true
                 } else {
-                    # admin console i.e. I have enough permission to start PS_env_set_up sched. task here
+                    # admin console ie I have enough permission to start PS_env_set_up sched. task here
                     $pParams.NoNewWindow = $true
                 }
 

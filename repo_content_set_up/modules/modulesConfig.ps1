@@ -50,8 +50,4 @@ Both modules from modules and scripts2module (automatically generated) folders c
 #>
 
 $modulesConfig = @(
-    [PSCustomObject]@{
-        folderName   = "adminFunctions"
-        computerName = $_computerWithProfile
-    }
 )
