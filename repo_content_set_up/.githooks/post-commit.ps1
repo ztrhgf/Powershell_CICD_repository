@@ -60,7 +60,8 @@ try {
     #
     # push commit to cloud GIT repository
     "- push commit to cloud repository"
-    $repoStatus = _startProcess git "push origin master"
+    $defaultBranch = ((git symbolic-ref refs/remotes/origin/HEAD) -split "/")[-1]
+    $repoStatus = _startProcess git "push origin $defaultBranch"
     # check that push was succesfull
     if ($repoStatus -match "\[rejected\]") {
         _ErrorAndExit "There was an error when trying to push commit to cloud repository:`n$repoStatus"
