@@ -202,6 +202,13 @@ Begin {
         }
     }
 
+    function _unsetVariable {
+        # function defines variable and fills it with value find in ini file or entered by the user
+        param ([string] $variable)
+
+        $setupVariable.$variable = $null
+    }
+
 
     function _setVariableValue {
         # function defines variable and fills it with given value
@@ -1271,7 +1278,7 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
                 1 = $repositoryShare
                 2 = _setVariable repositoryURL "Cloning URL of your own GIT repository. Will be used on MGM server" -passThru
                 3 = $MGMServer
-                4 = _setVariable computerWithProfile "name of computer(s) (without ending $, divided by comma) that should get:`n       - global Powershell profile (shows number of commits this console is behind in Title etc)`n       - adminFunctions module (Refresh-Console function etc)`n" -passThru
+                4 = _setVariable computerWithProfile "name of computer(s) (without ending $, divided by comma) that should get:`n       - global Powershell profile (shows number of commits this console is behind in Title etc)`n" -passThru
                 5 = _setVariable smtpServer "IP or hostname of your SMTP server. Will be used for sending error notifications (recipient will be specified later)" -optional -passThru
                 6 = _setVariable adminEmail "recipient(s) email address (divided by comma), that should receive error notifications. Use format it@contoso.com" -optional -passThru
                 7 = _setVariable 'from' "sender email address, that should be used for sending error notifications. Use format robot@contoso.com" -optional -passThru
@@ -1284,10 +1291,10 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
                 1 = $repositoryShare
                 2 = _setVariable repositoryURL "Cloning URL of your own GIT repository." -passThru
                 3 = $MGMServer
-                4 = "####" # will be replaced with real computer name, if user decides to have synchronized PS profile
+                4 = "##DONOTSYNCPROFILEANYWHERE##" # will be replaced with real computer name, if user decides to have synchronized PS profile
             }
 
-            _setVariable syncPSProfile "Do you want to synchronize Global PowerShell Profile (shows number of commits this console is behind in Title etc) and adminFunctions module (contains Refresh-Console function etc) to this computer?" -YNQuestion
+            _setVariable syncPSProfile "Do you want to synchronize Global PowerShell Profile (shows number of commits this console is behind in Title etc) to this computer?" -YNQuestion
 
             if ($syncPSProfile -eq "Y") {
                 $replacemeVariable.4 = $env:COMPUTERNAME
@@ -1297,7 +1304,7 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
 
             $repositoryURL = $remoteRepository
             $computerWithProfile = $env:COMPUTERNAME
-            Write-Warning "So this computer will get:`n - global Powershell profile (shows number of commits this console is behind in Title etc)`n - adminFunctions module (Refresh-Console function etc)`n"
+            Write-Warning "So this computer will get:`n - global Powershell profile (shows number of commits this console is behind in Title etc)`n"
 
             $replacemeVariable = @{
                 1 = $repositoryShare
@@ -1377,8 +1384,10 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
         if (!$testInstallation) {
             _setVariable userRepository "path to ROOT of your locally cloned repository '$repositoryURL'"
 
-            if (!(Test-Path (Join-Path $userRepository ".git") -ErrorAction SilentlyContinue)) {
-                throw "$userRepository isn't cloned GIT repository (.git folder is missing)"
+            while (!(Test-Path (Join-Path $userRepository ".git") -ErrorAction SilentlyContinue)) {
+                Write-Warning "'$userRepository' isn't cloned GIT repository (hidden '.git' folder is missing)"
+                _unsetVariable userRepository
+                _setVariable userRepository "path to ROOT of your locally cloned repository '$repositoryURL'"
             }
         } else {
             $userRepository = "$env:SystemDrive\myCompanyRepository"
@@ -1424,7 +1433,7 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
         } else {
             $userDomain = "$env:COMPUTERNAME.com"
         }
-        Write-Host "- Configuring repository '$userRepository' & commit and push the changes" -ForegroundColor Green
+        Write-Host "- Configuring repository '$userRepository'" -ForegroundColor Green
         "   - activating GIT Hooks, creating symlink for PowerShell snippets, commiting&pushing changes, etc"
 
         if ($testInstallation -or (!$noEnvModification -and !(_skip))) {
@@ -1590,7 +1599,18 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
                     $Repo_syncXMLContent.Task.Principals.Principal.UserId = ([System.Security.Principal.WindowsIdentity]::GetCurrent()).User.Value
                     $LogonTypeChild = $Repo_syncXMLContent.CreateElement('LogonType', 'http://schemas.microsoft.com/windows/2004/02/mit/task')
                     $null = $Repo_syncXMLContent.Task.Principals.Principal.AppendChild($LogonTypeChild)
-                    $Repo_syncXMLContent.Task.Principals.Principal.LogonType = 'S4U'
+                    if ((whoami.exe) -like "azuread\*") {
+                        # AAD user
+                        # sched. task run under AAD user cannot be set with 'run whether user is logged on or not' option (which I use)
+                        # instead 'run only when user is logged on' has to be used, which is interactive, therefore ps1 script is being run via vbs script to make it hidden
+                        Write-Warning "You are AzureAD user, synchronization will be run only when you will be logged on"
+                        $Repo_syncXMLContent.Task.Actions.Exec.Command = 'wscript.exe'
+                        $Repo_syncXMLContent.Task.Actions.Exec.Arguments = "$MGMRepoSync\run_hidden.vbs $MGMRepoSync\Repo_Sync.ps1 -force"
+                        $Repo_syncXMLContent.Task.Principals.Principal.LogonType = 'InteractiveToken'
+                    } else {
+                        # not an AAD user
+                        $Repo_syncXMLContent.Task.Principals.Principal.LogonType = 'S4U'
+                    }
                     $Repo_syncXMLContent.save($Repo_syncXML)
                 }
 
@@ -1690,14 +1710,14 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
             #region PS_env_set_up scheduled task properties preparation
             #region customize parameters of PS_env_set_up.ps1 script that is being run in PS_env_set_up scheduled task
             if ($personalInstallation) {
-                "1 - All"
-                "2 - PowerShell modules"
-                "3 - Custom content"
+                "1 - All (PS profile, modules, custom folders) - RECOMMENDED"
+                "2 - Just PowerShell modules"
+                "3 - Just Custom folders"
                 ""
 
                 $whatToSync = ""
                 while (!($whatToSync -match "^(1|2|3)$")) {
-                    [string[]] $whatToSync = Read-Host "Choose what do you want to have synchronyzing from your GIT repository to this computer"
+                    [string[]] $whatToSync = Read-Host "Choose what you want to allow to be synchronized to this computer"
                 }
 
                 if ($whatToSync -ne 1) {
