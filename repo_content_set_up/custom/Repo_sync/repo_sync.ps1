@@ -724,12 +724,15 @@ try {
         Set-Location $clonedRepository
         try {
             "$(Get-Date -Format HH:mm:ss) - Pulling newest repository data to $clonedRepository"
+            # to avoid error: fatal: detected dubious ownership in repository
+            $null = _startProcess git -argumentList "config --global --add safe.directory $($clonedRepository -replace "\\","/")"
             # download the latest data from GIT repository without trying to merge or rebase anything
             $result = _startProcess git -argumentList "fetch --all" -outputErr2Std
             if ($result -match "fatal: ") { throw $result }
             # resets the master branch to what you just fetched. The --hard option changes all the files in your working tree to match the files in origin/master
             "$(Get-Date -Format HH:mm:ss) - Discarding local changes"
-            $null = _startProcess git -argumentList "reset --hard"
+            $defaultBranch = ((git symbolic-ref refs/remotes/origin/HEAD) -split "/")[-1]
+            $null = _startProcess git -argumentList "reset --hard origin/$defaultBranch"
             # delete untracked files and folders (generated modules etc)
             _startProcess git -argumentList "clean -fd"
 
