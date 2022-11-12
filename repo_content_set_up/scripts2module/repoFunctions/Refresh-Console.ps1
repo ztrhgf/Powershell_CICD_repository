@@ -219,17 +219,19 @@
             # scriptblock for creation of custom scheduled task
             $prepareScriptBlockTxt = @'
         $taskName = "Repo_sync_custom" + (Get-Random)
-        $action = New-ScheduledTaskAction -Execute "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument "-ExecutionPolicy ByPass -NoProfile -Command `"&{`"$repo_Sync`"$params}`""
         if ((whoami.exe) -like "azuread\*") {
             # AAD user
+            $action = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "$repo_SyncFolder\run_hidden.vbs $repo_Sync $params"
             $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Highest
         } else {
+            $action = New-ScheduledTaskAction -Execute "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -Argument "-ExecutionPolicy ByPass -NoProfile -Command `"&{`"$repo_Sync`"$params}`""
             $principal = New-ScheduledTaskPrincipal -UserId SYSTEM -LogonType S4U -RunLevel Highest
         }
         $task = New-ScheduledTask -Action $action -Settings (New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries) -Principal $principal
         $null = Register-ScheduledTask -InputObject $task -TaskName $taskName -Force
 '@
-            $prepareScriptBlockTxt = $prepareScriptBlockTxt -replace '\$params', $params -replace '\$repo_Sync', $repo_Sync
+            $repo_SyncFolder = Split-Path $repo_Sync -Parent
+            $prepareScriptBlockTxt = $prepareScriptBlockTxt -replace '\$params', $params -replace '\$repo_SyncFolder', $repo_SyncFolder -replace '\$repo_Sync', $repo_Sync
 
             $endScriptBlockTxt = 'Unregister-ScheduledTask -TaskName $taskName -Confirm:$false'
         }
