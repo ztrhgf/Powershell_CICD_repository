@@ -724,55 +724,27 @@ Process {
 
     Clear-Host
 
-    if (!$noEnvModification -and !$testInstallation) {
-        if ($personalInstallation) {
-            @"
-####################################
-#   BEFORE YOU CONTINUE
-####################################
-
-- Create cloud or locally hosted GIT !private! repository (tested with Azure DevOps but probably will work also with GitHub etc).
-   - Clone this repository locally (git clone command).
-
-   - NOTE:
-        - More details can be found at https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20INSTALL.md
-"@
-        } else {
-            @"
-####################################
-#   BEFORE YOU CONTINUE
-####################################
-
-- Create cloud or locally hosted GIT !private! repository (tested with Azure DevOps but probably will work also with GitHub etc).
-   - Create READ only account in that repository (repo_puller).
-       - Create credentials for this account, that can be used in unattended way (i.e. alternate credentials in Azure DevOps).
-   - Clone this repository locally (git clone command).
-
-   - NOTE:
-        - More details can be found at https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20INSTALL.md
-"@
-        }
-
-        _pressKeyToContinue
-    }
-
-    if (!$testInstallation) {
-        Clear-Host
-    } else {
-        ""
-    }
-
     if ($personalInstallation -or $testInstallation) {
+        @"
+####################################
+#   INSTALLING REQUIREMENTS
+####################################
+"@
         "   - installing 'GIT'"
         _installGIT
 
         "   - installing 'VSC'"
         _installVSC
 
-        Install-PackageProvider -Name nuget -Force -ForceBootstrap -Scope allusers | Out-Null
+        "   - installing 'Nuget'"
+        if (Get-PackageProvider -Name nuget -ListAvailable -ErrorAction SilentlyContinue | ? Version -GT '2.8.5') {
+            "      - already installed"
+        } else {
+            Install-PackageProvider -Name nuget -Force -ForceBootstrap -Scope allusers | Out-Null
+        }
 
         # solves issue https://github.com/PowerShell/vscode-powershell/issues/2824
-        "   - updating 'PackageManagement' PS module"
+        "   - installing 'PackageManagement' PS module"
         if (Get-Module PackageManagement -ListAvailable | ? version -GT ([version]'1.4.8')) {
             "      - already installed"
         } else {
@@ -793,6 +765,44 @@ Process {
 
     if (!$testInstallation) {
         _pressKeyToContinue
+        Clear-Host
+    } else {
+        ""
+    }
+
+    if (!$noEnvModification -and !$testInstallation) {
+        if ($personalInstallation) {
+            @"
+####################################
+#   BEFORE YOU CONTINUE
+####################################
+
+- Create cloud or locally hosted GIT !private! repository (tested with Azure DevOps but probably will work also with GitHub etc).
+- Clone this repository locally (git clone command).
+
+- NOTE:
+    - More details can be found at https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20INSTALL.md
+"@
+        } else {
+            @"
+####################################
+#   BEFORE YOU CONTINUE
+####################################
+
+- Create cloud or locally hosted GIT !private! repository (tested with Azure DevOps but probably will work also with GitHub etc).
+- Create READ only account in that repository (repo_puller).
+    - Create credentials for this account, that can be used in unattended way (i.e. alternate credentials in Azure DevOps).
+- Clone this repository locally (git clone command).
+
+- NOTE:
+    - More details can be found at https://github.com/ztrhgf/Powershell_CICD_repository/blob/master/1.%20HOW%20TO%20INSTALL.md
+"@
+        }
+
+        _pressKeyToContinue
+    }
+
+    if (!$testInstallation) {
         Clear-Host
     } else {
         ""
@@ -1409,7 +1419,6 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
         Write-Host "- Copying customized repository data ($repo_content_set_up) to your own repository ($userRepository)" -ForegroundColor Green
 
         if ($testInstallation -or (!$noEnvModification -and !(_skip))) {
-
             $result = _copyFolder $repo_content_set_up $userRepository
             if ($err = $result.errMsg) {
                 throw "Copy failed:`n$err"
