@@ -259,7 +259,7 @@
                     filePath     = "powershell.exe"
                     ArgumentList = "-noprofile -encodedCommand $encodedCommand"
                     Wait         = $true
-                    #ErrorAction  = "Stop"
+                    ErrorAction  = "Stop"
                 }
 
                 if (!$force -and !(([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator))) {
