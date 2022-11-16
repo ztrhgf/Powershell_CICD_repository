@@ -1300,7 +1300,7 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
             $replacemeVariable = @{
                 1 = $repositoryShare
                 2 = _setVariable repositoryURL "Cloning URL of your own GIT repository." -passThru
-                3 = $MGMServer
+                3 = '"$env:COMPUTERNAME"' # there can be more than one computer that will behave like MGM server, therefore sync on them all
                 4 = "##DONOTSYNCPROFILEANYWHERE##" # will be replaced with real computer name, if user decides to have synchronized PS profile
             }
 
