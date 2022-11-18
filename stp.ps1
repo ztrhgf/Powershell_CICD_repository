@@ -34,7 +34,7 @@ Begin {
     $Host.UI.RawUI.WindowTitle = "Installer of PowerShell CI/CD solution"
 
     $transcript = Join-Path $env:USERPROFILE ((Split-Path $PSCommandPath -Leaf) + ".log")
-    Start-Transcript $transcript -Force
+    $null = Start-Transcript $transcript -Force
 
     $ErrorActionPreference = "Stop"
 
@@ -1869,12 +1869,13 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
             _startSchedTask $taskName
 
             "      - checking, that the task ends up succesfully"
-            while (($result = ((schtasks /query /tn "$taskName" /v /fo csv /nh) -split ",")[6]) -eq '"267009"') {
+            while (($result = ((schtasks /query /tn "$taskName" /v /fo csv /nh) -split ",")[6] -replace '"') -eq '267009') {
                 # task is running
                 Start-Sleep 1
             }
-            if ($result -ne '"0"') {
-                Write-Error "Task '$taskName' ends up with error ($($result -replace '"')). Check C:\Windows\Temp\PS_env_set_up.ps1.log on $env:COMPUTERNAME for more information"
+            if ($result -ne '0' -and $result -ne '10000') {
+                # custom error code 10000 means something wasn't synchronized (because in use etc), but for installation purposes it can be ignored
+                Write-Error "Task '$taskName' ends up with error $result. Check C:\Windows\Temp\PS_env_set_up.ps1.log on $env:COMPUTERNAME for more information"
             }
         }
         #endregion create GPO that creates PS_env_set_up scheduled task or just the sched. task
@@ -1980,7 +1981,7 @@ ENJOY :)
     } finally {
         Set-Location $PSScriptRoot
 
-        Stop-Transcript -ErrorAction SilentlyContinue
+        $null = Stop-Transcript -ErrorAction SilentlyContinue
 
         try {
             Remove-PSSession -Session $repositoryHostSession

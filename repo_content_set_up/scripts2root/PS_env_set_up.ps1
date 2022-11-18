@@ -89,9 +89,31 @@ if ($synchronize.count -ne 3 -or $moduleToSync -or $customToSync -or $omitDeleti
 
 $hostname = $env:COMPUTERNAME
 
+# modules etc that wasn't synced successfully
+$failedSync = @()
+
 "$(Get-Date -Format HH:mm:ss) - START synchronizing data from $repository$customized"
 
 #region helper functions
+function _isFilelocked {
+    param ([string] $file)
+
+    if ([System.IO.File]::Exists($file)) {
+        try {
+            $fileStream = [System.IO.File]::Open($file, 'Open', 'Write')
+
+            $fileStream.Close()
+            $fileStream.Dispose()
+
+            return $False
+        } catch [System.UnauthorizedAccessException] {
+            return 'AccessDenied'
+        } catch {
+            return $True
+        }
+    }
+}
+
 function _flattenArray {
     # flattens input in case, that string and arrays are entered at the same time
     param (
@@ -241,9 +263,9 @@ function _copyFolder {
 
     Process {
         if ($mirror) {
-            $result = Robocopy.exe "$source" "$destination" /MIR /E /NFL /NDL /NJH /R:4 /W:5 /XD "$excludeFolder"
+            $result = Robocopy.exe "$source" "$destination" /MIR /E /NFL /NDL /NJH /R:0 /W:0 /XD "$excludeFolder"
         } else {
-            $result = Robocopy.exe "$source" "$destination" /E /NFL /NDL /NJH /R:4 /W:5 /XD "$excludeFolder"
+            $result = Robocopy.exe "$source" "$destination" /E /NFL /NDL /NJH /R:0 /W:0 /XD "$excludeFolder"
         }
 
         $copied = 0
@@ -251,6 +273,8 @@ function _copyFolder {
         $duration = ""
         $deleted = @()
         $errMsg = @()
+
+        $i = 0
 
         $result | ForEach-Object {
             if ($_ -match "\s+Dirs\s+:") {
@@ -273,10 +297,22 @@ function _copyFolder {
             if ($_ -match "^ERROR: ") {
                 $errMsg += ($_ -replace "^ERROR:\s+")
             }
-            # captures errors like: 2020/04/27 09:01:27 ERROR 2 (0x00000002) Accessing Source Directory C:\temp
+            # errors like:
+            #  2022/11/18 07:58:34 ERROR 5 (0x00000005) Copying File C:\temp\test.rtf
+            #  Access is denied.
             if ($match = ([regex]"^[0-9 /]+ [0-9:]+ ERROR \d+ \([0-9x]+\) (.+)").Match($_).captures.groups) {
-                $errMsg += $match[1].value
+                $errorText = $match[1].value -replace "Copying File "
+                $errorDetails = $result[($i + 1)]
+
+                if ($errorDetails -like "*The process cannot access the file because it is being used by another process.*") {
+                    # make error msg shorter
+                    $errMsg += "$errorText - file is in use"
+                } else {
+                    $errMsg += "$errorText - $errorDetails"
+                }
             }
+
+            ++$i
         }
 
         return [PSCustomObject]@{
@@ -380,29 +416,51 @@ if ($synchronize -contains "module") {
     foreach ($module in (Get-ChildItem $moduleSrcFolder -Directory)) {
         $moduleName = $module.Name
         if ($moduleToSync -and $moduleName -notin $moduleToSync) {
-            "   - skipping module $moduleName (not in moduleToSync)"
+            "   - skipping module $moduleName (not in moduleToSync argument)"
             continue
         }
 
         if ($moduleName -notin $customModules -or $moduleName -in $thisPCModules) {
             # module should be on this computer
             $moduleDstPath = Join-Path $moduleDstFolder $moduleName
+
+            # if some dll file in destination folder is locked, copy cannot be successful, skip it
+            # this often happens for dll(s), because VSC loads them automatically
+            # it seems that robocopy if unable to access file, thinks it was changed hence tries to update it (in mirror mode)
+            if (Test-Path $moduleDstPath -ea SilentlyContinue) {
+                $lockedFile = $null
+
+                foreach ($dll in (Get-ChildItem $moduleDstPath -Recurse -Filter "*.dll")) {
+                    if (_isFilelocked $dll.FullName) {
+                        $lockedFile = $dll.name
+                        break
+                    }
+                }
+
+                if ($lockedFile) {
+                    $failedSync += "module $moduleName"
+                    "   - skipping module $moduleName (file '$lockedFile' is locked)"
+                    continue
+                }
+            }
             try {
                 "   - copying module $moduleName (if necessary)"
 
                 $result = _copyFolder $module.FullName $moduleDstPath -mirror
 
                 if ($result.failures) {
+                    $failedSync += "module $moduleName"
                     # just warn about error, it is likely, that it will end successfully next time (module can be in use etc)
-                    "       - there was an error when copying $($module.FullName)`n$($result.errMsg)"
+                    "       - there was an error when copying $($module.FullName)`n        $($result.errMsg)"
                 }
 
                 if ($result.copied) {
-                    "       - change detected, setting NTFS rights"
+                    "       - change detected (copied $($result.copied) files), setting NTFS rights"
                     _setPermissions $moduleDstPath -readUser $readUser -writeUser $writeUser
                 }
             } catch {
-                "       - there was an error when copying $moduleDstPath, error was`n$_"
+                $failedSync += "module $moduleName"
+                "       - there was an error when copying $moduleDstPath, error was`n        $_"
             }
         } else {
             # module shouldn't be on this computer
@@ -515,7 +573,7 @@ if ($synchronize -contains "custom") {
     foreach ($custom in $customConfig) {
         if ($hostname -in (_flattenArray $custom.computerName)) {
             if ($customToSync -and $customToSync -notcontains $custom.folderName) {
-                " - skipping custom folder {0} (not in customToSync)" -f $custom.folderName
+                " - skipping custom folder {0} (not in customToSync argument)" -f $custom.folderName
                 continue
             }
 
@@ -777,7 +835,7 @@ if ($synchronize -contains "custom") {
 
 
 #
-# delete PowerShell modules that shouldn't be on the client
+# delete PowerShell modules that shouldn't be on this computer
 # this section is after Custom, so I don't have to dot source customConfig.ps1 twice and to have $thisPCCustToModules prepared
 if (!$omitDeletion -and $synchronize -contains "module" -and ($synchronize -contains "custom" -and !$customToSync)) {
     # Custom section has to be processed, because of getting $thisPCCustToModules and at the same time $customToSync cannot be defined, because it could modify it
@@ -801,4 +859,14 @@ if (!$omitDeletion -and $synchronize -contains "module" -and ($synchronize -cont
     }
 }
 
+if ($failedSync) {
+    "`n`n!!!WARNING!!!`nSome content wasn't synchronized:`n$($failedSync | % {"`t- $_`n"})"
+}
+
 "$(Get-Date -Format HH:mm:ss) - END"
+
+if ($failedSync) {
+    # exit with custom code (10000), so CICD repository installation script and refresh function know this isn't serious
+    $host.SetShouldExit(10000)
+    exit
+}
