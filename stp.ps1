@@ -641,10 +641,9 @@ Process {
             - NOTE: Linking GPO has to be done manually.
     - NOTE: Every step has to be explicitly confirmed.
 
-3) Personal installation
+3) PERSONAL installation
     - PURPOSE:
-        - Choose this option, if you want to leverage benefits of CI/CD for your personal PowerShell content.
-        - TIP: Can also be used to share one GIT repository across multiple colleagues even without Active Directory.
+        - Choose this option, if you want to leverage benefits of CI/CD for your personal PowerShell content or to share one GIT repository across multiple colleagues even without Active Directory.
     - REQUIREMENTS:
         - Local Admin rights
         - Existing GIT repository
