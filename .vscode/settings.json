@@ -4,7 +4,6 @@
     // Misc
     //============================
     "breadcrumbs.enabled": true,
-    "telemetry.enableCrashReporter": false,
     //============================
     // Files config
     //============================
@@ -19,7 +18,11 @@
     "files.encoding": "utf8bom",
     // for PS script UTF8 with BOM is best option (en dash and similar problematic chars don't make problems) more at https://docs.microsoft.com/cs-cz/powershell/scripting/components/vscode/understanding-file-encoding?view=powershell-6
     "[powershell]": {
+        "files.autoGuessEncoding": true,
         "files.encoding": "utf8bom",
+        "editor.wordSeparators": "`~!@#%^&*()-=+[{]}\\|;:'\",.<>/?",
+        // to have working intellisense even for big repository/workspace
+        "editor.codeLens": false
     },
     //============================
     // GIT
@@ -44,16 +47,17 @@
     "todo-tree.highlights.customHighlight": {
         "TODO": {
             "icon": "check",
-            "background": "yellow",
+            "background": "#FFFF00",
             "type": "whole-line",
-            "opacity": 20
+            "opacity": 20,
+            "foreground": "#008000"
         },
         "FIXME": {
-            "foreground": "yellow",
-            "background": "red",
+            "foreground": "#FFFF00",
+            "background": "#FF0000",
             "type": "whole-line",
             "opacity": 70,
-            "iconColour": "red"
+            "iconColour": "#FF0000"
         }
     },
     // Error Lens
@@ -71,11 +75,13 @@
         "cmdletbinding",
         "endregion",
         "env",
-        "isnot",
-        "notin",
-        "userdomain",
         "hashtable",
-        "notmatch"
+        "isnot",
+        "notcontains",
+        "notin",
+        "notmatch",
+        "silentlycontinue",
+        "userdomain"
     ],
     // Gitlens
     "gitlens.advanced.similarityThreshold": 90,
@@ -114,8 +120,9 @@
     //============================
     // Editor
     //============================
-    // BUGFIX nez fixnou syntax colouring
-    "editor.semanticHighlighting.enabled": false,
+    "editor.guides.bracketPairs": "active",
+    "editor.bracketPairColorization.enabled": false,
+    "editor.minimap.enabled": false,
     "editor.wordSeparators": "`~!@#%^&*()-=+[{]}\\|;:'\",.<>/?",
     "editor.tabSize": 4,
     //"editor.minimap.enabled": false,
@@ -165,7 +172,7 @@
     // "powershell.codeFormatting.autoCorrectAliases": true,
     "powershell.codeFormatting.pipelineIndentationStyle": "IncreaseIndentationForFirstPipeline",
     "powershell.codeFormatting.trimWhitespaceAroundPipe": true,
-    // BUG, pokud se povoli, tak zacne nahodne mazat kusy textu!
+    // BUG if enabled, random strings get deleted!
     // "powershell.codeFormatting.whitespaceBetweenParameters": true,
     "powershell.integratedConsole.focusConsoleOnExecute": true,
     "powershell.integratedConsole.showOnStartup": false,
