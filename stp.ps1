@@ -48,6 +48,8 @@ Begin {
     # name of GPO that will be used for connecting computers to this solution
     $GPOname = 'PS_env_set_up'
 
+    $userRepositoryWasntEmpty = $false
+
     # hardcoded PATHs for TEST installation
     $remoteRepository = "$env:SystemDrive\myCompanyRepository_remote"
     #endregion Variables
@@ -1398,6 +1400,9 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
                 _unsetVariable userRepository
                 _setVariable userRepository "path to ROOT of your locally cloned repository '$repositoryURL'"
             }
+
+            # make a note whether cloned repository is brand new or was already set up
+            $userRepositoryWasntEmpty = Test-Path "$userRepository\Custom\Repo_Sync\Repo_Sync.ps1" -ErrorAction SilentlyContinue
         } else {
             $userRepository = "$env:SystemDrive\myCompanyRepository"
 
@@ -1442,7 +1447,7 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
             $userDomain = "$env:COMPUTERNAME.com"
         }
         Write-Host "- Configuring repository '$userRepository'" -ForegroundColor Green
-        "   - activating GIT Hooks, creating symlink for PowerShell snippets, commiting&pushing changes, etc"
+        "   - activating GIT Hooks, creating symlink for PowerShell snippets, commiting&pushing changes (if new repository), etc"
 
         if ($testInstallation -or (!$noEnvModification -and !(_skip))) {
             $currPath = Get-Location
@@ -1475,9 +1480,16 @@ Your input will be stored to '$iniFile'. So next time you start this script, its
 
             # commit without using hooks, to avoid possible problem with checks (because of wrong encoding, missing PSScriptAnalyzer etc), that could stop it
             "   - commiting & pushing changes to repository $repositoryURL"
-            $null = git add .
-            $null = _startProcess git "commit --no-verify -m initial" -outputErr2Std -dontWait
-            $null = _startProcess git "push --no-verify" -outputErr2Std
+            if ($testInstallation -or !$userRepositoryWasntEmpty) {
+                # user repo was empty before my customized content was copied to it or this is TEST installation
+                # it is safe to automatically do commit&push
+                $null = git add .
+                $null = _startProcess git "commit --no-verify -m initial" -outputErr2Std -dontWait
+                $null = _startProcess git "push --no-verify" -outputErr2Std
+            } else {
+                Write-Warning "Skipped.`n`nYour repository wasn't empty before customized content was copied a.k.a. some of your content could be lost. Check manually changed files (in VSC 'Source Control' tab) and commit&push just safe changes before continue!"
+                _pressKeyToContinue
+            }
 
             "   - activating GIT hooks for automation of checks, git push etc"
             $null = _startProcess git 'config core.hooksPath ".\.githooks"'
