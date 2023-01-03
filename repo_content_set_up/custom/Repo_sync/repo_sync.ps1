@@ -330,7 +330,7 @@ function _exportScripts2Module {
                         param([System.Management.Automation.Language.Ast] $ast)
 
                         $ast -is [System.Management.Automation.Language.AttributeAst]
-                    }, $true) | ? { $_.parent.extent.text -match '^param' } | Select-Object -ExpandProperty PositionalArguments | Select-Object -ExpandProperty Value -ErrorAction SilentlyContinue # filter out aliases for function parameters
+                    }, $true) | ? { $_.typeName.name -eq "Alias" -and $_.parent.extent.text -match '^param' } | Select-Object -ExpandProperty PositionalArguments | Select-Object -ExpandProperty Value -ErrorAction SilentlyContinue # filter out aliases for function parameters
 
                 if ($innerAliasDefinition) {
                     $innerAliasDefinition | % {
