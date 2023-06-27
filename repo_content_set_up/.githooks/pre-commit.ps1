@@ -212,7 +212,7 @@ function _getFunctionAST {
             $AST -is [System.Management.Automation.Language.FunctionDefinitionAst] -and
             # Class methods have a FunctionDefinitionAst under them as well, but we don't want them.
             ($PSVersionTable.PSVersion.Major -lt 5 -or
-                $AST.Parent -isnot [System.Management.Automation.Language.FunctionMemberAst])
+            $AST.Parent -isnot [System.Management.Automation.Language.FunctionMemberAst])
         }, $false)
 }
 #endregion helper functions
@@ -716,6 +716,7 @@ try {
                 $scriptUnixPath = $script -replace ([regex]::Escape((Get-Location))) -replace "\\", "/" -replace "^/"
                 $lastCommitContent = _startProcess git "show HEAD:$scriptUnixPath"
                 $prevParameter = ""
+                $prevAlias = ""
                 if (!$lastCommitContent -or $lastCommitContent -match "^fatal: ") {
                     Write-Warning "Previous version of $scriptUnixPath cannot be found (to check modified parameters/aliases)."
                 } else {
