@@ -117,7 +117,9 @@ function _isFilelocked {
 function _flattenArray {
     # flattens input in case, that string and arrays are entered at the same time
     param (
-        [array] $inputArray
+        [array] $inputArray,
+
+        [switch] $fqdnToHostname
     )
 
     foreach ($item in $inputArray) {
@@ -127,7 +129,12 @@ function _flattenArray {
                 _flattenArray $item
             } else {
                 # output non-arrays
-                $item
+                if ($fqdnToHostname -and $item -like "*.*") {
+                    # return just hostname part
+                    ($item -split "\.")[0]
+                } else {
+                    $item
+                }
             }
         }
     }
@@ -405,7 +412,7 @@ if ($synchronize -contains "module") {
     $modulesConfig | ForEach-Object {
         $customModules += $_.folderName
 
-        if ($hostname -in (_flattenArray $_.computerName)) {
+        if ($hostname -in (_flattenArray $_.computerName -fqdnToHostname)) {
             $thisPCModules += $_.folderName
         }
     }
@@ -479,7 +486,7 @@ if ($synchronize -contains "module") {
 $commitHistorySrc = Join-Path $repository "commitHistory"
 # copy file with commit history locally
 # so prompt function in profile.ps1 where this file is used to check how much is that console obsolete, will be as fast as possible
-if ((Test-Path $commitHistorySrc -ea SilentlyContinue) -and ($env:COMPUTERNAME -in (_flattenArray $_computerWithProfile))) {
+if ((Test-Path $commitHistorySrc -ea SilentlyContinue) -and ($env:COMPUTERNAME -in (_flattenArray $_computerWithProfile -fqdnToHostname))) {
     [Void][System.IO.Directory]::CreateDirectory($customDstFolder)
     Copy-Item $commitHistorySrc $customDstFolder -Force -Confirm:$false
 }
@@ -500,7 +507,7 @@ if ($synchronize -contains "profile") {
 
     if (Test-Path $profileSrc -ea SilentlyContinue) {
         # DFS share contains profile.ps1
-        if ($env:COMPUTERNAME -in (_flattenArray $_computerWithProfile)) {
+        if ($env:COMPUTERNAME -in (_flattenArray $_computerWithProfile -fqdnToHostname)) {
             # profile.ps1 should be copied to this computer
             if (Test-Path $profileDst -ea SilentlyContinue) {
                 # profile.ps1 already exist on this computer, check whether it differs
@@ -531,7 +538,7 @@ if ($synchronize -contains "profile") {
         }
     } else {
         # in DFS share there is not profile.ps1
-        if ((Test-Path $profileDst -ea SilentlyContinue) -and ($env:COMPUTERNAME -in (_flattenArray $_computerWithProfile)) -and $isOurProfile) {
+        if ((Test-Path $profileDst -ea SilentlyContinue) -and ($env:COMPUTERNAME -in (_flattenArray $_computerWithProfile -fqdnToHostname)) -and $isOurProfile) {
             # profile.ps1 is on this computer and was copied by this script == delete it
             " - deleting $profileDst"
             Remove-Item $profileDst -Force -Confirm:$false
@@ -571,7 +578,7 @@ if ($synchronize -contains "custom") {
     $thisPCCustSchedTask = @()
 
     foreach ($custom in $customConfig) {
-        if ($hostname -in (_flattenArray $custom.computerName)) {
+        if ($hostname -in (_flattenArray $custom.computerName -fqdnToHostname)) {
             if ($customToSync -and $customToSync -notcontains $custom.folderName) {
                 " - skipping custom folder {0} (not in customToSync argument)" -f $custom.folderName
                 continue

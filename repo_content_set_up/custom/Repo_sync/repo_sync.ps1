@@ -581,7 +581,9 @@ Function _copyFolder {
 function _flattenArray {
     # flattens input in case, that string and arrays are entered at the same time
     param (
-        [array] $inputArray
+        [array] $inputArray,
+
+        [switch] $fqdnToHostname
     )
 
     foreach ($item in $inputArray) {
@@ -591,7 +593,12 @@ function _flattenArray {
                 _flattenArray $item
             } else {
                 # output non-arrays
-                $item
+                if ($fqdnToHostname -and $item -like "*.*") {
+                    # return just hostname part
+                    ($item -split "\.")[0]
+                } else {
+                    $item
+                }
             }
         }
     }
@@ -732,7 +739,8 @@ try {
             # resets the master branch to what you just fetched. The --hard option changes all the files in your working tree to match the files in origin/master
             "$(Get-Date -Format HH:mm:ss) - Discarding local changes"
             $defaultBranch = ((git symbolic-ref refs/remotes/origin/HEAD) -split "/")[-1]
-            $null = _startProcess git -argumentList "reset --hard origin/$defaultBranch"
+            $result = _startProcess git -argumentList "reset --hard origin/$defaultBranch" -outputErr2Std
+            if ($result -match "fatal: ") { throw $result }
             # delete untracked files and folders (generated modules etc)
             _startProcess git -argumentList "clean -fd"
 
@@ -990,7 +998,7 @@ try {
                     # limit NTFS rights accordingly
                     $readUserC = $configData.computerName
                     # computer AD accounts end with $
-                    $readUserC = (_flattenArray $readUserC) | % { $_ + "$" }
+                    $readUserC = (_flattenArray $readUserC -fqdnToHostname) | % { $_ + "$" }
                     "       - limiting NTFS permissions on $folderName`n            - access just for: $($readUserC -join ', ')"
                     _setPermissions $folder -readUser $readUserC -writeUser $writeUser
                 } else {
@@ -1065,7 +1073,7 @@ try {
                         $destProfile = (Join-Path $repository "profile.ps1")
                         if ($_computerWithProfile) {
                             # computer AD accounts end with $
-                            $readUserP = (_flattenArray $_computerWithProfile) | % { $_ + "$" }
+                            $readUserP = (_flattenArray $_computerWithProfile -fqdnToHostname) | % { $_ + "$" }
 
                             "       - limiting NTFS permissions on $destProfile`n            - access just for: $($readUserP -join ', ')"
                             _setPermissions $destProfile -readUser $readUserP -writeUser $writeUser
@@ -1194,7 +1202,7 @@ try {
                     } else {
                         $readUserC = $configData.computerName
                         # computer AD ucty maji $ za svym jmenem, pridam
-                        $readUserC = (_flattenArray $readUserC) | % { $_ + "$" }
+                        $readUserC = (_flattenArray $readUserC -fqdnToHostname) | % { $_ + "$" }
                     }
 
                     "       - limiting NTFS permissions on $folderName`n            - access just for: $($readUserC -join ', ')"
