@@ -742,6 +742,7 @@ try {
                 }
 
                 # deleted alias check
+                $deletedAlias = ""
                 if ($prevAlias -and !$actAlias) {
                     $deletedAlias = $prevAlias
                 }
@@ -767,6 +768,7 @@ try {
                 }
 
                 # added alias check
+                $addedAlias = ""
                 if ($actAlias -and !$prevAlias) {
                     $addedAlias = $actAlias
                 }
